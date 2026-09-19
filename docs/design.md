@@ -1,6 +1,6 @@
 # spring-acp — a Spring Data-style abstraction over ACP coding agents
 
-Status: proposed design. Successor to the `java-wrapper` module of
+Status: **M1 built and verified**; M2–M4 proposed. Successor to the `java-wrapper` module of
 [`goose-buildpack`](https://github.com/cpage-pivotal/goose-buildpack).
 
 ## Context
@@ -393,23 +393,40 @@ Defaults must be restrictive and match the wrapper's 4.1.0 hardening:
 
 ## Milestones
 
-**M1 — core + Goose over stdio.** Build order:
+**M1 — core + Goose over stdio. Done.** All seven steps built and verified against a live
+`goose acp` subprocess. 49 tests green: 5 drive the real binary and skip when it is absent, 44 run
+anywhere.
 
-1. `spring-acp-core` dependencies and the `AgentEvent` sealed model.
-2. `AgentSession` + `SessionRegistry` — port the name→id authority over the caller's `resume` flag
-   and the per-entry `Semaphore(1)` turn permit.
-3. **`AgentTurn`** — the notification demultiplexer described under "What to port". This is the
-   hard part of M1; the exactly-one-terminal-event test lands with it.
-4. `AgentClient` fluent API over `AcpAsyncClient`.
-5. `PermissionPolicy` (deny by default) and a minimal `ConfigResolver` that applies `model`,
-   `provider` and `mode` from the `configOptions` Goose returns on `session/new`.
-6. `GooseRuntime` (stdio), `AcpProperties`, `AcpAutoConfiguration`, starter.
-7. Smoke app: a Boot application that prompts `goose acp` and streams structured events.
+| Step | Delivered | Where |
+| --- | --- | --- |
+| 1 | `AgentEvent` sealed model, `AgentEventMapper` | `core/event` |
+| 2 | `AgentSession`, `SessionRegistry` | `core/session` |
+| 3 | `SessionUpdateRouter`, `AgentTurn` | `core/turn` |
+| 4 | `AgentClient`, `DefaultAgentClient`, `AgentClientFactory` | `core/client` |
+| 5 | `PermissionPolicy`, `ConfigResolver`, `Validation` | `core/permission`, `core/config` |
+| 6 | `GooseRuntime`, `AcpProperties`, `AcpAutoConfiguration`, `SelectedRuntime`, starter | `runtime-goose`, `spring-boot-autoconfigure` |
+| 7 | Smoke app driven entirely by `application.yaml` | `samples/smoke-app` |
 
-Done when step 7 runs against the real binary and the TCK's turn-semantics tests pass.
+Live coverage: connect and negotiate, blocking call, streamed turn, named sessions keeping context
+across turns, and stream cancellation that reaches the agent.
 
-Deferred out of M1 deliberately: `AgentProcessSupervisor` restart/health logic (one process, fail
-fast, until pooling arrives in M3) and the WebSocket transport.
+Three things the build taught us that the plan had not anticipated:
+
+- **Runtime selection had to be separated from launching.** Validation originally lived inside the
+  bean that starts the process, so proving "a bad `spring.acp.runtime` fails fast" meant spawning an
+  agent. `SelectedRuntime` now resolves and validates at context refresh and names the registered
+  alternatives in the error. A tier-3 block for an unregistered runtime fails there too, rather than
+  being silently ignored — the single most expensive mistake class in the format this replaces.
+- **`AgentTurn` needed two guards, not one.** A flag to make the first channel to finish the winner
+  and the second a no-op, and a second flag distinguishing consumer cancellation from a turn that
+  ended on its own — without it, every completed turn would also send a pointless `session/cancel`.
+- **A pinned test model was necessary.** The developer's own `~/.config/goose/config.yaml` may name
+  a model their key cannot reach, and the resulting 404 arrives as agent *text*, so it reads as a
+  library bug in the assertion output. The live tests pin the model via a system property, which
+  exercises the negotiated tier as a side effect and proves `session/set_config_option` took effect.
+
+Deferred from M1 as planned: `AgentProcessSupervisor` restart/health logic and the WebSocket
+transport.
 
 **M2 — the abstraction earns its keep.** `AgentRuntime` SPI extracted, `CodexRuntime` and
 `OpenCodeRuntime` added, `ConfigResolver` generalized across runtimes with the `providers/*` and
@@ -427,21 +444,35 @@ negotiation and a feature flag, off by default.
 
 ## Verification
 
+Built in M1:
+
+- **Fast tests (44)** — turn semantics, session registry concurrency and permit accounting, event
+  mapping, permission policy, URL/header/env validation, and Boot property binding via
+  `ApplicationContextRunner`. No subprocess; run anywhere.
+- **Live tests (5)** — `GooseLiveIntegrationTests` drives the real binary, gated on `goose
+  --version` succeeding so the suite stays green on a machine that has never installed it.
+- **Smoke app** — `samples/smoke-app`, configured only by `application.yaml`.
+
+Still planned:
+
 1. **Runtime conformance TCK** in `spring-acp-test` — one abstract `AgentRuntimeContractTest` run
-   as a parameterized suite against every registered runtime. Asserts the portable contract only:
+   as a parameterized suite against every registered runtime, asserting the portable contract only:
    session create/prompt/cancel/close, exactly-one-terminal-event, tool-call events observed,
-   deny-by-default blocks a write, MCP server from config appears in the agent's tool list,
-   unsupported `model` honors `on-unsupported`. This suite *is* the definition of the abstraction —
-   an adapter that passes it is swappable.
-2. **Fast tests** against `acp-test`'s in-memory transport plus a scripted fake agent, mirroring
-   today's `FakeAcpTransport` — no subprocess, runs in CI.
-3. **Integration tests** gated on the binaries being present (`goose`, `npx`, `opencode`), skipped
-   otherwise; a CI job installs all three from the registry manifest and runs them.
-4. **Smoke app** under `spring-acp/samples/` with a single `application.yaml`; flip
-   `spring.acp.runtime` across goose/codex/opencode and confirm identical observable behavior.
-   Analogue of today's `validation/smoke-app/`.
-5. **Security tests** ported from the wrapper: symlink escape from the workspace jail, non-loopback
-   host rejection, `base-url` scheme validation, secret redaction in logs, permission-deny path.
+   deny-by-default blocks a write, an MCP server from config appears in the agent's tool list, and
+   an unsupported `model` honors `on-unsupported`. M1's `AgentTurnTests` and
+   `GooseLiveIntegrationTests` are the raw material; generalizing them across runtimes is M2 work,
+   because a contract written against one runtime is not yet a contract. This suite, not the
+   `AgentRuntime` interface, is the real definition of the abstraction.
+2. **A scripted fake agent** on `acp-test`'s in-memory transport. M1's fast tests mock
+   `AcpAsyncClient`, which proves the turn logic but not the wire format; a fake that speaks real
+   JSON-RPC would also have caught the two SDK gaps above without a live binary.
+3. **Multi-runtime integration** — extend the `goose --version` gate to `npx` and `opencode`, and a
+   CI job that installs all three from the registry manifest.
+4. **Multi-runtime smoke** — flip `spring.acp.runtime` across goose, codex and opencode in
+   `samples/smoke-app` and confirm identical observable behavior. This is M2's completion test.
+5. **Security tests.** URL scheme, embedded-credential, header-injection and env-name rejection are
+   covered in `ValidationTests`. Still to come, with the features they guard: workspace jail escape
+   via symlink, terminal `cwd` confinement, and secret redaction in process logs.
 
 ## Repository layout
 
