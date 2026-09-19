@@ -30,8 +30,28 @@ Flux<AgentEvent> events = agentClient.prompt()
 
 ## Status
 
-Proposed. The design is in **[docs/design.md](docs/design.md)** — read that first; it carries the
-feasibility analysis, the configuration model, the runtime SPI, and the milestone plan.
+**M1 is done: core plus Goose over stdio.** Verified against a live `goose acp` subprocess —
+connect, blocking call, streamed turn, named sessions keeping context across turns, and stream
+cancellation that actually cancels the turn on the agent. 49 tests green, of which 5 drive the real
+binary and skip when it is absent.
+
+Not yet built: the Codex and OpenCode adapters (M2), the `agents.yaml` loader, process pooling and
+the WebSocket transport (M3), the registry-driven runtime and the Spring AI adapter (M4).
+
+The design is in **[docs/design.md](docs/design.md)** — the feasibility analysis, the configuration
+model, the runtime SPI, known gaps in the ACP Java SDK, and the milestone plan.
+
+## Try it
+
+```bash
+mvn install
+cd samples/smoke-app
+mvn dependency:build-classpath -Dmdep.outputFile=/tmp/cp.txt -q
+java -cp "target/classes:$(cat /tmp/cp.txt)" org.tanzu.acp.sample.SmokeApplication
+```
+
+Needs `goose` on the PATH with a provider configured. Change `spring.acp.model` in
+`samples/smoke-app/src/main/resources/application.yaml` if your key cannot reach the default.
 
 ## Why this is feasible
 

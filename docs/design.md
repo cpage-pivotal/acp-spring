@@ -348,6 +348,31 @@ be ported closely rather than reinvented.
 
 ---
 
+## Known gaps in acp-core 0.17.0
+
+Found by running the SDK against a live goose 1.50.0. Neither blocks M1; both are worth tracking,
+and both argue for keeping the SDK behind our own types rather than exposing it in the public API.
+
+**`NewSessionResponse` does not model `configOptions`.** The record carries `sessionId`, `modes` and
+`models`, and is annotated `@JsonIgnoreProperties(ignoreUnknown = true)` — so the config options a
+live agent returns on `session/new` are dropped before a client can read them. `ForkSessionResponse`
+and `SetSessionConfigOptionResponse` both model the field, which suggests an oversight rather than a
+deliberate omission. `ConfigResolver` works around it by setting optimistically and reading the
+agent's real configuration out of the set response.
+
+**`session_info_update` is an unknown subtype.** Goose emits it several times per turn; acp-core's
+`SessionUpdate` hierarchy has no variant for it, so Jackson fails to resolve the type id and the SDK
+logs an ERROR per occurrence. Functionally harmless — the notification carries session metadata a
+turn does not need, and the turn completes normally — but the log noise is alarming and would train
+operators to ignore a genuine error at that logger.
+
+We deliberately do *not* suppress that logger: silencing real notification-handling failures to hide
+one known-benign case is the wrong trade. The fix is to stop relying on `sessionUpdateConsumer` and
+register a raw `notificationHandler` for `session/update` instead, deserializing leniently so an
+unknown discriminator is skipped rather than thrown. `AcpClient.build()` only installs its own
+handler when a `sessionUpdateConsumer` is registered, so a custom handler survives. That belongs in
+M2, alongside the SPI extraction.
+
 ## Security posture
 
 This library is an ACP **client** running server-side, which is materially different from an IDE.

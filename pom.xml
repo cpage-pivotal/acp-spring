@@ -39,6 +39,7 @@
         <module>spring-acp-spring-boot-autoconfigure</module>
         <module>spring-acp-spring-boot-starter</module>
         <module>spring-acp-test</module>
+        <module>samples/smoke-app</module>
     </modules>
 
     <dependencyManagement>
@@ -77,6 +78,11 @@
             <dependency>
                 <groupId>org.tanzu.acp</groupId>
                 <artifactId>spring-acp-runtime-goose</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.tanzu.acp</groupId>
+                <artifactId>spring-acp-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

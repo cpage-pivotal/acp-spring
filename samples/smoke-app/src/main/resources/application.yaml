@@ -1,0 +1,26 @@
+spring:
+  acp:
+    # The one line that swaps the agent. Try codex or opencode once those adapters land.
+    runtime: goose
+
+    # Requests, not assignments: if the runtime cannot honor them, on-unsupported decides.
+    model: gpt-5.4-mini
+    on-unsupported: warn
+
+    timeout: 3m
+
+    # Server-side default. Nothing here is approving a file write on its own.
+    permissions:
+      policy: deny
+
+    # Runtime-specific escape hatch. Ignored by every runtime but goose.
+    runtimes:
+      goose:
+        builtins: developer
+
+  main:
+    web-application-type: none
+
+logging:
+  level:
+    org.tanzu.acp: INFO

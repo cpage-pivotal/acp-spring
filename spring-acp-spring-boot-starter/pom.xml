@@ -12,7 +12,6 @@
     </parent>
 
     <artifactId>spring-acp-spring-boot-starter</artifactId>
-    <packaging>pom</packaging>
     <name>Spring ACP Starter</name>
     <description>Starter: core, auto-configuration, and the Goose runtime adapter</description>
 

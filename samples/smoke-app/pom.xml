@@ -9,32 +9,21 @@
         <groupId>org.tanzu.acp</groupId>
         <artifactId>spring-acp</artifactId>
         <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>spring-acp-spring-boot-autoconfigure</artifactId>
-    <name>Spring ACP Autoconfigure</name>
-    <description>Spring Boot auto-configuration and configuration properties</description>
+    <artifactId>spring-acp-smoke-app</artifactId>
+    <name>Spring ACP Smoke App</name>
+    <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
     <dependencies>
         <dependency>
             <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-core</artifactId>
+            <artifactId>spring-acp-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- Runtime adapters are optional: an application puts the one it wants on the classpath. -->
-        <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-runtime-goose</artifactId>
-            <optional>true</optional>
+            <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
         <dependency>
