@@ -1,22 +1,39 @@
 spring:
   acp:
-    # The one line that swaps the agent. Try codex or opencode once those adapters land.
+    # The one line that swaps the agent. goose, codex and opencode are all on the classpath;
+    # nothing else in this application changes when this does. Run with
+    # --spring.acp.runtime=opencode to see it.
     runtime: goose
 
-    # Requests, not assignments: if the runtime cannot honor them, on-unsupported decides.
-    model: gpt-5.4-mini
+    # A request, not an assignment: if the runtime has no such model, on-unsupported decides. Left
+    # unset here so each agent uses the model it is configured with, which is the only one the
+    # machine's credentials are guaranteed to reach.
     on-unsupported: warn
 
     timeout: 3m
 
-    # Server-side default. Nothing here is approving a file write on its own.
+    # How to answer an agent that asks permission to use a tool. Worth knowing what this does and
+    # does not buy: it decides the answer, and `mode` below decides whether the question is asked at
+    # all. On its own, deny does not stop an agent editing files with its own tools.
     permissions:
       policy: deny
 
-    # Runtime-specific escape hatch. Ignored by every runtime but goose.
+    # The agent's own review gate, expressed portably. `plan` is a value of goose's `mode`, of
+    # OpenCode's `mode`, and of Codex's `collaboration_mode`; the resolver finds whichever applies.
+    # goose spells its equivalent `approve`, so this is commented out rather than lying about it.
+    # mode: plan
+
+    # Runtime-specific escape hatches. Each block is passed to that adapter untouched and ignored by
+    # every other, so all three can sit here at once.
     runtimes:
       goose:
         builtins: developer
+      codex:
+        config-toml:
+          model_reasoning_effort: low
+      opencode:
+        config:
+          share: disabled
 
   main:
     web-application-type: none

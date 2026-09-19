@@ -62,7 +62,6 @@
                 <groupId>com.agentclientprotocol</groupId>
                 <artifactId>acp-test</artifactId>
                 <version>${acp.version}</version>
-                <scope>test</scope>
             </dependency>
 
             <dependency>
@@ -99,7 +98,6 @@
                 <groupId>org.tanzu.acp</groupId>
                 <artifactId>spring-acp-test</artifactId>
                 <version>${project.version}</version>
-                <scope>test</scope>
             </dependency>
 
             <dependency>

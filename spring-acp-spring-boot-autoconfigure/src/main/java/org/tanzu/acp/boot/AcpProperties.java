@@ -12,6 +12,8 @@ import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.tanzu.acp.config.McpServerSpec;
 import org.tanzu.acp.config.OnUnsupported;
+import org.tanzu.acp.config.ProviderSpec;
+import org.tanzu.acp.config.RuntimeOptions;
 import org.tanzu.acp.permission.PermissionPolicy;
 
 /**
@@ -32,14 +34,19 @@ public class AcpProperties {
 	/** Absolute path the agent treats as its working directory. Defaults to the JVM's. */
 	private Path workspace;
 
+	/**
+	 * Where an adapter may write the config files its agent reads at startup. Never the workspace.
+	 * Defaults to a directory under the JVM's temp directory, named for the runtime.
+	 */
+	private Path runtimeHome;
+
 	/** How long a single turn may take. */
 	private Duration timeout = Duration.ofMinutes(5);
 
 	/** Requested model. Honored only if the agent exposes one; see on-unsupported. */
 	private String model;
 
-	/** Requested provider. Honored only if the agent exposes one; see on-unsupported. */
-	private String provider;
+	private final Provider provider = new Provider();
 
 	/** Requested session mode, e.g. Goose's auto, approve, chat. */
 	private String mode;
@@ -55,8 +62,15 @@ public class AcpProperties {
 
 	private final Permissions permissions = new Permissions();
 
-	/** Runtime-specific options, keyed by runtime id. Ignored by every other runtime. */
-	private Map<String, Map<String, String>> runtimes = new LinkedHashMap<>();
+	/**
+	 * Runtime-specific options, keyed by runtime id. Ignored by every other runtime.
+	 *
+	 * <p>The value type is {@code Object} rather than {@code String} because tier 3 passes an
+	 * agent's own configuration through untouched, and that is not always flat —
+	 * {@code codex.config-toml} is a table and {@code opencode.config} is a JSON document.
+	 * {@link RuntimeOptions} normalizes whichever shape the binder produces.
+	 */
+	private Map<String, Map<String, Object>> runtimes = new LinkedHashMap<>();
 
 	public List<McpServerSpec> toMcpServerSpecs() {
 		return mcpServers.stream().map(McpServer::toSpec).toList();
@@ -66,13 +80,86 @@ public class AcpProperties {
 		return permissions.toPolicy();
 	}
 
-	public Map<String, String> optionsFor(String runtimeId) {
-		return runtimes.getOrDefault(runtimeId, Map.of());
+	public ProviderSpec toProviderSpec() {
+		return provider.toSpec();
+	}
+
+	public RuntimeOptions optionsFor(String runtimeId) {
+		return RuntimeOptions.of(runtimes.getOrDefault(runtimeId, Map.of()));
 	}
 
 	public enum PermissionMode {
 
 		DENY, ALLOWLIST, AUTO_APPROVE
+	}
+
+	/**
+	 * Which model provider to use, and how to reach it.
+	 *
+	 * <p>{@code id} is a negotiated request the agent may decline. The rest is provisioning: it goes
+	 * over the wire when the agent advertises the providers capability, and into the agent process's
+	 * environment when it does not. Fixed when the process starts, never per request.
+	 */
+	public static class Provider {
+
+		/** The provider's name as the agent knows it, e.g. openai. */
+		private String id;
+
+		/** The API dialect, which also names the environment variables the credentials travel in. */
+		private String apiType;
+
+		/** HTTPS, or plain HTTP only for loopback and .apps.internal. */
+		private URI baseUrl;
+
+		/** Sent to the provider, never logged. */
+		private String apiKey;
+
+		/** Extra headers for the provider endpoint. Rejected if they contain CR or LF. */
+		private Map<String, String> headers = Map.of();
+
+		ProviderSpec toSpec() {
+			return new ProviderSpec(id, apiType, baseUrl, apiKey, headers);
+		}
+
+		public String getId() {
+			return id;
+		}
+
+		public void setId(String id) {
+			this.id = id;
+		}
+
+		public String getApiType() {
+			return apiType;
+		}
+
+		public void setApiType(String apiType) {
+			this.apiType = apiType;
+		}
+
+		public URI getBaseUrl() {
+			return baseUrl;
+		}
+
+		public void setBaseUrl(URI baseUrl) {
+			this.baseUrl = baseUrl;
+		}
+
+		public String getApiKey() {
+			return apiKey;
+		}
+
+		public void setApiKey(String apiKey) {
+			this.apiKey = apiKey;
+		}
+
+		public Map<String, String> getHeaders() {
+			return headers;
+		}
+
+		public void setHeaders(Map<String, String> headers) {
+			this.headers = headers;
+		}
 	}
 
 	public static class Permissions {
@@ -218,12 +305,8 @@ public class AcpProperties {
 		this.model = model;
 	}
 
-	public String getProvider() {
+	public Provider getProvider() {
 		return provider;
-	}
-
-	public void setProvider(String provider) {
-		this.provider = provider;
 	}
 
 	public String getMode() {
@@ -262,11 +345,19 @@ public class AcpProperties {
 		return permissions;
 	}
 
-	public Map<String, Map<String, String>> getRuntimes() {
+	public Map<String, Map<String, Object>> getRuntimes() {
 		return runtimes;
 	}
 
-	public void setRuntimes(Map<String, Map<String, String>> runtimes) {
+	public void setRuntimes(Map<String, Map<String, Object>> runtimes) {
 		this.runtimes = runtimes;
+	}
+
+	public Path getRuntimeHome() {
+		return runtimeHome;
+	}
+
+	public void setRuntimeHome(Path runtimeHome) {
+		this.runtimeHome = runtimeHome;
 	}
 }

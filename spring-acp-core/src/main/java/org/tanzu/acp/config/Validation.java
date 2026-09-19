@@ -21,6 +21,9 @@ public final class Validation {
 	/** RFC 7230 token, the legal character set for a header field name. */
 	private static final Pattern HEADER_NAME = Pattern.compile("[!#$%&'*+\\-.^_`|~0-9A-Za-z]+");
 
+	/** An API key larger than this is a configuration mistake, not a credential. */
+	private static final int MAX_SECRET_LENGTH = 16 * 1024;
+
 	/** Platform-internal routes that are allowed to be plain HTTP. */
 	private static final String INTERNAL_SUFFIX = ".apps.internal";
 
@@ -70,6 +73,24 @@ public final class Validation {
 		}
 		if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
 			throw new IllegalArgumentException("header '" + name + "' must not contain CR or LF");
+		}
+		return value;
+	}
+
+	/**
+	 * Bounds a credential and rejects line breaks in it. Both matter because the value is about to be
+	 * written into a subprocess environment or a config file on disk, and a newline there can end the
+	 * line early and change the meaning of what follows. The message never names the value.
+	 */
+	public static String requireSecret(String value, String what) {
+		if (value == null || value.isEmpty()) {
+			throw new IllegalArgumentException(what + " must not be empty");
+		}
+		if (value.length() > MAX_SECRET_LENGTH) {
+			throw new IllegalArgumentException(what + " must not exceed " + MAX_SECRET_LENGTH + " characters");
+		}
+		if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+			throw new IllegalArgumentException(what + " must not contain CR or LF");
 		}
 		return value;
 	}

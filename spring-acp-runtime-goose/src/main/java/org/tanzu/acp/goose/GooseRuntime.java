@@ -10,19 +10,34 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.tanzu.acp.config.AgentSettings;
+import org.tanzu.acp.config.ProviderEnvironment;
+import org.tanzu.acp.config.ProviderSpec;
+import org.tanzu.acp.config.RuntimeOptions;
 import org.tanzu.acp.runtime.AgentLaunchSpec;
 import org.tanzu.acp.runtime.AgentRuntime;
+import org.tanzu.acp.runtime.ToolNames;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
 /**
  * Runs Goose as an ACP agent over stdio.
  *
- * <p>Goose is the reference runtime for this library, and it is well behaved: {@code goose acp}
- * speaks ACP v1 on stdin and stdout, and a live {@code session/new} advertises config options for
- * provider, model, mode and thinking effort. That means provider and model selection go over the
- * wire through {@code session/set_config_option} rather than through environment variables — more
+ * <p>Goose is the reference runtime for this library and the best behaved of the three: a live
+ * {@code session/new} advertises config options for provider, model, mode and thinking effort, so
+ * provider and model selection go over the wire rather than through environment variables — more
  * portable, and it survives Goose changing its own configuration format.
+ *
+ * <p>Two things about it the core has to be told. Its {@code provider} option arrives with no
+ * {@code category}, so it is only findable by id; and it will <em>accept</em> a model id it has
+ * never heard of, which is why {@code ConfigResolver} validates against the advertised values
+ * instead of trusting the call to fail.
+ *
+ * <p>Tier-3 options, under {@code spring.acp.runtimes.goose}:
+ *
+ * <pre>{@code
+ * builtins: developer,todo     # --with-builtin, comma-separated or a YAML list
+ * env: { GOOSE_DISABLE_KEYRING: "1" }
+ * }</pre>
  */
 public class GooseRuntime implements AgentRuntime {
 
@@ -30,6 +45,12 @@ public class GooseRuntime implements AgentRuntime {
 	public static final String CLI_PATH_ENV = "GOOSE_CLI_PATH";
 
 	public static final String ID = "goose";
+
+	/**
+	 * Goose names the endpoint of an OpenAI-compatible provider {@code OPENAI_HOST}, not the
+	 * {@code OPENAI_BASE_URL} the derivation rule would produce.
+	 */
+	private static final String OPENAI_HOST = "OPENAI_HOST";
 
 	private final String executable;
 
@@ -51,7 +72,7 @@ public class GooseRuntime implements AgentRuntime {
 		List<String> args = new ArrayList<>(List.of("acp"));
 
 		// Goose's builtin extensions are a runtime-specific concern: tier 3, not tier 1.
-		builtins(settings).forEach(name -> {
+		settings.runtimeOptions().textList("builtins").forEach(name -> {
 			args.add("--with-builtin");
 			args.add(name);
 		});
@@ -66,15 +87,12 @@ public class GooseRuntime implements AgentRuntime {
 	 */
 	@Override
 	public Optional<String> toolNameOf(AcpSchema.ToolCallUpdate toolCall) {
-		return Optional.ofNullable(toolCall).map(AcpSchema.ToolCallUpdate::rawInput)
-				.filter(Map.class::isInstance).map(Map.class::cast).map(m -> m.get("toolName"))
-				.filter(String.class::isInstance).map(String.class::cast)
-				.or(() -> Optional.ofNullable(toolCall).map(AcpSchema.ToolCallUpdate::title));
+		return ToolNames.fromRawInputOrTitle(toolCall);
 	}
 
 	@Override
 	public List<String> configIdsFor(PortableOption option) {
-		// Verified against goose 1.50.0: session/new advertises exactly these ids.
+		// Verified against goose 1.51.0: session/new advertises exactly these ids.
 		return switch (option) {
 			case MODEL -> List.of("model");
 			case PROVIDER -> List.of("provider");
@@ -82,14 +100,21 @@ public class GooseRuntime implements AgentRuntime {
 		};
 	}
 
-	private List<String> builtins(AgentSettings settings) {
-		String value = settings.runtimeOptions().get("builtins");
-		if (value == null || value.isBlank()) {
-			return List.of();
-		}
-		return List.of(value.split("\\s*,\\s*"));
+	/**
+	 * Goose's provider option carries no category, so the portable {@code provider} category would
+	 * never match it and could only match something else. Better to have no fallback than a wrong one.
+	 */
+	@Override
+	public List<String> configCategoriesFor(PortableOption option) {
+		return option == PortableOption.PROVIDER ? List.of() : AgentRuntime.super.configCategoriesFor(option);
 	}
 
+	/**
+	 * The environment Goose starts with.
+	 *
+	 * <p>Ordering is the contract: the hardening defaults first, then the provider's credentials, then
+	 * the application's own tier-3 {@code env} block, which therefore wins over both.
+	 */
 	private Map<String, String> environment(AgentSettings settings) {
 		Map<String, String> env = new LinkedHashMap<>();
 
@@ -98,12 +123,16 @@ public class GooseRuntime implements AgentRuntime {
 		env.put("GOOSE_DISABLE_KEYRING", "1");
 		env.put("GOOSE_TELEMETRY_ENABLED", "false");
 
-		settings.runtimeOptions().forEach((key, value) -> {
-			if (key.startsWith("env.")) {
-				env.put(key.substring("env.".length()), value);
-			}
-		});
+		ProviderSpec provider = settings.provider();
+		env.putAll(ProviderEnvironment.of(provider, baseUrlVariable(provider)));
+
+		RuntimeOptions options = settings.runtimeOptions();
+		env.putAll(options.textSection("env"));
 		return env;
+	}
+
+	private static String baseUrlVariable(ProviderSpec provider) {
+		return provider.findApiType().filter("openai"::equalsIgnoreCase).map(t -> OPENAI_HOST).orElse(null);
 	}
 
 	/**

@@ -26,10 +26,33 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!--
+          The starter brings Goose. These two make the point of the milestone testable: three agents
+          on one classpath, and nothing but spring.acp.runtime chooses between them.
+        -->
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-codex</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-opencode</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+            </plugin>
+        </plugins>
+    </build>
 </project>

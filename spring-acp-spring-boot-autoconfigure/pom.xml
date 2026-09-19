@@ -36,6 +36,16 @@
             <artifactId>spring-acp-runtime-goose</artifactId>
             <optional>true</optional>
         </dependency>
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-codex</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-opencode</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

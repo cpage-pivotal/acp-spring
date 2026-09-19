@@ -5,7 +5,9 @@ package org.tanzu.acp.config;
  * {@link OnUnsupported#FAIL} is in force.
  *
  * <p>The analogue of the store-specific {@code UnsupportedOperationException} a Spring Data
- * repository throws for a query its backend cannot express.
+ * repository throws for a query its backend cannot express. The message carries the reason the
+ * resolver reached that conclusion, because "goose cannot honor model=gpt-4o" is only actionable
+ * once you know whether the option is missing or the value is.
  */
 public class UnsupportedAgentOptionException extends RuntimeException {
 
@@ -13,8 +15,10 @@ public class UnsupportedAgentOptionException extends RuntimeException {
 
 	private final String runtime;
 
-	public UnsupportedAgentOptionException(String option, String value, String runtime, Throwable cause) {
-		super("runtime '" + runtime + "' cannot honor " + option + "='" + value + "'", cause);
+	public UnsupportedAgentOptionException(String option, String value, String runtime, String detail,
+			Throwable cause) {
+		super("runtime '" + runtime + "' cannot honor " + option + "='" + value + "'"
+				+ (detail == null ? "" : ": " + detail), cause);
 		this.option = option;
 		this.runtime = runtime;
 	}

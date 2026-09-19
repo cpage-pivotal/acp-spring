@@ -39,6 +39,26 @@ public interface AgentClient extends AutoCloseable {
 	/** The id of the runtime behind this client, e.g. {@code goose}. */
 	String runtimeId();
 
+	/**
+	 * The named session, once a turn has opened it.
+	 *
+	 * <p>The way to find out what the negotiated tier actually achieved: {@code AgentSession
+	 * .configuration()} says, per option, whether the request was applied and by which mechanism.
+	 * With {@code on-unsupported: warn} that is the difference between the model an application asked
+	 * for and the model it is talking to.
+	 */
+	java.util.Optional<org.tanzu.acp.session.AgentSession> session(String name);
+
+	/**
+	 * Opens the named session now, or returns the one already open, without prompting.
+	 *
+	 * <p>A turn does this for itself, so this is for the case where the answer is wanted before the
+	 * question: what the agent advertises, and what the negotiated tier managed to apply, are both
+	 * known as soon as the session exists. Also the only way to find out that a requested model is
+	 * unsupported without paying for a turn to discover it.
+	 */
+	org.tanzu.acp.session.AgentSession openSession(String name);
+
 	@Override
 	void close();
 

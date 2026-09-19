@@ -2,6 +2,7 @@ package org.tanzu.acp.config;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -13,10 +14,16 @@ import org.tanzu.acp.permission.PermissionPolicy;
  *
  * <p>Deliberately free of Spring types. The Boot module binds {@code spring.acp.*} into this, but
  * the core library stays usable — and testable — with Spring absent from the classpath.
+ *
+ * <p>All three configuration tiers appear here, and the type of each field says which tier it is in.
+ * {@code workspace}, {@code mcpServers}, {@code permissions} and {@code timeout} are portable: every
+ * runtime honors them, because ACP does. {@code model}, {@code mode} and {@code provider} are
+ * negotiated requests that {@code ConfigResolver} tries to place and {@code onUnsupported} prices.
+ * {@link RuntimeOptions} is tier three, opaque to everything but the one adapter it names.
  */
-public record AgentSettings(String runtime, Path workspace, Duration timeout, String model, String provider,
-		String mode, List<McpServerSpec> mcpServers, PermissionPolicy permissions, OnUnsupported onUnsupported,
-		Duration sessionTtl, Map<String, String> runtimeOptions) {
+public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Duration timeout, String model,
+		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, PermissionPolicy permissions,
+		OnUnsupported onUnsupported, Duration sessionTtl, RuntimeOptions runtimeOptions) {
 
 	public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
 
@@ -33,6 +40,7 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 		if (!Files.isDirectory(workspace)) {
 			throw new IllegalArgumentException("workspace '" + workspace + "' is not an existing directory");
 		}
+		runtimeHome = runtimeHome == null ? defaultRuntimeHome(runtime) : runtimeHome.toAbsolutePath();
 		timeout = timeout == null ? DEFAULT_TIMEOUT : timeout;
 		if (timeout.isNegative() || timeout.isZero()) {
 			throw new IllegalArgumentException("timeout must be positive but was " + timeout);
@@ -41,12 +49,24 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 		mcpServers = mcpServers == null ? List.of() : List.copyOf(mcpServers);
 		permissions = permissions == null ? PermissionPolicy.deny() : permissions;
 		onUnsupported = onUnsupported == null ? OnUnsupported.WARN : onUnsupported;
-		runtimeOptions = runtimeOptions == null ? Map.of() : Map.copyOf(runtimeOptions);
+		provider = provider == null ? ProviderSpec.none() : provider;
+		runtimeOptions = runtimeOptions == null ? RuntimeOptions.empty() : runtimeOptions;
 
 		long distinct = mcpServers.stream().map(McpServerSpec::name).distinct().count();
 		if (distinct != mcpServers.size()) {
 			throw new IllegalArgumentException("mcp server names must be unique");
 		}
+	}
+
+	/**
+	 * Where an adapter may write the files its agent reads at startup.
+	 *
+	 * <p>Not the workspace: the workspace is the application's own code, and dropping a
+	 * {@code config.toml} into it would be visible to the agent as content and to a reviewer as a
+	 * change. Keyed by runtime id so two adapters on one machine cannot overwrite each other.
+	 */
+	private static Path defaultRuntimeHome(String runtime) {
+		return Paths.get(System.getProperty("java.io.tmpdir"), "spring-acp", runtime).toAbsolutePath();
 	}
 
 	public static Builder builder(String runtime, Path workspace) {
@@ -58,8 +78,8 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 		if (options == null) {
 			return this;
 		}
-		return new AgentSettings(runtime, workspace, options.findTimeout().orElse(timeout),
-				options.findModel().orElse(model), options.findProvider().orElse(provider),
+		return new AgentSettings(runtime, workspace, runtimeHome, options.findTimeout().orElse(timeout),
+				options.findModel().orElse(model), options.findProvider().map(provider::withId).orElse(provider),
 				options.findMode().orElse(mode), mcpServers, permissions, onUnsupported, sessionTtl, runtimeOptions);
 	}
 
@@ -69,11 +89,13 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 
 		private final Path workspace;
 
+		private Path runtimeHome;
+
 		private Duration timeout;
 
 		private String model;
 
-		private String provider;
+		private ProviderSpec provider = ProviderSpec.none();
 
 		private String mode;
 
@@ -85,11 +107,16 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 
 		private Duration sessionTtl;
 
-		private Map<String, String> runtimeOptions = Map.of();
+		private RuntimeOptions runtimeOptions = RuntimeOptions.empty();
 
 		private Builder(String runtime, Path workspace) {
 			this.runtime = runtime;
 			this.workspace = workspace;
+		}
+
+		public Builder runtimeHome(Path runtimeHome) {
+			this.runtimeHome = runtimeHome;
+			return this;
 		}
 
 		public Builder timeout(Duration timeout) {
@@ -102,9 +129,13 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 			return this;
 		}
 
-		public Builder provider(String provider) {
+		public Builder provider(ProviderSpec provider) {
 			this.provider = provider;
 			return this;
+		}
+
+		public Builder provider(String id) {
+			return provider(ProviderSpec.of(id));
 		}
 
 		public Builder mode(String mode) {
@@ -132,14 +163,18 @@ public record AgentSettings(String runtime, Path workspace, Duration timeout, St
 			return this;
 		}
 
-		public Builder runtimeOptions(Map<String, String> runtimeOptions) {
+		public Builder runtimeOptions(RuntimeOptions runtimeOptions) {
 			this.runtimeOptions = runtimeOptions;
 			return this;
 		}
 
+		public Builder runtimeOptions(Map<String, ?> runtimeOptions) {
+			return runtimeOptions(RuntimeOptions.of(runtimeOptions));
+		}
+
 		public AgentSettings build() {
-			return new AgentSettings(runtime, workspace, timeout, model, provider, mode, mcpServers, permissions,
-					onUnsupported, sessionTtl, runtimeOptions);
+			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers,
+					permissions, onUnsupported, sessionTtl, runtimeOptions);
 		}
 	}
 }

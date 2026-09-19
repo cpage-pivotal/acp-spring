@@ -14,7 +14,7 @@ The relationship to ACP runtimes is the one Spring Data has to databases:
 spring:
   acp:
     runtime: goose      # ← change to codex or opencode; nothing else moves
-    model: claude-sonnet-5
+    model: gpt-5.4-mini # a request, not an assignment; see on-unsupported
 ```
 
 ```java
@@ -30,28 +30,52 @@ Flux<AgentEvent> events = agentClient.prompt()
 
 ## Status
 
-**M1 is done: core plus Goose over stdio.** Verified against a live `goose acp` subprocess —
-connect, blocking call, streamed turn, named sessions keeping context across turns, and stream
-cancellation that actually cancels the turn on the agent. 49 tests green, of which 5 drive the real
-binary and skip when it is absent.
+**M1 and M2 are done: the core, and all three runtimes.** One unchanged application runs against
+goose 1.51.0, codex-acp 1.12.0 and opencode 1.18.31 with `spring.acp.runtime` as the only
+difference — the milestone's completion test, and the reason the abstraction is worth having.
 
-Not yet built: the Codex and OpenCode adapters (M2), the `agents.yaml` loader, process pooling and
-the WebSocket transport (M3), the registry-driven runtime and the Spring AI adapter (M4).
+170 tests green: 137 run anywhere (including 16 against a scripted agent speaking raw JSON-RPC over
+an in-memory transport) and 33 drive real agents, skipping themselves when one is not usable here.
+The 33 are the same 11 assertions run against each adapter: `AgentRuntimeContract`, which is the
+actual definition of the abstraction, since an interface alone cannot stop three adapters behaving
+differently enough that an application cannot move between them.
+
+Not yet built: the `agents.yaml` loader, process pooling, the workspace jail and the WebSocket
+transport (M3); the registry-driven runtime, the Spring AI adapter and Micrometer (M4).
 
 The design is in **[docs/design.md](docs/design.md)** — the feasibility analysis, the configuration
-model, the runtime SPI, known gaps in the ACP Java SDK, and the milestone plan.
+model, the runtime SPI, four known gaps in the ACP Java SDK, and what each milestone measured.
 
 ## Try it
 
 ```bash
 mvn install
-cd samples/smoke-app
-mvn dependency:build-classpath -Dmdep.outputFile=/tmp/cp.txt -q
-java -cp "target/classes:$(cat /tmp/cp.txt)" org.tanzu.acp.sample.SmokeApplication
+mvn -pl samples/smoke-app spring-boot:run
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
 ```
 
-Needs `goose` on the PATH with a provider configured. Change `spring.acp.model` in
-`samples/smoke-app/src/main/resources/application.yaml` if your key cannot reach the default.
+Needs the corresponding agent installed and authenticated: `goose` or `opencode` on the PATH, or
+`npx` for the Codex adapter. Nothing in the sample's Java names an agent.
+
+## A caveat worth reading before you rely on it
+
+`permissions.policy: deny` does **not** stop an agent from writing files. Declaring
+`fs.writeTextFile: false` only declines to lend the agent *the client's* filesystem; measured against
+all three agents, each one creates a file in its default mode with **zero** permission requests.
+
+The mode decides whether the question gets asked; the policy decides the answer. Set both:
+
+```yaml
+spring:
+  acp:
+    mode: plan          # goose calls its equivalent "approve"
+    permissions:
+      policy: deny
+```
+
+With that, goose asks twice, is refused twice, and writes nothing. The measurements and the full
+table are in the design doc's security section.
 
 ## Why this is feasible
 
@@ -72,11 +96,23 @@ ACP standardizes the *conversation*, not the *provisioning*. So configuration co
 | --- | --- | --- |
 | **Portable** | `spring.acp.*` | `workspace`, `mcp-servers`, `permissions`, `timeout` |
 | **Negotiated** | resolved against what the agent advertises | `model`, `mode`, `provider` |
-| **Runtime-specific** | `spring.acp.runtimes.<id>.*` | Goose `extensions`, Codex `config-toml` |
+| **Runtime-specific** | `spring.acp.runtimes.<id>.*` | Goose `builtins`, Codex `config-toml`, OpenCode `config` |
 
 The negotiated tier is the crux: `session/set_config_option` is a standard method, but its option
-IDs are agent-declared, so `model:` is a request rather than an assignment. `on-unsupported`
-(`fail` / `warn` / `ignore`) decides what happens when a runtime cannot honor one.
+IDs and values are agent-declared, so `model:` is a request rather than an assignment.
+`on-unsupported` (`fail` / `warn` / `ignore`) decides what happens when a runtime cannot honor one,
+and `AgentSession.configuration()` reports what actually took effect.
+
+Two things that tier turned out to require, both measured rather than guessed:
+
+- **Read before you write.** goose 1.51 *accepts* a model id it has never heard of and fails seconds
+  later inside the turn, where the provider's 404 arrives as agent prose. So the resolver matches the
+  request against the options the agent advertised and never sends a call it expects to be refused —
+  which meant recovering a field the ACP Java SDK drops from `session/new`.
+- **One value, several vendor spellings.** `plan` is a value of OpenCode's `mode` and of Codex's
+  `collaboration_mode`; `gpt-5.4-mini` is `openai/gpt-5.4-mini` on OpenCode. An adapter supplies
+  candidate option ids and the core matches values across the spellings, so one property means one
+  thing.
 
 ## Scope
 

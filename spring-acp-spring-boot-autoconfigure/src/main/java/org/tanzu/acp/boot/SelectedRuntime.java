@@ -1,6 +1,9 @@
 package org.tanzu.acp.boot;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.tanzu.acp.runtime.AgentRuntime;
 
@@ -15,6 +18,7 @@ public record SelectedRuntime(AgentRuntime runtime) {
 
 	static SelectedRuntime from(List<AgentRuntime> available, AcpProperties properties) {
 		List<String> ids = available.stream().map(AgentRuntime::id).sorted().toList();
+		requireDistinctIds(available);
 
 		AgentRuntime selected = available.stream().filter(r -> r.id().equals(properties.getRuntime())).findFirst()
 				.orElseThrow(() -> new IllegalStateException("No AgentRuntime registered for spring.acp.runtime='"
@@ -29,5 +33,26 @@ public record SelectedRuntime(AgentRuntime runtime) {
 		}
 
 		return new SelectedRuntime(selected);
+	}
+
+	/**
+	 * Two adapters claiming the same agent is a configuration error, not a tie to be broken.
+	 *
+	 * <p>It happens when an application contributes its own adapter for an agent this library also
+	 * ships one for: the bundled registration only backs off from a bean of the same <em>name</em>, so
+	 * a differently named bean leaves both registered. Picking one silently would mean the agent an
+	 * application actually gets depends on bean ordering, which is exactly the kind of surprise this
+	 * library exists to remove — so the message says how to replace the bundled one instead.
+	 */
+	private static void requireDistinctIds(List<AgentRuntime> available) {
+		Map<String, List<AgentRuntime>> byId = available.stream()
+				.collect(Collectors.groupingBy(AgentRuntime::id));
+		List<String> duplicated = byId.entrySet().stream().filter(e -> e.getValue().size() > 1).map(Map.Entry::getKey)
+				.sorted(Comparator.naturalOrder()).toList();
+		if (!duplicated.isEmpty()) {
+			throw new IllegalStateException("More than one AgentRuntime is registered for " + duplicated
+					+ "; to replace a bundled adapter, declare your bean with the same name as the one it replaces"
+					+ " (for example @Bean(\"gooseAgentRuntime\"))");
+		}
 	}
 }

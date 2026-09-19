@@ -7,6 +7,9 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.tanzu.acp.config.AdvertisedSessionConfig;
+import org.tanzu.acp.config.SessionConfiguration;
+
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
 /**
@@ -29,6 +32,12 @@ public final class AgentSession {
 
 	private final AtomicReference<List<AcpSchema.SessionConfigOption>> configOptions = new AtomicReference<>(List.of());
 
+	private final AtomicReference<AdvertisedSessionConfig> advertised = new AtomicReference<>(
+			AdvertisedSessionConfig.empty());
+
+	private final AtomicReference<SessionConfiguration> configuration = new AtomicReference<>(
+			SessionConfiguration.empty());
+
 	AgentSession(String name, String sessionId) {
 		this.name = name;
 		this.sessionId = sessionId;
@@ -43,9 +52,34 @@ public final class AgentSession {
 	}
 
 	/**
-	 * The agent's advertised configuration, as last observed. Empty until a
-	 * {@code session/set_config_option} response or a {@code config_option_update} reveals it —
-	 * see {@code ConfigResolver} for why {@code session/new} cannot supply it.
+	 * What the agent advertised when this session was created: the options it will accept, and the
+	 * values it has for each. Read by {@code ConfigResolver} before it sets anything.
+	 */
+	public AdvertisedSessionConfig advertised() {
+		return advertised.get();
+	}
+
+	public void advertised(AdvertisedSessionConfig config) {
+		AdvertisedSessionConfig resolved = config == null ? AdvertisedSessionConfig.empty() : config;
+		advertised.set(resolved);
+		configOptions.set(resolved.configOptions());
+	}
+
+	/**
+	 * What the negotiated tier actually managed to apply. An application that asked for a model and
+	 * got {@code on-unsupported: warn} can find out here which model it is really talking to.
+	 */
+	public SessionConfiguration configuration() {
+		return configuration.get();
+	}
+
+	public void configuration(SessionConfiguration resolved) {
+		configuration.set(resolved == null ? SessionConfiguration.empty() : resolved);
+	}
+
+	/**
+	 * The agent's current configuration, as last observed. Seeded from {@link #advertised()} and
+	 * refreshed by every {@code session/set_config_option} response and {@code config_option_update}.
 	 */
 	public List<AcpSchema.SessionConfigOption> configOptions() {
 		return configOptions.get();
