@@ -1258,8 +1258,20 @@ Eight things the build taught us that the plan had not anticipated:
 
 ## Verification
 
-391 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable,
-and two opt in with `-Dacp-spring.test.registry.live=true` because they download 24 MB.
+391 tests, in two halves that cost very different things.
+
+`mvn test` runs the 368 that need no agent. The live suites are **opt-in**, behind
+`-Dacp-spring.test.live=true`, and skip silently without it: every turn they run is charged to
+whoever runs the build, against their own key, and a machine with all three agents logged in was
+paying for around thirty turns on every `mvn install` — of which two per runtime, the agentic
+file-writing ones, cost more than the other eight put together. That is the wrong trade for a
+command run dozens of times a day. What changes between two builds is this library, and what the
+live suite uniquely catches is the *agents* moving underneath it; the always-on gate against
+regressions in our own protocol handling is `ScriptedAgent`'s wire tests. So the live suites run
+when an adapter changes, before a release, and in CI. Opted in, they still skip per runtime when the
+agent is absent or has no credentials — `AgentProbe.isUsable` answers for both questions, cheapest
+first, and does not start an agent at all unless the build asked for one. Two further tests opt in
+separately with `-Dacp-spring.test.registry.live=true` because they download 24 MB.
 
 **Fast tests (344)** — turn semantics, session registry concurrency and permit accounting, event
 mapping, permission policy, URL/header/env/secret validation, tier-3 normalization, model matching,
@@ -1298,6 +1310,14 @@ or not the agent can be told, and — where the agent implements `session/load` 
 being the same conversation when it comes back. It never asserts a model name, a tool name, or how an
 agent phrases an answer; a test a runtime could only pass by behaving like Goose would make it a Goose
 conformance suite.
+
+Two of those fourteen assert the same invariant — that a tool-using turn still terminates exactly
+once — over the same file-writing prompt, and an agentic turn is the most expensive thing this suite
+does. Where a runtime names a `reviewingMode()`, the deny-by-default test covers it in the harder
+case, the one where permission is actually requested and refused and a stall would really happen, so
+`aToolUsingTurnStillTerminatesExactlyOnce` skips and only runs for an adapter with no reviewing mode
+to fall back on. All three current adapters have one, so an opted-in run spends three agentic turns
+rather than six.
 
 The load test is skipped rather than asserted where `session/load` is absent, and that is the line
 this suite walks: failing goose for not having `resume`, or OpenCode for not having `delete`, would

@@ -9,16 +9,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-mvn install                                   # build + all tests (also needed before running the sample)
-mvn test                                      # all tests; live-agent tests skip themselves when no usable agent
+mvn install                                   # build + all tests except the live-agent ones (also needed before running the sample)
+mvn test                                      # all tests; live-agent suites are opt-in and skip by default
+mvn test -Dacp-spring.test.live=true          # also run the live-agent suites (spends real tokens)
 mvn -pl acp-spring-core test                  # one module
 mvn -pl acp-spring-core test -Dtest=ConfigResolverTests            # one class
 mvn -pl acp-spring-core test -Dtest=ConfigResolverTests#someMethod # one method
 mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex   # goose|codex|opencode|gemini
 ```
 
-- Opt-in tests that download ~24 MB from the real registry: `-Dacp-spring.test.registry.live=true`.
+- **Live-agent suites cost real tokens, so they are opt-in: `-Dacp-spring.test.live=true`** (`LiveAgents`, honoured by `AgentProbe.isUsable`, which every live suite gates on). Without it nothing is probed and no agent is started. Run them when an adapter changes and before a release; `ScriptedAgent`'s wire tests are the always-on gate against protocol regressions. They still skip per runtime when the agent is absent or has no credentials.
 - Live contract tests pick the model via `-Dacp-spring.test.<runtimeId>.model=...` (otherwise `AgentProbe` chooses).
+- Opt-in tests that download ~24 MB from the real registry: `-Dacp-spring.test.registry.live=true`.
 - No linter/formatter is configured. Java uses tabs.
 
 ## Architecture

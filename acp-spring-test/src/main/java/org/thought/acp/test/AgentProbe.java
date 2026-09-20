@@ -33,7 +33,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * picks one that is <em>not</em> the one it already has, so setting it proves something.
  *
  * <p>Probes are cached per runtime id for the life of the JVM: three handshakes per build, not one
- * per test.
+ * per test. On a build that has not opted in to {@link LiveAgents}, there are none at all.
  */
 public final class AgentProbe {
 
@@ -66,9 +66,16 @@ public final class AgentProbe {
 		return CACHE.computeIfAbsent(runtime.id(), id -> probe(runtime));
 	}
 
-	/** Whether a live suite for {@code runtime} should run on this machine. */
+	/**
+	 * Whether a live suite for {@code runtime} should run on this build.
+	 *
+	 * <p>Two questions, in the cheap order. A build that has not opted in with
+	 * {@link LiveAgents#PROPERTY} is not probed at all — no agent is started and no turn is spent —
+	 * because the answer cannot change what it does. Only then is the machine asked whether it has a
+	 * usable agent, which costs a handshake.
+	 */
 	public static boolean isUsable(AgentRuntime runtime) {
-		return of(runtime).usable();
+		return LiveAgents.enabled() && of(runtime).usable();
 	}
 
 	private static AgentProbe probe(AgentRuntime runtime) {

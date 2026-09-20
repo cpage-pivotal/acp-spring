@@ -49,12 +49,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * phrases an answer. A test that a runtime could only pass by behaving like Goose would make the
  * suite a Goose conformance suite.
  *
+ * <p>Every test here spends real turns against a real vendor, so the suite is opt-in and skips
+ * unless the build asked for it — see {@link LiveAgents}, and gate the subclass on
+ * {@link AgentProbe#isUsable}, which answers for both that switch and this machine:
+ *
+ * <pre>{@code
+ * mvn test -Dacp-spring.test.live=true
+ * }</pre>
+ *
  * <p>To add a runtime: extend this, return the adapter, name the cheap end of its catalog, and gate
  * the class on the agent being installed. The model itself is discovered, not declared.
  *
  * <pre>{@code
- * @EnabledIf("available")
+ * @EnabledIf("usable")
  * class OpenCodeContractTests extends AgentRuntimeContract {
+ *     static boolean usable() { return AgentProbe.isUsable(new OpenCodeRuntime()); }
  *     protected AgentRuntime runtime() { return new OpenCodeRuntime(); }
  *     protected List<String> preferredModels() { return List.of("openai/gpt-5.4-mini"); }
  * }
@@ -283,12 +292,27 @@ public abstract class AgentRuntimeContract {
 		}
 	}
 
+	/**
+	 * A tool-using turn terminates once, on an agent with no mode in which it would ask.
+	 *
+	 * <p>The failure this library's deny-by-default policy could most easily have introduced: an
+	 * unanswered {@code session/request_permission} stalls a turn forever, and no timeout in the agent
+	 * will end it, because from the agent's side nothing is wrong.
+	 *
+	 * <p>Skipped where {@link #reviewingMode()} exists, because
+	 * {@link #denyByDefaultStopsAWriteWhenTheAgentAsksFirst} then asserts the same invariant over the
+	 * same file-writing prompt, and asserts it in the harder case — the one where permission really is
+	 * requested and refused, which is where a stall would actually happen. An agentic turn is the most
+	 * expensive thing this suite does, by more than the other turns put together, and running two of
+	 * them per runtime to prove one thing is not worth what it costs.
+	 */
 	@Test
 	@DisplayName("a turn that needs a tool still ends exactly once, whatever the policy decides")
 	void aToolUsingTurnStillTerminatesExactlyOnce() {
-		// The failure this library's deny-by-default policy could most easily have introduced: an
-		// unanswered session/request_permission stalls a turn forever, and no timeout in the agent will
-		// end it, because from the agent's side nothing is wrong.
+		org.junit.jupiter.api.Assumptions.assumeTrue(reviewingMode().isEmpty(),
+				"this agent has a reviewing mode, so denyByDefaultStopsAWriteWhenTheAgentAsksFirst "
+						+ "covers this invariant in the harder case");
+
 		List<AgentEvent> events = client().prompt()
 				.user("Create a file called contract.txt containing the word NO, then reply DONE.").stream().events()
 				.collectList().block(TURN_TIMEOUT);
