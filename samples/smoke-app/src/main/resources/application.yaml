@@ -23,11 +23,34 @@ spring:
     # goose spells its equivalent `approve`, so this is commented out rather than lying about it.
     # mode: plan
 
+    # What this client lends the agent. Both off: a server-side client has no editor to show a
+    # file in and no human to supervise a command, so there is nothing to gain by lending either.
+    # Note what this does NOT control — the agent's own file access, which is its process's.
+    filesystem:
+      enabled: false
+    terminal:
+      enabled: false
+
+    # One agent process is right for an application that serves requests one at a time. Raise
+    # max-processes for unrelated conversations that should make progress at once.
+    pool:
+      max-processes: 1
+      max-sessions-per-process: 32
+      session-ttl: 60m
+
+    # The HTTP endpoint is off by default, and authenticated when it is on.
+    controller:
+      enabled: false
+
     # Runtime-specific escape hatches. Each block is passed to that adapter untouched and ignored by
     # every other, so all three can sit here at once.
     runtimes:
       goose:
         builtins: developer
+        # Goose is the only runtime with a second transport. Uncomment to run `goose serve` as a
+        # supervised sidecar and speak ACP over its WebSocket instead of over a pipe.
+        # serve:
+        #   transport: websocket
       codex:
         config-toml:
           model_reasoning_effort: low

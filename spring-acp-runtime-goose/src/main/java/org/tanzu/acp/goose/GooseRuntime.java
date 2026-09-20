@@ -1,8 +1,10 @@
 package org.tanzu.acp.goose;
 
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +22,7 @@ import org.tanzu.acp.runtime.ToolNames;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
 /**
- * Runs Goose as an ACP agent over stdio.
+ * Runs Goose as an ACP agent, over stdio or over its own WebSocket server.
  *
  * <p>Goose is the reference runtime for this library and the best behaved of the three: a live
  * {@code session/new} advertises config options for provider, model, mode and thinking effort, so
@@ -32,11 +34,22 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * never heard of, which is why {@code ConfigResolver} validates against the advertised values
  * instead of trusting the call to fail.
  *
+ * <p>Goose is also the only runtime with a second transport. {@code goose serve} is an ACP server
+ * over WebSocket rather than a subprocess on a pipe, which is what the buildpack this library
+ * succeeds has always used, and the two differ in more than plumbing: a served agent outlives any
+ * one connection, so it is supervised and restarted rather than owned by its transport. Stdio
+ * stays the default because every other runtime has only that, and a library whose default
+ * behaviour depended on which agent was selected would be the problem it exists to solve.
+ *
  * <p>Tier-3 options, under {@code spring.acp.runtimes.goose}:
  *
  * <pre>{@code
  * builtins: developer,todo     # --with-builtin, comma-separated or a YAML list
  * env: { GOOSE_DISABLE_KEYRING: "1" }
+ * serve:
+ *   transport: websocket       # stdio (default) or websocket
+ *   host: 127.0.0.1            # loopback unless you mean otherwise
+ *   port: 0                    # 0 asks the OS for a free one
  * }</pre>
  */
 public class GooseRuntime implements AgentRuntime {
@@ -51,6 +64,15 @@ public class GooseRuntime implements AgentRuntime {
 	 * {@code OPENAI_BASE_URL} the derivation rule would produce.
 	 */
 	private static final String OPENAI_HOST = "OPENAI_HOST";
+
+	/** {@code goose serve} refuses to start without this, which is the behaviour we want. */
+	private static final String SECRET_KEY_ENV = "GOOSE_SERVER__SECRET_KEY";
+
+	private static final String SECRET_KEY_HEADER = "X-Secret-Key";
+
+	private static final String SERVE_WEBSOCKET = "websocket";
+
+	private static final String DEFAULT_SERVE_HOST = "127.0.0.1";
 
 	private final String executable;
 
@@ -69,15 +91,80 @@ public class GooseRuntime implements AgentRuntime {
 
 	@Override
 	public AgentLaunchSpec launch(AgentSettings settings) {
-		List<String> args = new ArrayList<>(List.of("acp"));
+		return isServed(settings) ? serve(settings) : stdio(settings);
+	}
 
-		// Goose's builtin extensions are a runtime-specific concern: tier 3, not tier 1.
+	private AgentLaunchSpec stdio(AgentSettings settings) {
+		List<String> args = new ArrayList<>(List.of("acp"));
+		builtins(settings, args);
+		return new AgentLaunchSpec.Stdio(executable, args, environment(settings));
+	}
+
+	/**
+	 * Starts {@code goose serve} on a loopback port and connects to its {@code /acp} WebSocket.
+	 *
+	 * <p>The secret is generated here rather than configured, and that is deliberate: it is a
+	 * credential shared between two processes on one machine for the lifetime of one of them, so
+	 * there is nothing for an operator to rotate, leak or forget to set. It reaches the server on
+	 * its environment and this client on an upgrade header, and appears in no file and no log —
+	 * {@code SecretRedactor} covers the case where the agent prints it back.
+	 *
+	 * <p>Port 0 means "ask the OS", which is what an application that only needs the agent to be
+	 * reachable from inside the same container should say. Binding a socket to find a free port and
+	 * closing it again does leave a window in which something else could take it; the alternative
+	 * is a fixed port that fails outright when it is busy, which is worse for a sidecar nobody
+	 * chose the port of.
+	 */
+	private AgentLaunchSpec serve(AgentSettings settings) {
+		RuntimeOptions options = settings.runtimeOptions();
+		String host = options.text("serve.host").orElse(DEFAULT_SERVE_HOST);
+		int port = options.text("serve.port").map(Integer::parseInt).filter(p -> p > 0)
+				.orElseGet(GooseRuntime::freePort);
+		String secret = newSecret();
+
+		List<String> args = new ArrayList<>(List.of("serve", "--host", host, "--port", String.valueOf(port)));
+		builtins(settings, args);
+
+		Map<String, String> env = new LinkedHashMap<>(environment(settings));
+		env.put(SECRET_KEY_ENV, secret);
+
+		AgentLaunchSpec.ManagedProcess process = new AgentLaunchSpec.ManagedProcess(executable, args, env,
+				URI.create("http://" + host + ":" + port + "/health"), startupTimeout(options));
+
+		return new AgentLaunchSpec.WebSocket(URI.create("ws://" + host + ":" + port + "/acp"),
+				Map.of(SECRET_KEY_HEADER, secret), process);
+	}
+
+	private static Duration startupTimeout(RuntimeOptions options) {
+		return options.text("serve.startup-timeout").map(Duration::parse).orElse(null);
+	}
+
+	/** Whether tier 3 asked for the served transport. */
+	private static boolean isServed(AgentSettings settings) {
+		return settings.runtimeOptions().text("serve.transport").filter(SERVE_WEBSOCKET::equalsIgnoreCase).isPresent();
+	}
+
+	/** Goose's builtin extensions are a runtime-specific concern: tier 3, not tier 1. */
+	private static void builtins(AgentSettings settings, List<String> args) {
 		settings.runtimeOptions().textList("builtins").forEach(name -> {
 			args.add("--with-builtin");
 			args.add(name);
 		});
+	}
 
-		return new AgentLaunchSpec.Stdio(executable, args, environment(settings));
+	private static int freePort() {
+		try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+			return socket.getLocalPort();
+		}
+		catch (java.io.IOException ex) {
+			throw new IllegalStateException("Could not allocate a port for 'goose serve'", ex);
+		}
+	}
+
+	private static String newSecret() {
+		byte[] bytes = new byte[32];
+		new java.security.SecureRandom().nextBytes(bytes);
+		return java.util.HexFormat.of().formatHex(bytes);
 	}
 
 	/**

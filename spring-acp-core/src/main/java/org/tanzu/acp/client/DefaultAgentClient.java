@@ -17,6 +17,8 @@ import org.tanzu.acp.event.AgentEvent;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.runtime.AgentRuntime.PortableOption;
 import org.tanzu.acp.session.AgentSession;
+import org.tanzu.acp.session.AgentSessions;
+import org.tanzu.acp.session.DefaultAgentSessions;
 import org.tanzu.acp.session.SessionRegistry;
 import org.tanzu.acp.turn.AgentTurn;
 import org.tanzu.acp.turn.SessionUpdateRouter;
@@ -47,10 +49,20 @@ public final class DefaultAgentClient implements AgentClient {
 
 	private final ConfigResolver configResolver;
 
+	private final AgentInfo agentInfo;
+
+	private final AgentSessions sessionOperations;
+
+	/** Null when the transport cannot tell; see {@code AgentClientFactory.Liveness}. */
+	private final java.util.function.BooleanSupplier alive;
+
+	private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
+
 	private final Runnable onClose;
 
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
-			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder, Runnable onClose) {
+			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
+			AcpSchema.InitializeResponse initialized, java.util.function.BooleanSupplier alive, Runnable onClose) {
 		this.acp = acp;
 		this.runtime = runtime;
 		this.settings = settings;
@@ -58,8 +70,28 @@ public final class DefaultAgentClient implements AgentClient {
 		this.router = router;
 		this.recorder = recorder == null ? new SessionConfigRecorder() : recorder;
 		this.configResolver = new ConfigResolver(runtime, settings.onUnsupported());
+		this.agentInfo = initialized == null ? null : AgentInfo.from(initialized.agentInfo()).orElse(null);
+		this.sessionOperations = new DefaultAgentSessions(acp, runtime.id(), settings,
+				initialized == null ? null : initialized.agentCapabilities(), sessions, this.recorder,
+				session -> configure(session, settings));
+		this.alive = alive;
 		this.onClose = onClose == null ? () -> {
 		} : onClose;
+	}
+
+	@Override
+	public boolean isAlive() {
+		return !closed.get() && (alive == null || alive.getAsBoolean());
+	}
+
+	@Override
+	public Optional<AgentInfo> agentInfo() {
+		return Optional.ofNullable(agentInfo);
+	}
+
+	@Override
+	public AgentSessions sessions() {
+		return sessionOperations;
 	}
 
 	@Override
@@ -74,6 +106,9 @@ public final class DefaultAgentClient implements AgentClient {
 
 	@Override
 	public void close() {
+		if (!closed.compareAndSet(false, true)) {
+			return;
+		}
 		sessions.all().forEach(s -> closeRemote(s.sessionId()));
 		sessions.clear();
 		try {
@@ -87,7 +122,7 @@ public final class DefaultAgentClient implements AgentClient {
 		}
 	}
 
-	/** Evicts sessions idle past the TTL and closes them on the agent. */
+	@Override
 	public void evictIdleSessions() {
 		sessions.evictIdle(settings.sessionTtl()).forEach(s -> closeRemote(s.sessionId()));
 	}
@@ -313,10 +348,5 @@ public final class DefaultAgentClient implements AgentClient {
 	@Override
 	public Optional<AgentSession> session(String name) {
 		return sessions.find(name);
-	}
-
-	/** Every session this client currently holds. */
-	public List<AgentSession> sessions() {
-		return sessions.all();
 	}
 }

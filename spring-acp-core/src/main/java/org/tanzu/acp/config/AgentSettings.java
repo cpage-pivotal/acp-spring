@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.workspace.FileSystemAccess;
+import org.tanzu.acp.workspace.TerminalAccess;
 
 /**
  * The resolved, runtime-neutral configuration an {@code AgentClient} runs with.
@@ -20,10 +22,15 @@ import org.tanzu.acp.permission.PermissionPolicy;
  * runtime honors them, because ACP does. {@code model}, {@code mode} and {@code provider} are
  * negotiated requests that {@code ConfigResolver} tries to place and {@code onUnsupported} prices.
  * {@link RuntimeOptions} is tier three, opaque to everything but the one adapter it names.
+ *
+ * <p>{@link FileSystemAccess} and {@link TerminalAccess} are portable in the same sense but point
+ * the other way: they say what the agent may ask <em>this</em> client to do, not what this client
+ * asks of the agent. Both are off by default.
  */
 public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Duration timeout, String model,
 		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, PermissionPolicy permissions,
-		OnUnsupported onUnsupported, Duration sessionTtl, RuntimeOptions runtimeOptions) {
+		FileSystemAccess filesystem, TerminalAccess terminal, OnUnsupported onUnsupported, Duration sessionTtl,
+		PoolSettings pool, RuntimeOptions runtimeOptions) {
 
 	public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
 
@@ -46,8 +53,11 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 			throw new IllegalArgumentException("timeout must be positive but was " + timeout);
 		}
 		sessionTtl = sessionTtl == null ? DEFAULT_SESSION_TTL : sessionTtl;
+		pool = pool == null ? PoolSettings.defaults() : pool;
 		mcpServers = mcpServers == null ? List.of() : List.copyOf(mcpServers);
 		permissions = permissions == null ? PermissionPolicy.deny() : permissions;
+		filesystem = filesystem == null ? FileSystemAccess.none() : filesystem;
+		terminal = terminal == null ? TerminalAccess.disabled() : terminal;
 		onUnsupported = onUnsupported == null ? OnUnsupported.WARN : onUnsupported;
 		provider = provider == null ? ProviderSpec.none() : provider;
 		runtimeOptions = runtimeOptions == null ? RuntimeOptions.empty() : runtimeOptions;
@@ -80,7 +90,8 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		}
 		return new AgentSettings(runtime, workspace, runtimeHome, options.findTimeout().orElse(timeout),
 				options.findModel().orElse(model), options.findProvider().map(provider::withId).orElse(provider),
-				options.findMode().orElse(mode), mcpServers, permissions, onUnsupported, sessionTtl, runtimeOptions);
+				options.findMode().orElse(mode), mcpServers, permissions, filesystem, terminal, onUnsupported,
+				sessionTtl, pool, runtimeOptions);
 	}
 
 	public static final class Builder {
@@ -103,9 +114,15 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 
 		private PermissionPolicy permissions = PermissionPolicy.deny();
 
+		private FileSystemAccess filesystem = FileSystemAccess.none();
+
+		private TerminalAccess terminal = TerminalAccess.disabled();
+
 		private OnUnsupported onUnsupported = OnUnsupported.WARN;
 
 		private Duration sessionTtl;
+
+		private PoolSettings pool = PoolSettings.defaults();
 
 		private RuntimeOptions runtimeOptions = RuntimeOptions.empty();
 
@@ -153,6 +170,16 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 			return this;
 		}
 
+		public Builder filesystem(FileSystemAccess filesystem) {
+			this.filesystem = filesystem;
+			return this;
+		}
+
+		public Builder terminal(TerminalAccess terminal) {
+			this.terminal = terminal;
+			return this;
+		}
+
 		public Builder onUnsupported(OnUnsupported onUnsupported) {
 			this.onUnsupported = onUnsupported;
 			return this;
@@ -160,6 +187,11 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 
 		public Builder sessionTtl(Duration sessionTtl) {
 			this.sessionTtl = sessionTtl;
+			return this;
+		}
+
+		public Builder pool(PoolSettings pool) {
+			this.pool = pool;
 			return this;
 		}
 
@@ -174,7 +206,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 
 		public AgentSettings build() {
 			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers,
-					permissions, onUnsupported, sessionTtl, runtimeOptions);
+					permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions);
 		}
 	}
 }

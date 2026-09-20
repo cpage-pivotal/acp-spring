@@ -31,8 +31,15 @@ import reactor.core.publisher.Mono;
  * anything about framing, ids or correlation. Options are decoded one at a time, so an option of a
  * type this SDK version has no record for costs that one option rather than all of them.
  *
- * <p>Delete this when {@code NewSessionResponse} models the field. The only thing outside needs to
- * know is {@link #configOptionsFor(String)}.
+ * <p>{@code LoadSessionResponse} and {@code ResumeSessionResponse} have the same gap and one extra
+ * difficulty: neither response carries the session id, so there is nothing to key the options on.
+ * Those are stashed unattributed and claimed by the caller that just made the call, which is only
+ * sound because {@code AgentSessions} serializes load and resume. Best effort by construction — an
+ * agent that returns no options there costs a fallback to {@code modes}/{@code models}, not a
+ * failure.
+ *
+ * <p>Delete this when {@code NewSessionResponse} models the field. The only things outside need to
+ * know are {@link #configOptionsFor(String)} and {@link #claimUnattributed()}.
  */
 public final class SessionConfigRecorder {
 
@@ -42,6 +49,10 @@ public final class SessionConfigRecorder {
 	};
 
 	private final Map<String, List<AcpSchema.SessionConfigOption>> bySession = new ConcurrentHashMap<>();
+
+	/** Options from a response that did not name its session. See the class javadoc. */
+	private final java.util.concurrent.atomic.AtomicReference<List<AcpSchema.SessionConfigOption>> unattributed =
+			new java.util.concurrent.atomic.AtomicReference<>();
 
 	/** Wraps {@code delegate} so that new sessions' config options are recorded as they arrive. */
 	public AcpClientTransport wrap(AcpClientTransport delegate) {
@@ -61,9 +72,36 @@ public final class SessionConfigRecorder {
 		bySession.remove(sessionId);
 	}
 
+	/**
+	 * Takes the options from the last response that carried some without naming a session, clearing
+	 * them so a later caller cannot pick up a stale set.
+	 */
+	public List<AcpSchema.SessionConfigOption> claimUnattributed() {
+		List<AcpSchema.SessionConfigOption> claimed = unattributed.getAndSet(null);
+		return claimed == null ? List.of() : claimed;
+	}
+
+	private void recordUnattributed(AcpClientTransport transport, Object rawOptions) {
+		List<AcpSchema.SessionConfigOption> options = decode(transport, rawOptions);
+		if (!options.isEmpty()) {
+			unattributed.set(options);
+		}
+	}
+
 	private void record(AcpClientTransport transport, String sessionId, Object rawOptions) {
-		if (sessionId == null || !(rawOptions instanceof List<?> raw) || raw.isEmpty()) {
+		if (sessionId == null) {
 			return;
+		}
+		List<AcpSchema.SessionConfigOption> options = decode(transport, rawOptions);
+		if (!options.isEmpty()) {
+			bySession.put(sessionId, options);
+			logger.debug("Session {} advertised {} config option(s)", sessionId, options.size());
+		}
+	}
+
+	private List<AcpSchema.SessionConfigOption> decode(AcpClientTransport transport, Object rawOptions) {
+		if (!(rawOptions instanceof List<?> raw) || raw.isEmpty()) {
+			return List.of();
 		}
 		List<AcpSchema.SessionConfigOption> options = new ArrayList<>(raw.size());
 		for (Object element : raw) {
@@ -74,10 +112,7 @@ public final class SessionConfigRecorder {
 				logger.debug("Ignoring a session config option this SDK version cannot model: {}", ex.getMessage());
 			}
 		}
-		if (!options.isEmpty()) {
-			bySession.put(sessionId, List.copyOf(options));
-			logger.debug("Session {} advertised {} config option(s)", sessionId, options.size());
-		}
+		return List.copyOf(options);
 	}
 
 	/** Delegates everything; watches one method. */
@@ -92,8 +127,14 @@ public final class SessionConfigRecorder {
 		@Override
 		public <T> T unmarshalFrom(Object raw, TypeRef<T> type) {
 			T value = delegate.unmarshalFrom(raw, type);
-			if (value instanceof AcpSchema.NewSessionResponse response && raw instanceof Map<?, ?> map) {
-				record(delegate, response.sessionId(), map.get("configOptions"));
+			if (raw instanceof Map<?, ?> map) {
+				if (value instanceof AcpSchema.NewSessionResponse response) {
+					record(delegate, response.sessionId(), map.get("configOptions"));
+				}
+				else if (value instanceof AcpSchema.LoadSessionResponse
+						|| value instanceof AcpSchema.ResumeSessionResponse) {
+					recordUnattributed(delegate, map.get("configOptions"));
+				}
 			}
 			return value;
 		}

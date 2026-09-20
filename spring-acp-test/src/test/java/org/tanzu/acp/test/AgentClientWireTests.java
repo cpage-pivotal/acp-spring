@@ -18,6 +18,9 @@ import org.tanzu.acp.event.AgentEvent;
 import org.tanzu.acp.runtime.AgentLaunchSpec;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.runtime.AgentRuntime.PortableOption;
+import org.tanzu.acp.session.AgentSessions;
+import org.tanzu.acp.session.StoredSession;
+import org.tanzu.acp.session.UnsupportedAgentOperationException;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -236,6 +239,95 @@ class AgentClientWireTests {
 				client.prompt("two").call();
 				client.prompt("three").call();
 			});
+		}
+	}
+
+	// --- session operations -----------------------------------------------------------------
+
+	@Test
+	void anAgentThatAdvertisesNoSessionOperationsIsRefusedByNameRatherThanOnTheWire() {
+		// Every one of these is optional in ACP and the three real runtimes implement different
+		// subsets, so "not here" has to be a typed answer rather than a JSON-RPC error code.
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, settings().build())) {
+
+			AgentSessions sessions = client.sessions();
+
+			assertThat(sessions.supports(AgentSessions.Operation.LIST)).isFalse();
+			assertThatThrownBy(sessions::list).isInstanceOf(UnsupportedAgentOperationException.class);
+			assertThatThrownBy(() -> sessions.load("a", "sid-1"))
+					.isInstanceOf(UnsupportedAgentOperationException.class);
+			assertThatThrownBy(() -> sessions.delete("sid-1"))
+					.isInstanceOf(UnsupportedAgentOperationException.class);
+			assertThat(agent.methods()).doesNotContain("session/list", "session/load", "session/delete");
+		}
+	}
+
+	@Test
+	void listingFollowsTheAgentsCursorToTheEnd() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("list")
+				.storedSessions("sid-1", "sid-2", "sid-3").build();
+				AgentClient client = connect(agent, settings().build())) {
+
+			assertThat(client.sessions().list()).extracting(StoredSession::sessionId)
+					.containsExactly("sid-1", "sid-2", "sid-3");
+			assertThat(client.sessions().supports(AgentSessions.Operation.LIST)).isTrue();
+		}
+	}
+
+	/**
+	 * {@code LoadSessionResponse} drops {@code configOptions} exactly as {@code NewSessionResponse}
+	 * does, and with one extra difficulty: the response does not name its session, so there is
+	 * nothing to key the recovered options on. A loaded session that can still negotiate its model
+	 * is the proof that the claim-immediately arrangement works.
+	 */
+	@Test
+	void aLoadedSessionStillNegotiatesItsModel() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("load", "list")
+				.storedSessions("sid-1").select("model", "model", "a", "a", "b").build();
+				AgentClient client = connect(agent, settings().model("b").build())) {
+
+			client.sessions().load("restored", "sid-1");
+
+			assertThat(agent.loaded()).containsExactly("sid-1");
+			assertThat(client.session("restored")).get()
+					.extracting(session -> session.configuration().of(PortableOption.MODEL).applied())
+					.isEqualTo("b");
+			assertThat(agent.configSets()).contains(Map.of("configId", "model", "value", "b"));
+		}
+	}
+
+	@Test
+	void aResumedSessionIsBoundWithoutReplayingHistory() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("resume")
+				.storedSessions("sid-1").build();
+				AgentClient client = connect(agent, settings().build())) {
+
+			assertThat(client.sessions().resume("restored", "sid-1").sessionId()).isEqualTo("sid-1");
+			assertThat(agent.methods()).contains("session/resume").doesNotContain("session/load");
+		}
+	}
+
+	@Test
+	void deletingRemovesTheSessionFromTheAgentAndTheNameFromTheClient() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("load", "delete", "list")
+				.storedSessions("sid-1", "sid-2").build();
+				AgentClient client = connect(agent, settings().build())) {
+			client.sessions().load("restored", "sid-1");
+
+			client.sessions().delete("sid-1");
+
+			assertThat(agent.storedSessions()).containsExactly("sid-2");
+			assertThat(client.session("restored")).isEmpty();
+		}
+	}
+
+	@Test
+	void theAgentsOwnVersionSurvivesTheHandshake() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().agentInfo("pretend", "9.9.9").build();
+				AgentClient client = connect(agent, settings().build())) {
+
+			assertThat(client.agentInfo()).get().hasToString("pretend 9.9.9");
 		}
 	}
 

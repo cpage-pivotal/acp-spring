@@ -96,4 +96,24 @@ class SessionRegistryTests {
 		assertThat(session.tryBeginTurn(Duration.ofMillis(50))).isTrue();
 		assertThat(session.tryBeginTurn(Duration.ofMillis(50))).isFalse();
 	}
+
+	/**
+	 * The counterpart to {@code resolve}'s idempotence, and the reason both exist: continuing a
+	 * conversation must never create a second one, and binding a name to a session the agent
+	 * already has must never quietly displace whatever that name meant before.
+	 */
+	@Test
+	void adoptingAnOpenNameIsRefusedRatherThanSilentlyRebinding() {
+		registry.adopt("review", "sid-1");
+
+		assertThatThrownBy(() -> registry.adopt("review", "sid-2")).isInstanceOf(IllegalStateException.class)
+				.hasMessageContaining("sid-1").hasMessageContaining("sid-2");
+
+		assertThat(registry.find("review")).get().extracting(AgentSession::sessionId).isEqualTo("sid-1");
+	}
+
+	@Test
+	void adoptingValidatesTheName() {
+		assertThatThrownBy(() -> registry.adopt("../escape", "sid-1")).isInstanceOf(IllegalArgumentException.class);
+	}
 }

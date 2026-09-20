@@ -10,11 +10,15 @@ import java.util.Map;
 import java.util.Set;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 import org.tanzu.acp.config.McpServerSpec;
 import org.tanzu.acp.config.OnUnsupported;
+import org.tanzu.acp.config.PoolSettings;
 import org.tanzu.acp.config.ProviderSpec;
 import org.tanzu.acp.config.RuntimeOptions;
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.workspace.FileSystemAccess;
+import org.tanzu.acp.workspace.TerminalAccess;
 
 /**
  * Binds {@code spring.acp.*}.
@@ -54,13 +58,18 @@ public class AcpProperties {
 	/** What to do when the runtime cannot honor model, provider or mode. */
 	private OnUnsupported onUnsupported = OnUnsupported.WARN;
 
-	/** How long an idle named session is kept before it is closed. */
-	private Duration sessionTtl = Duration.ofMinutes(60);
-
 	/** MCP servers offered to every session. Passed through ACP verbatim. */
 	private List<McpServer> mcpServers = new ArrayList<>();
 
 	private final Permissions permissions = new Permissions();
+
+	private final FileSystem filesystem = new FileSystem();
+
+	private final Terminal terminal = new Terminal();
+
+	private final Pool pool = new Pool();
+
+	private final Controller controller = new Controller();
 
 	/**
 	 * Runtime-specific options, keyed by runtime id. Ignored by every other runtime.
@@ -88,9 +97,249 @@ public class AcpProperties {
 		return RuntimeOptions.of(runtimes.getOrDefault(runtimeId, Map.of()));
 	}
 
+	public FileSystemAccess toFileSystemAccess() {
+		return filesystem.toAccess();
+	}
+
+	public TerminalAccess toTerminalAccess() {
+		return terminal.toAccess();
+	}
+
+	public PoolSettings toPoolSettings() {
+		return pool.toSettings();
+	}
+
 	public enum PermissionMode {
 
 		DENY, ALLOWLIST, AUTO_APPROVE
+	}
+
+	/**
+	 * Whether the agent may use this client's filesystem methods.
+	 *
+	 * <p>Off by default, and read-only when it is on unless {@code write} says otherwise, because
+	 * the two are genuinely different decisions: lending an agent the ability to read the
+	 * repository it is reasoning about is ordinary, and lending it the ability to change that
+	 * repository through this process is not.
+	 */
+	public static class FileSystem {
+
+		/** Answer fs/read_text_file. */
+		private boolean enabled;
+
+		/** Also answer fs/write_text_file. Implies enabled. */
+		private boolean write;
+
+		FileSystemAccess toAccess() {
+			return new FileSystemAccess(enabled || write, write);
+		}
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public boolean isWrite() {
+			return write;
+		}
+
+		public void setWrite(boolean write) {
+			this.write = write;
+		}
+	}
+
+	/** Whether the agent may ask this client to run commands, and which ones. */
+	public static class Terminal {
+
+		/** Answer the terminal/* methods. Arbitrary code execution as this JVM's user. */
+		private boolean enabled;
+
+		/** Command names the agent may run. Empty allows any, which is the default. */
+		private Set<String> allowedCommands = Set.of();
+
+		/** Output kept per terminal before it is reported truncated. */
+		private DataSize outputLimit = DataSize.ofMegabytes(1);
+
+		/** How long one command may run before it is killed. */
+		private Duration commandTimeout = Duration.ofMinutes(5);
+
+		/** Terminals one connection may hold at once. */
+		private int maxConcurrent = 8;
+
+		TerminalAccess toAccess() {
+			return new TerminalAccess(enabled, allowedCommands, outputLimit.toBytes(), commandTimeout, maxConcurrent);
+		}
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public Set<String> getAllowedCommands() {
+			return allowedCommands;
+		}
+
+		public void setAllowedCommands(Set<String> allowedCommands) {
+			this.allowedCommands = allowedCommands;
+		}
+
+		public DataSize getOutputLimit() {
+			return outputLimit;
+		}
+
+		public void setOutputLimit(DataSize outputLimit) {
+			this.outputLimit = outputLimit;
+		}
+
+		public Duration getCommandTimeout() {
+			return commandTimeout;
+		}
+
+		public void setCommandTimeout(Duration commandTimeout) {
+			this.commandTimeout = commandTimeout;
+		}
+
+		public int getMaxConcurrent() {
+			return maxConcurrent;
+		}
+
+		public void setMaxConcurrent(int maxConcurrent) {
+			this.maxConcurrent = maxConcurrent;
+		}
+	}
+
+	/** How many agent processes to run, and how much to ask of each. */
+	public static class Pool {
+
+		/** Agent connections to keep. Each one is a separate agent process. */
+		private int maxProcesses = 1;
+
+		/** Named sessions one connection may hold before another is preferred. */
+		private int maxSessionsPerProcess = 32;
+
+		/** How long an idle named session is kept before it is closed. */
+		private Duration sessionTtl = Duration.ofMinutes(60);
+
+		/** Replacements allowed within a five-minute window before a connection is left down. */
+		private int maxRestarts = 5;
+
+		PoolSettings toSettings() {
+			return new PoolSettings(maxProcesses, maxSessionsPerProcess, maxRestarts);
+		}
+
+		public int getMaxProcesses() {
+			return maxProcesses;
+		}
+
+		public void setMaxProcesses(int maxProcesses) {
+			this.maxProcesses = maxProcesses;
+		}
+
+		public int getMaxSessionsPerProcess() {
+			return maxSessionsPerProcess;
+		}
+
+		public void setMaxSessionsPerProcess(int maxSessionsPerProcess) {
+			this.maxSessionsPerProcess = maxSessionsPerProcess;
+		}
+
+		public Duration getSessionTtl() {
+			return sessionTtl;
+		}
+
+		public void setSessionTtl(Duration sessionTtl) {
+			this.sessionTtl = sessionTtl;
+		}
+
+		public int getMaxRestarts() {
+			return maxRestarts;
+		}
+
+		public void setMaxRestarts(int maxRestarts) {
+			this.maxRestarts = maxRestarts;
+		}
+	}
+
+	/**
+	 * The optional HTTP endpoint.
+	 *
+	 * <p>Off by default and, when on, authenticated by default. An agent endpoint is a way to spend
+	 * an application's model budget and to make its agent act on its workspace, so the defaults are
+	 * the ones an application would have to deliberately weaken rather than remember to set.
+	 */
+	public static class Controller {
+
+		/** Register the reactive controller. */
+		private boolean enabled;
+
+		/** Serve requests that arrive without a Principal. Development only. */
+		private boolean allowUnauthenticated;
+
+		/** Let a request name its own model or provider. Off: credentials are fixed at startup. */
+		private boolean allowRequestOverrides;
+
+		/** Base path for the endpoint. */
+		private String path = "/api/acp";
+
+		/** Longest prompt a request may carry. */
+		private int maxPromptChars = 32_000;
+
+		/** Longest timeout a request may ask for. */
+		private Duration maxTimeout = Duration.ofMinutes(10);
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public boolean isAllowUnauthenticated() {
+			return allowUnauthenticated;
+		}
+
+		public void setAllowUnauthenticated(boolean allowUnauthenticated) {
+			this.allowUnauthenticated = allowUnauthenticated;
+		}
+
+		public boolean isAllowRequestOverrides() {
+			return allowRequestOverrides;
+		}
+
+		public void setAllowRequestOverrides(boolean allowRequestOverrides) {
+			this.allowRequestOverrides = allowRequestOverrides;
+		}
+
+		public String getPath() {
+			return path;
+		}
+
+		public void setPath(String path) {
+			this.path = path;
+		}
+
+		public int getMaxPromptChars() {
+			return maxPromptChars;
+		}
+
+		public void setMaxPromptChars(int maxPromptChars) {
+			this.maxPromptChars = maxPromptChars;
+		}
+
+		public Duration getMaxTimeout() {
+			return maxTimeout;
+		}
+
+		public void setMaxTimeout(Duration maxTimeout) {
+			this.maxTimeout = maxTimeout;
+		}
 	}
 
 	/**
@@ -325,14 +574,6 @@ public class AcpProperties {
 		this.onUnsupported = onUnsupported;
 	}
 
-	public Duration getSessionTtl() {
-		return sessionTtl;
-	}
-
-	public void setSessionTtl(Duration sessionTtl) {
-		this.sessionTtl = sessionTtl;
-	}
-
 	public List<McpServer> getMcpServers() {
 		return mcpServers;
 	}
@@ -343,6 +584,22 @@ public class AcpProperties {
 
 	public Permissions getPermissions() {
 		return permissions;
+	}
+
+	public FileSystem getFilesystem() {
+		return filesystem;
+	}
+
+	public Terminal getTerminal() {
+		return terminal;
+	}
+
+	public Pool getPool() {
+		return pool;
+	}
+
+	public Controller getController() {
+		return controller;
 	}
 
 	public Map<String, Map<String, Object>> getRuntimes() {

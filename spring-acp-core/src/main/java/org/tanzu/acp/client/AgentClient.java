@@ -39,6 +39,40 @@ public interface AgentClient extends AutoCloseable {
 	/** The id of the runtime behind this client, e.g. {@code goose}. */
 	String runtimeId();
 
+	/** What the agent called itself during {@code initialize}, when it said. */
+	java.util.Optional<AgentInfo> agentInfo();
+
+	/**
+	 * Whether this connection is still usable.
+	 *
+	 * <p>Optimistic by contract: a transport that cannot tell answers {@code true}, because the
+	 * alternative — reporting "possibly dead" for every stdio agent — would make the answer useless
+	 * to the one caller that needs it. What it does promise is that {@code false} is never wrong.
+	 */
+	default boolean isAlive() {
+		return true;
+	}
+
+	/**
+	 * Closes the named sessions that have been idle longer than the configured TTL.
+	 *
+	 * <p>On the interface rather than hidden in a lifecycle bean because a session costs memory on
+	 * the agent for as long as it is open, and an application that knows its own quiet periods can
+	 * reclaim them sooner than a timer would. A pooled client sweeps on a schedule of its own, so
+	 * most applications never call this.
+	 */
+	default void evictIdleSessions() {
+	}
+
+	/**
+	 * The conversations this agent has, as opposed to the turns run in them: list, load, resume,
+	 * delete, close.
+	 *
+	 * <p>Every one of them is optional in ACP and the runtimes disagree about which they implement,
+	 * so ask {@code sessions().supports(...)} before spending a round trip on finding out.
+	 */
+	org.tanzu.acp.session.AgentSessions sessions();
+
 	/**
 	 * The named session, once a turn has opened it.
 	 *

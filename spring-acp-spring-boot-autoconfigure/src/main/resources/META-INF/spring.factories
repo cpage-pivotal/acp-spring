@@ -1,0 +1,5 @@
+org.springframework.boot.context.config.ConfigDataLocationResolver=\
+org.tanzu.acp.boot.AgentsConfigDataLocationResolver
+
+org.springframework.boot.context.config.ConfigDataLoader=\
+org.tanzu.acp.boot.AgentsConfigDataLoader

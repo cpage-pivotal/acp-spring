@@ -94,4 +94,64 @@ class GooseRuntimeTests {
 
 		assertThat(runtime.toolNameOf(call)).contains("developer__text_editor");
 	}
+
+	// --- the served transport ---------------------------------------------------------------
+
+	private AgentLaunchSpec.WebSocket served(Map<String, Object> serve) {
+		AgentSettings settings = AgentSettings.builder("goose", workspace)
+				.runtimeOptions(Map.of("serve", serve)).build();
+		return (AgentLaunchSpec.WebSocket) runtime.launch(settings);
+	}
+
+	@Test
+	void stdioIsTheDefaultTransport() {
+		assertThat(runtime.launch(AgentSettings.builder("goose", workspace).build()))
+				.isInstanceOf(AgentLaunchSpec.Stdio.class);
+	}
+
+	@Test
+	void theServedTransportStartsGooseServeAndPointsAtItsAcpEndpoint() {
+		AgentLaunchSpec.WebSocket spec = served(Map.of("transport", "websocket", "port", "45231"));
+
+		assertThat(spec.uri()).isEqualTo(URI.create("ws://127.0.0.1:45231/acp"));
+		assertThat(spec.process().healthUri()).isEqualTo(URI.create("http://127.0.0.1:45231/health"));
+		assertThat(spec.process().args()).containsExactly("serve", "--host", "127.0.0.1", "--port", "45231");
+	}
+
+	@Test
+	void portZeroAsksTheOperatingSystemForOne() {
+		AgentLaunchSpec.WebSocket spec = served(Map.of("transport", "websocket", "port", "0"));
+
+		assertThat(spec.uri().getPort()).isGreaterThan(0);
+	}
+
+	/**
+	 * The generated secret has to reach two places at once — the server's environment and this
+	 * client's upgrade header — and the server refuses every connection if they disagree.
+	 */
+	@Test
+	void theGeneratedSecretReachesBothTheServerAndTheHeader() {
+		AgentLaunchSpec.WebSocket spec = served(Map.of("transport", "websocket"));
+
+		String fromEnvironment = spec.process().env().get("GOOSE_SERVER__SECRET_KEY");
+		assertThat(fromEnvironment).isNotBlank().hasSize(64);
+		assertThat(spec.headers()).containsEntry("X-Secret-Key", fromEnvironment);
+	}
+
+	@Test
+	void eachLaunchGetsItsOwnSecret() {
+		assertThat(served(Map.of("transport", "websocket")).headers().get("X-Secret-Key"))
+				.isNotEqualTo(served(Map.of("transport", "websocket")).headers().get("X-Secret-Key"));
+	}
+
+	@Test
+	void builtinsAndTheHardeningEnvironmentSurviveTheSwitchOfTransport() {
+		AgentSettings settings = AgentSettings.builder("goose", workspace)
+				.runtimeOptions(Map.of("serve", Map.of("transport", "websocket"), "builtins", "developer")).build();
+
+		AgentLaunchSpec.WebSocket spec = (AgentLaunchSpec.WebSocket) runtime.launch(settings);
+
+		assertThat(spec.process().args()).contains("--with-builtin", "developer");
+		assertThat(spec.process().env()).containsEntry("GOOSE_DISABLE_KEYRING", "1");
+	}
 }

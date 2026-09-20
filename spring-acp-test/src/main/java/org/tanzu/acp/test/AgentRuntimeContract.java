@@ -20,6 +20,8 @@ import org.tanzu.acp.config.UnsupportedAgentOptionException;
 import org.tanzu.acp.event.AgentEvent;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.runtime.AgentRuntime.PortableOption;
+import org.tanzu.acp.session.AgentSessions;
+import org.tanzu.acp.session.UnsupportedAgentOperationException;
 
 import reactor.test.StepVerifier;
 
@@ -295,6 +297,88 @@ public abstract class AgentRuntimeContract {
 			assertThat(events.stream().filter(AgentEvent::terminal)).hasSize(1);
 			assertThat(workspace.resolve("contract.txt")).doesNotExist();
 		}
+	}
+
+	/**
+	 * The optional session methods are declared rather than discovered by failing.
+	 *
+	 * <p>The portable claim is not that any of these work — {@code session/list},
+	 * {@code session/load}, {@code session/resume} and {@code session/delete} are each gated on a
+	 * capability, and the three runtimes implement different subsets, which is exactly the kind of
+	 * difference an application must not have to know about. What is portable is that asking is
+	 * safe: {@code supports} answers for every operation, and an operation the agent never
+	 * advertised throws a typed exception naming the method instead of failing on the wire with an
+	 * error code the caller would have to interpret.
+	 */
+	@Test
+	@DisplayName("every optional session operation is askable, and says no by name when it must")
+	void optionalSessionOperationsAreDeclared() {
+		AgentSessions sessions = client().sessions();
+
+		for (AgentSessions.Operation operation : AgentSessions.Operation.values()) {
+			assertThat(sessions.supports(operation)).isNotNull();
+		}
+
+		if (sessions.supports(AgentSessions.Operation.LIST)) {
+			assertThat(sessions.list()).isNotNull();
+		}
+		else {
+			assertThatThrownBy(sessions::list).isInstanceOf(UnsupportedAgentOperationException.class)
+					.hasMessageContaining("session/list");
+		}
+
+		if (!sessions.supports(AgentSessions.Operation.DELETE)) {
+			assertThatThrownBy(() -> sessions.delete("no-such-session"))
+					.isInstanceOf(UnsupportedAgentOperationException.class);
+		}
+	}
+
+	/**
+	 * Closing a session works whether or not the agent has {@code session/close}.
+	 *
+	 * <p>An agent without it cannot be told, and there is nothing a client can do about that except
+	 * stop using the session; an application should not have to find out which kind of agent it has
+	 * before it can end a conversation. No turn is spent: a name that came back with a new session
+	 * id is proof enough that the old one was let go.
+	 */
+	@Test
+	@DisplayName("closing a named session works on every runtime, told or not")
+	void closingANamedSessionAlwaysWorks() {
+		AgentClient agent = client();
+		String first = agent.openSession("contract-close").sessionId();
+
+		agent.sessions().close("contract-close");
+
+		assertThat(agent.session("contract-close")).isEmpty();
+		assertThat(agent.openSession("contract-close").sessionId()).isNotEqualTo(first);
+	}
+
+	/**
+	 * A conversation survives being closed and loaded again, on the agents that can load.
+	 *
+	 * <p>Skipped rather than asserted where {@code session/load} is absent, because the protocol
+	 * genuinely makes it optional and a suite that failed goose for not having {@code resume} — or
+	 * OpenCode for not having {@code delete} — would be asserting a feature matrix rather than a
+	 * contract. What it does assert, for every agent that offers the method, is the only reason to
+	 * offer it: the reloaded session is the same conversation, not a new one wearing its id.
+	 */
+	@Test
+	@DisplayName("a closed session loaded again is still the same conversation")
+	void loadingRestoresContext() {
+		AgentClient agent = client();
+		org.junit.jupiter.api.Assumptions.assumeTrue(agent.sessions().supports(AgentSessions.Operation.LOAD),
+				"this agent does not implement session/load");
+
+		agent.prompt().session("contract-load")
+				.user("Remember the number 8675309. Reply with just OK. Do not use tools.").call();
+		String sessionId = agent.session("contract-load").orElseThrow().sessionId();
+		agent.sessions().close("contract-load");
+
+		agent.sessions().load("contract-reloaded", sessionId);
+		String recalled = agent.prompt().session("contract-reloaded")
+				.user("What number did I ask you to remember? Reply with digits only.").call().content();
+
+		assertThat(recalled).contains("8675309");
 	}
 
 	private SessionConfiguration configurationOf(AgentClient agent, String session) {

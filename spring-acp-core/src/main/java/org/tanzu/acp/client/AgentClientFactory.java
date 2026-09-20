@@ -8,9 +8,13 @@ import org.slf4j.LoggerFactory;
 import org.tanzu.acp.config.AgentSettings;
 import org.tanzu.acp.event.SessionUpdateDecoder;
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.process.AgentProcessSupervisor;
 import org.tanzu.acp.runtime.AgentLaunchSpec;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.session.SessionRegistry;
+import org.tanzu.acp.transport.WebSocketAgentTransport;
+import org.tanzu.acp.workspace.WorkspaceFileSystem;
+import org.tanzu.acp.workspace.WorkspaceTerminals;
 import org.tanzu.acp.turn.SessionUpdateRouter;
 
 import com.agentclientprotocol.sdk.client.AcpAsyncClient;
@@ -24,11 +28,12 @@ import reactor.core.publisher.Mono;
 /**
  * Starts an agent and hands back a connected {@link AgentClient}.
  *
- * <p>The client capabilities declared here are restrictive by design. This library runs
- * server-side, where an agent asking to read a file or open a terminal is asking a process with no
- * human supervising it. Filesystem and terminal access are therefore declared unsupported outright
- * rather than advertised and then refused — an agent that knows it cannot read files plans
- * differently from one that discovers it mid-turn.
+ * <p>The client capabilities declared here follow the settings, and default to lending the agent
+ * nothing. This library runs server-side, where an agent asking to read a file or open a terminal
+ * is asking a process with no human supervising it. What is not lent is declared unsupported rather
+ * than advertised and then refused — an agent that knows it cannot read files plans differently
+ * from one that discovers it mid-turn — and the handler for a capability is registered only when
+ * that capability is on, so there is one source of truth rather than two that can disagree.
  *
  * <p>Nothing here names a runtime. Everything vendor-specific is behind {@link AgentRuntime}: what
  * to launch, what to write before launching, and what the agent calls the options a client may set.
@@ -50,12 +55,70 @@ public final class AgentClientFactory {
 	public static AgentClient create(AgentRuntime runtime, AgentSettings settings) {
 		runtime.provision(settings);
 
-		AgentLaunchSpec spec = runtime.launch(settings);
 		AgentDiagnostics diagnostics = new AgentDiagnostics();
-		AcpClientTransport launched = switch (spec) {
-			case AgentLaunchSpec.Stdio stdio -> stdioTransport(stdio, diagnostics);
+		return switch (runtime.launch(settings)) {
+			case AgentLaunchSpec.Stdio stdio ->
+				connect(runtime, settings, stdioTransport(stdio, diagnostics), diagnostics, Liveness.unknowable(),
+						() -> {
+						});
+			case AgentLaunchSpec.WebSocket served -> connectServed(runtime, settings, served, diagnostics);
 		};
-		return connect(runtime, settings, launched, diagnostics);
+	}
+
+	/**
+	 * Starts the agent's server if this library owns it, then connects over a WebSocket.
+	 *
+	 * <p>The order is the point. A served agent that rejects its configuration exits about a second
+	 * after it is spawned, so connecting first would produce "connection refused" for a problem the
+	 * process already explained on its own output; {@link AgentProcessSupervisor} waits for
+	 * readiness and reports what the agent said instead.
+	 */
+	private static AgentClient connectServed(AgentRuntime runtime, AgentSettings settings,
+			AgentLaunchSpec.WebSocket served, AgentDiagnostics diagnostics) {
+		AgentProcessSupervisor supervisor = served.process() == null ? null
+				: new AgentProcessSupervisor(runtime.id(), served.process(), settings.pool().maxRestarts());
+		if (supervisor != null) {
+			supervisor.start();
+		}
+
+		WebSocketAgentTransport transport = new WebSocketAgentTransport(served.uri(), served.headers());
+		java.util.concurrent.atomic.AtomicBoolean connected = new java.util.concurrent.atomic.AtomicBoolean(true);
+		transport.onDisconnect(() -> connected.set(false));
+		// A restarted server is a new process behind the same address: this connection is stale
+		// whatever the socket thinks, and the pool should replace the client rather than reuse it.
+		if (supervisor != null) {
+			supervisor.addRestartListener(() -> connected.set(false));
+		}
+
+		Liveness liveness = new Liveness(true,
+				() -> connected.get() && (supervisor == null || supervisor.isHealthy()));
+		Runnable onClose = supervisor == null ? () -> {
+		} : supervisor::close;
+
+		try {
+			return connect(runtime, settings, transport, diagnostics, liveness, onClose);
+		}
+		catch (RuntimeException ex) {
+			onClose.run();
+			throw ex;
+		}
+	}
+
+	/**
+	 * Whether this connection can say if it is still usable, and the answer if it can.
+	 *
+	 * <p>Split in two because "yes" and "I cannot tell" are different facts and a pool that
+	 * confused them would either never replace a dead agent or replace a healthy one. A stdio
+	 * connection genuinely cannot tell: {@code StdioAcpClientTransport} owns the child process in a
+	 * private field, never reports a transport exception to the handler it accepts, and exposes no
+	 * liveness of any kind, so the only evidence of a dead agent is a request that does not come
+	 * back. A served agent has a socket that closes and a supervisor that watches the process.
+	 */
+	private record Liveness(boolean knowable, java.util.function.BooleanSupplier alive) {
+
+		static Liveness unknowable() {
+			return new Liveness(false, () -> true);
+		}
 	}
 
 	/**
@@ -66,27 +129,45 @@ public final class AgentClientFactory {
 	 * not spawn — an agent on a WebSocket, a sidecar — will come in.
 	 */
 	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched) {
-		return connect(runtime, settings, launched, new AgentDiagnostics());
+		return connect(runtime, settings, launched, new AgentDiagnostics(), Liveness.unknowable(), () -> {
+		});
 	}
 
 	private static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
-			AgentDiagnostics diagnostics) {
+			AgentDiagnostics diagnostics, Liveness liveness, Runnable onTransportClose) {
 		SessionConfigRecorder recorder = new SessionConfigRecorder();
 		AcpClientTransport transport = recorder.wrap(launched);
 		SessionUpdateRouter router = new SessionUpdateRouter();
 
-		AcpAsyncClient acp = AcpClient.async(transport).requestTimeout(settings.timeout())
-				.clientCapabilities(headlessCapabilities())
+		WorkspaceFileSystem files = new WorkspaceFileSystem(settings.workspace(), settings.filesystem());
+		WorkspaceTerminals terminals = new WorkspaceTerminals(files.jail(), settings.terminal());
+
+		AcpClient.AsyncSpec spec = AcpClient.async(transport).requestTimeout(settings.timeout())
+				.clientCapabilities(capabilities(settings))
 				// Deliberately not sessionUpdateConsumer: see SessionUpdateDecoder for why a raw handler.
 				.notificationHandler(SESSION_UPDATE, params -> {
 					SessionUpdateDecoder.decode(params, transport).ifPresent(router::accept);
 					return Mono.empty();
-				}).requestPermissionHandler(request -> handlePermission(runtime, settings.permissions(), request))
-				.build();
+				}).requestPermissionHandler(request -> handlePermission(runtime, settings.permissions(), request));
 
+		if (settings.filesystem().read()) {
+			spec = spec.readTextFileHandler(files::read);
+		}
+		if (settings.filesystem().write()) {
+			spec = spec.writeTextFileHandler(files::write);
+		}
+		if (settings.terminal().enabled()) {
+			spec = spec.createTerminalHandler(terminals::create).terminalOutputHandler(terminals::output)
+					.waitForTerminalExitHandler(terminals::waitForExit).killTerminalHandler(terminals::kill)
+					.releaseTerminalHandler(terminals::release);
+		}
+
+		AcpAsyncClient acp = spec.build();
+
+		AcpSchema.InitializeResponse initialized;
 		try {
-			AcpSchema.InitializeResponse initialized = acp
-					.initialize(new AcpSchema.InitializeRequest(PROTOCOL_VERSION, headlessCapabilities(),
+			initialized = acp
+					.initialize(new AcpSchema.InitializeRequest(PROTOCOL_VERSION, capabilities(settings),
 							new AcpSchema.Implementation(CLIENT_NAME, version()), null))
 					.block(settings.timeout());
 			if (initialized == null) {
@@ -101,11 +182,17 @@ public final class AgentClientFactory {
 			// Collected before the close, not after: closing disposes the scheduler that delivers the
 			// agent's stderr, so a complaint still in flight is lost the moment the transport goes down.
 			String reported = diagnostics.settledSummary();
+			terminals.close();
 			closeQuietly(acp);
+			onTransportClose.run();
 			throw new AgentClientException("Failed to initialize runtime '" + runtime.id() + "'" + reported, ex);
 		}
 
-		return new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router, recorder, null);
+		return new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router, recorder, initialized,
+				liveness.knowable() ? liveness.alive() : null, () -> {
+					terminals.close();
+					onTransportClose.run();
+				});
 	}
 
 	private static AcpClientTransport stdioTransport(AgentLaunchSpec.Stdio stdio, AgentDiagnostics diagnostics) {
@@ -194,8 +281,18 @@ public final class AgentClientFactory {
 		});
 	}
 
-	private static AcpSchema.ClientCapabilities headlessCapabilities() {
-		return new AcpSchema.ClientCapabilities(new AcpSchema.FileSystemCapability(false, false), false, null, null);
+	/**
+	 * What this client offers the agent, which is nothing unless the application said otherwise.
+	 *
+	 * <p>Declared identically on the builder and in the {@code initialize} request because the SDK
+	 * uses the first to decide which inbound methods it will route and the second is what the agent
+	 * reads; they are two halves of one statement and disagreeing would mean advertising something
+	 * no handler answers.
+	 */
+	private static AcpSchema.ClientCapabilities capabilities(AgentSettings settings) {
+		return new AcpSchema.ClientCapabilities(
+				new AcpSchema.FileSystemCapability(settings.filesystem().read(), settings.filesystem().write()),
+				settings.terminal().enabled(), null, null);
 	}
 
 	private static String version() {

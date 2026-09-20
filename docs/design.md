@@ -1,6 +1,6 @@
 # spring-acp — a Spring Data-style abstraction over ACP coding agents
 
-Status: **M1 and M2 built and verified**; M3–M4 proposed. Successor to the `java-wrapper` module of
+Status: **M1, M2 and M3 built and verified**; M4 proposed. Successor to the `java-wrapper` module of
 [`goose-buildpack`](https://github.com/cpage-pivotal/goose-buildpack).
 
 ## Context
@@ -81,22 +81,24 @@ is Goose-specific; every other runtime is stdio-only, so both transports must be
 
 ```
   Application code
-        │  AgentClient  (fluent; sessions, turns, events)
+        │  AgentClient (fluent; turns, events) · AgentSessions · AgentExecutor
+        ▼
+  AgentClientPool ── N connections, sticky sessions, idle sweep, replacement
         ▼
   spring-acp-core ──────────────────────────────────────────────┐
-     AgentClient impl · SessionRegistry · AgentProcessPool       │
-     PermissionPolicy · WorkspaceFileSystem · TerminalPolicy     │
-     ConfigResolver (3-tier) · AgentEvent model                  │
+     AgentClient impl · SessionRegistry · ConfigResolver (3-tier) │
+     PermissionPolicy · WorkspaceJail · WorkspaceFileSystem       │
+     WorkspaceTerminals · AgentProcessSupervisor · AgentEvent     │
         │                    ▲                                   │
         │ AcpAsyncClient     │ AgentRuntime SPI                  │
         │                    │ (launch · provision · option ids)  │
         ▼                    │                                   │
   com.agentclientprotocol:acp-core                               │
-     StdioAcpClientTransport │ WebSocketAcpClientTransport        │
+     StdioAcpClientTransport │ WebSocketAgentTransport (ours)     │
         │                    │                                   │
-        ▼                    ├── runtime-goose  (stdio; ws M3)   │
+        ▼                    ├── runtime-goose  (stdio + ws)     │
   agent subprocess           ├── runtime-codex  (npx, stdio)     │
-                             ├── runtime-opencode (binary, stdio)│
+  or supervised server       ├── runtime-opencode (binary, stdio)│
                              └── RegistryAgentRuntime (M4) ──────┘
 ```
 
@@ -113,11 +115,11 @@ Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org
 
 | Module | Contents |
 | --- | --- |
-| `spring-acp-core` | No Spring types on the classpath-required path. `org.tanzu.acp.client`, `.session`, `.process`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event` |
-| `spring-acp-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve`/WebSocket; writes `config.yaml`; `extensions`/`skills` support |
+| `spring-acp-core` | No Spring types on the classpath-required path. `org.tanzu.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor` |
+| `spring-acp-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
 | `spring-acp-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
 | `spring-acp-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
-| `spring-acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration`, `AgentsYamlConfigDataLoader` |
+| `spring-acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
 | `spring-acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
 | `spring-acp-spring-ai` | Optional `AcpChatModel implements ChatModel` |
 | `spring-acp-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
@@ -164,18 +166,51 @@ spring:
       policy: deny              # deny | allowlist | auto-approve
       allowed-tools: [ developer__text_editor ]
 
-    filesystem:
-      enabled: false            # clientCapabilities.fs
-      write: false
+    filesystem:                 # → clientCapabilities.fs; see the security section
+      enabled: false            # answer fs/read_text_file
+      write: false              # also answer fs/write_text_file; implies enabled
     terminal:
-      enabled: false
+      enabled: false            # answer terminal/*; arbitrary execution as this JVM's user
+      allowed-commands: []      # empty allows any; the capability itself is the gate
+      output-limit: 1MB
+      command-timeout: 5m
+      max-concurrent: 8
 
     pool:
       max-processes: 1
       max-sessions-per-process: 32
       session-ttl: 60m
       max-restarts: 5
+
+    controller:                 # the optional HTTP endpoint, off unless asked for
+      enabled: false
+      path: /api/acp
+      allow-unauthenticated: false
+      allow-request-overrides: false
+      max-prompt-chars: 32000
+      max-timeout: 10m
 ```
+
+The same properties can arrive from a standalone `agents.yaml`, pulled in with
+`spring.config.import: optional:agents.yaml`, where the `spring.acp` prefix is implied:
+
+```yaml
+# agents.yaml — an operator's or a buildpack's file, next to the jar
+runtime: goose
+workspace: /home/vcap/app/workspace
+permissions:
+  policy: deny
+runtimes:
+  goose:
+    builtins: developer
+```
+
+`AgentsConfigDataLoader` re-keys the document and hands it back to Boot's own machinery, so
+relaxed binding, profiles, `${}` resolution and origin tracking all still apply — a validation
+failure points at the line in `agents.yaml`. A key that already starts with `spring.` is left
+alone, per key rather than per file, so one file can carry the agent configuration it exists for
+and the occasional unrelated property. The explicit form `optional:acp:<path>` names a file called
+something else.
 
 Carry over the wrapper's `GooseOptions` validation wholesale — `base-url` must be HTTPS or
 loopback/`.apps.internal` with no userinfo/query/fragment, env keys `^[A-Za-z_][A-Za-z0-9_]*$`,
@@ -258,8 +293,7 @@ spring:
   acp:
     runtimes:
       goose:
-        extensions: { developer: { enabled: true } }
-        skills: [ { name: release-checks, path: .goose/skills/release-checks } ]
+        builtins: developer,todo
         env: { GOOSE_DISABLE_KEYRING: "1" }
         serve: { transport: websocket, host: 127.0.0.1, port: 0 }
       codex:
@@ -317,6 +351,17 @@ config.applied(PortableOption.MODEL);            // the model this session is re
 config.unsupported();                            // what was asked for and could not be honored
 ```
 
+```java
+// the conversations the agent has, as opposed to the turns run in them
+AgentSessions sessions = agentClient.sessions();
+if (sessions.supports(AgentSessions.Operation.LIST)) {
+    List<StoredSession> stored = sessions.list();            // follows the agent's cursor to the end
+}
+sessions.load("review-123", storedId);                        // replays history
+sessions.resume("review-123", storedId);                      // reattaches without replaying
+sessions.close("review-123");                                 // always works, told or not
+```
+
 `openSession` exists because with `on-unsupported: warn` the requested model and the effective model
 can differ, and an application that cares should not have to run a turn to discover which it got.
 Negotiation happens once per session rather than once per turn — re-sending three unchanged options
@@ -354,9 +399,32 @@ cancellation. Closing an unfinished stream sends `session/cancel` *before* compl
 invariant is documented in `AcpTurn.java` and is why UI spinners don't hang; carry the test for it
 across.
 
-Also ship `AgentSessions` (list/load/resume/delete/close, capability-gated) and, for migration, an
-`AgentExecutor` facade with the exact `GooseExecutor` signatures so existing goose-buildpack apps
-can move with a rename.
+### Session operations are optional, and no two agents agree
+
+Every method behind `AgentSessions` is gated on a capability the agent advertises, and the three
+runtimes implement different subsets. Measured on the same machine, same day:
+
+| | `session/list` | `session/load` | `session/resume` | `session/delete` | `session/close` |
+| --- | --- | --- | --- | --- | --- |
+| goose 1.51.0 | yes | yes | **no** | yes | yes |
+| codex-acp 1.12.0 | yes | yes | yes | yes | yes |
+| opencode 1.18.31 | yes | yes | yes | **no** | yes |
+
+That table is the argument for `supports()` being part of the public contract rather than a
+convenience: an application that assumed any one column would break on one of the three, and the
+one it broke on would depend on which agent the operator chose. An operation the agent never
+advertised throws `UnsupportedAgentOperationException` — the method-level counterpart to
+`UnsupportedAgentOptionException` — naming the ACP method, rather than failing on the wire with an
+error code the caller would have to interpret. `close` is the exception that proves the rule: it
+always succeeds locally, because an agent that cannot be told a session is over is not a reason for
+an application to be unable to end one.
+
+For migration there is `AgentExecutor`, signature-for-signature the old `GooseExecutor` with
+`GooseOptions` replaced by `AgentOptions`, including the newline-delimited
+`message`/`notification`/`complete` JSON its consumers parse. Two methods did not come across:
+`getConfiguration()` returned a parsed `~/.config/goose/config.yaml`, which no other agent has, and
+what an application wanted from it — which model am I really using — is
+`openSession(name).configuration()`, which is the negotiated truth rather than a file.
 
 ---
 
@@ -398,10 +466,16 @@ environment whether or not `providers/set` worked, OpenCode because a requested 
 unsupported there but *subsumed*, having taken effect as the prefix the model was matched with.
 Without that, `on-unsupported: fail` would fire on a configuration working exactly as asked.
 
-`AgentLaunchSpec` is sealed, with `Stdio(command, args, env)` today; `WebSocket` arrives with the
-process pool in M3. `AgentClientFactory.connect(runtime, settings, transport)` is the seam between
-starting an agent and talking to one — it is how the scripted agent is driven, and where a runtime
-that attaches to something it did not spawn will come in.
+`AgentLaunchSpec` is sealed with two variants, and the difference between them is who owns the
+process. `Stdio(command, args, env)` is owned by the transport: the SDK spawns the child and it dies
+when the transport closes. `WebSocket(uri, headers, process)` reaches an agent that is a server,
+either one this library starts and supervises (`ManagedProcess`) or one somebody else runs. Only
+Goose offers the second shape; every other runtime is stdio-only, which is why this is a sealed
+hierarchy rather than one record with optional fields.
+
+`AgentClientFactory.connect(runtime, settings, transport)` is the seam between starting an agent and
+talking to one — it is how the scripted agent is driven, and how a runtime attaching to something it
+did not spawn comes in.
 
 Discovery is a nested `@Configuration` per adapter, each carrying `@ConditionalOnClass`, not a
 `@ConditionalOnClass` bean method. Boot reads the condition on a configuration class from the
@@ -425,15 +499,19 @@ Port (these are proven and non-obvious):
 | From | To | Why |
 | --- | --- | --- |
 | `acp/AcpSessionRegistry.java` | `session/SessionRegistry` | name→id map authoritative over the caller's `resume` flag; per-entry `Semaphore(1)` turn permit (not a lock — the releasing thread differs); idle TTL sweep |
-| `acp/GooseServerSupervisor.java` | `process/AgentProcessSupervisor` | virtual-thread stdout drain (an undrained pipe blocks the child), secret redaction, exponential-backoff restart capped in a 5-min window, health polling, shutdown hook |
+| `acp/GooseServerSupervisor.java` | `process/AgentProcessSupervisor` *(ported in M3)* | virtual-thread stdout drain (an undrained pipe blocks the child), secret redaction, exponential-backoff restart capped in a 5-min window, health polling, shutdown hook |
 | `acp/AcpPermissionPolicy` + `AcpClientRequestHandler` | `permission/PermissionPolicy` | deny-by-default, allowlist, `allow_once`/`reject_once` option selection |
 | `acp/AcpEventTranslator.java` | `event/AgentEventMapper` | `session/update` → event mapping, drops `_meta.replay` history, synthesizes results for tool calls left open |
 | `GooseOptions` validation | `config/` records | see tier 1 above |
 | `GooseAutoConfiguration` shape | `AcpAutoConfiguration` | `SmartLifecycle` at `Integer.MAX_VALUE - 1000`; **startup failure logged, not thrown**, so an app healthy apart from its agent stays up |
 
-Drop: the hand-rolled `AcpConnection`, `WebSocketAcpTransport` and JSON-RPC request/response
-correlation — `acp-core` covers all of it, and its 0.15.0 release specifically fixed notification
-ordering and loss-on-graceful-close, the same class of bug that code exists to avoid.
+Drop: the hand-rolled `AcpConnection` and its JSON-RPC request/response correlation — `acp-core`
+covers all of it, and its 0.15.0 release specifically fixed notification ordering and
+loss-on-graceful-close, the same class of bug that code exists to avoid.
+
+One thing on the drop list came back. `WebSocketAcpTransport` was to be replaced by the SDK's, and
+the SDK's cannot send a header, which Goose's server requires — so `transport/WebSocketAgentTransport`
+is a smaller, Reactor-shaped descendant of it rather than a deletion. See the known gaps.
 
 **Keep the turn demultiplexer.** Verified against the 0.17.0 sources: `prompt()` returns
 `Mono<PromptResponse>` carrying only a `stopReason`. Streamed content does *not* come back on that
@@ -452,8 +530,9 @@ be ported closely rather than reinvented.
 
 ## Known gaps in acp-core 0.17.0
 
-Found by running the SDK against three live agents. All four are worked around; none is suppressed;
-each argues for keeping the SDK behind our own types rather than exposing it in the public API.
+Found by running the SDK against three live agents. Four are worked around, two are designed around
+and documented; none is suppressed. Each argues for keeping the SDK behind our own types rather than
+exposing it in the public API.
 
 **`NewSessionResponse` does not model `configOptions`.** *(worked around in M2.)* The record carries
 `sessionId`, `modes` and `models` and ignores unknown properties, so the config options every live
@@ -480,6 +559,24 @@ when a `sessionUpdateConsumer` is registered, so the custom one survives.
 implements `providers/list`, and every entry it returns parses with a null id. So the providers path
 sets directly rather than listing first: the list step could only confirm that an id exists, and it
 cannot. Gated on the advertised capability, with an error meaning unsupported.
+
+**`WebSocketAcpClientTransport` cannot send a header.** *(worked around in M3.)* It builds its
+socket inside `connect()` from `httpClient.newWebSocketBuilder()` and never exposes the builder, so
+there is no way to add one — and Goose's ACP server refuses every connection that arrives without
+`X-Secret-Key`, the alternative being a flag called `--dangerously-unauthenticated`. So the whole
+served transport turns on a header the SDK's implementation cannot carry.
+`WebSocketAgentTransport` follows the SDK's implementation closely and deliberately, adding headers,
+a keepalive ping and a disconnect callback, so that the day the SDK grows a header hook this class
+can be deleted rather than reconciled.
+
+**A stdio connection cannot say whether its agent is still alive.** *(not worked around; designed
+around in M3.)* `StdioAcpClientTransport` keeps the child `Process` in a private field, accepts a
+`setExceptionHandler` it never calls, and exposes no liveness of any kind. So the only evidence of a
+dead stdio agent is a request that does not come back. `AgentClient.isAlive()` is therefore
+optimistic by contract — a transport that cannot tell answers `true`, and the promise is only that
+`false` is never wrong. Replacement in the pool is real for a served agent, whose socket closes and
+whose supervisor watches the process, and best effort for a stdio one. Reporting "possibly dead" for
+every stdio agent would have made the answer useless to the only caller that needs it.
 
 **Stderr from a process that dies immediately is sometimes lost.** The SDK subscribes to the child's
 error stream slightly after starting it, so a complaint written microseconds before the process exits
@@ -517,15 +614,65 @@ One trap inside the trap: Codex's `mode: read-only` is described as "always ask 
 files" and lets it write inside the session's own `cwd` without asking at all. A client that trusted
 the name would believe it had a gate it did not have.
 
-The conformance suite asserts both halves, and the remaining exposure — an agent writing outside the
-workspace with its own tools — is what M3's `WorkspaceFileSystem` jail and the process supervisor
-address. Until then, an agent's process has whatever access the JVM's user has.
+The conformance suite asserts both halves. The remaining exposure — an agent writing outside the
+workspace **with its own tools** — is not something a client can close, and M3 did not close it:
+restricting what the agent's own process can reach is the operating system's job. What M3 did close
+is the half that is this library's, below.
+
+### What M3 added, and what it is honestly for
+
+`WorkspaceJail` confines every path the agent asks *this client* to touch. That is a smaller claim
+than the name suggests and it is worth keeping the two apart: `fs/read_text_file` and
+`fs/write_text_file` let an agent borrow the client's file access, which is useful to an IDE that
+wants the edit in its own buffer and of no use to a server-side client, so both are off by default.
+When they are on, the jail is the thing standing between an agent and the rest of the filesystem.
+
+**`Path.normalize()` is not a jail.** It removes `..` textually, which stops
+`workspace/../../etc/passwd` and stops nothing else. A symlink inside the workspace pointing at
+`/etc` is an ordinary-looking relative path that resolves outside, and an agent can create one with
+a single tool call and then ask this client to read through it. So every decision is made on the
+*real* path, with symlinks followed, recomputed per call because the filesystem changes between
+requests; for a path that does not exist yet — which is most writes — the walk goes up to the
+deepest ancestor that does, and what does not exist cannot be a link. The root is realpathed too,
+which is not cosmetic: on macOS a temp directory is reached through `/var`, itself a link to
+`/private/var`, and a jail comparing the two spellings would refuse every path in its own workspace.
+
+**Terminals are the same jail plus four more limits.** `terminal/*` is arbitrary code execution as
+the JVM's user, in a process holding the application's credentials, so it is off by default; when it
+is on, the working directory goes through the jail, output is bounded and reported `truncated`
+rather than growing, a command that outlives `command-timeout` is killed, and every process is
+killed when the client closes. `allowed-commands` is empty by default and empty means *all*, which
+reads backwards until you notice that the capability itself is the gate — an application that turned
+terminals on and allowed nothing would have built something that cannot work. It matches on the
+command's file name, so `/usr/local/bin/mvn` and `mvn` are the same command; an allowlist that could
+be evaded by spelling out the path would not be one.
+
+**Secret redaction, and a bug the first version had.** A supervised agent's output goes into the
+application's log, and agents print their configuration when they start, when they fail to start,
+and whenever someone raises their log level to find out why. `SecretRedactor` blanks the shapes
+these appear in — `key=value`, `"key": "value"`, `key: value`. The first version printed the token
+for `Authorization: Bearer eyJ…`: a single pass consumes the first thing after the separator, which
+is the word `Bearer`, and carries on from there. The wrapper this succeeds has the same bug. Found
+by the test, not by reading it.
+
+**The HTTP endpoint is opt-in twice over** — the WebFlux dependency, then
+`spring.acp.controller.enabled` with no `matchIfMissing`, so adding the starter for an unrelated
+reason cannot publish an agent endpoint as a side effect. A caller who reaches it can spend the
+application's model budget and make the agent act on its workspace, so authentication is required
+by default, per-request model and provider overrides are refused by default, and prompt length and
+timeout are bounded. Credentials are fixed when the agent process starts and are not reachable from
+a request at all. The streamed endpoint emits assistant text only: tool calls and plans name paths
+and commands inside the workspace, and an endpoint that may face a browser should not be what
+decides those are safe to publish.
 
 ### Baseline
 
-- `permissions.policy: deny`; `filesystem.enabled: false`; `terminal.enabled: false` — declare all
-  three in `clientCapabilities` so agents don't attempt them (and see the correction above for what
-  that does and does not buy).
+- `permissions.policy: deny`; `filesystem.enabled: false`; `terminal.enabled: false`. What is not
+  lent is declared unsupported in `clientCapabilities` rather than advertised and then refused — an
+  agent that knows it cannot read files plans differently from one that finds out mid-turn — and the
+  handler for a capability is registered only when that capability is on, so there is one source of
+  truth rather than two that can disagree. See the correction above for what this does and does not
+  buy.
 - When filesystem *is* enabled, `WorkspaceFileSystem` resolves every `fs/read_text_file` and
   `fs/write_text_file` path against the session `cwd` via `Path.toRealPath()` and rejects escapes,
   including via symlink. Same jail for `terminal/create` `cwd`.
@@ -533,7 +680,9 @@ address. Until then, an agent's process has whatever access the JVM's user has.
   `Principal`, and rejects request-level provider/model/credential overrides unless explicitly
   enabled. Credentials and endpoints are fixed at process start; only negotiated per-session
   options vary.
-- Never log the process env, the WebSocket secret, or MCP headers — keep the supervisor's redaction.
+- Never log the process env, the WebSocket secret, or MCP headers. A supervised agent's own output
+  goes through `SecretRedactor` on the way to the log, as a second line of defence rather than the
+  first.
 
 ---
 
@@ -572,7 +721,7 @@ Three things the build taught us that the plan had not anticipated:
   exercises the negotiated tier as a side effect and proves `session/set_config_option` took effect.
 
 Deferred from M1 as planned: `AgentProcessSupervisor` restart/health logic and the WebSocket
-transport.
+transport. Both arrived in M3.
 
 **M2 — the abstraction earns its keep. Done.** One unchanged application runs against goose 1.51.0,
 codex-acp 1.12.0 and opencode 1.18.31 with `spring.acp.runtime` as the only difference. 170 tests
@@ -632,12 +781,70 @@ Six things the build taught us that the plan had not anticipated:
   failed and nothing said so; the session was left open on the agent anyway. Found by reading test
   timings, not by a failure.
 
-Deferred from M2 as planned: `AgentProcessSupervisor` restart/health logic, the WebSocket transport,
-and `agents.yaml`.
+Deferred from M2 as planned, and delivered in M3: `AgentProcessSupervisor` restart/health logic, the
+WebSocket transport, and `agents.yaml`.
 
-**M3 — parity and ergonomics.** `agents.yaml` `ConfigDataLoader`, `AgentExecutor` migration facade,
-process pooling, session list/load/resume/delete, `WorkspaceFileSystem` + terminal handlers,
-optional WebFlux controller, Goose WebSocket transport (`goose serve`) for goose-buildpack parity.
+**M3 — parity and ergonomics. Done.** Everything the buildpack's wrapper could do, the library now
+does, without naming Goose anywhere but in the Goose adapter. 289 tests green: 244 run anywhere, 45
+drive real agents and skip when one is unusable.
+
+| Step | Delivered | Where |
+| --- | --- | --- |
+| 1 | `AgentSessions` — list (paginated), load, resume, delete, close, all capability-gated | `core/session` |
+| 2 | `WorkspaceJail`, `WorkspaceFileSystem`, `WorkspaceTerminals`, `FileSystemAccess`, `TerminalAccess` | `core/workspace` |
+| 3 | `WebSocketAgentTransport` and `AgentLaunchSpec.WebSocket` | `core/transport`, `core/runtime` |
+| 4 | `AgentProcessSupervisor` and `SecretRedactor` | `core/process` |
+| 5 | `AgentClientPool` — sticky sessions, idle sweep, connection replacement | `core/client` |
+| 6 | `AgentExecutor` + `LegacyEventFormat`, the `GooseExecutor` migration path | `core/executor` |
+| 7 | `GooseRuntime` over `goose serve`, generated secret, supervised sidecar | `runtime-goose` |
+| 8 | `AgentsConfigDataLoader`, `AcpController`, `AcpWebFluxAutoConfiguration`, pool/fs/terminal properties | `spring-boot-autoconfigure` |
+| 9 | Three contract tests, the security suites, and session operations in `ScriptedAgent` | `spring-acp-test`, `core` |
+
+The served transport, verified end to end against a real `goose serve`: handshake, a turn that
+terminates exactly once, a named session keeping context across turns over the socket, and the
+server dying with the client that started it.
+
+`agents.yaml` verified at the spelling the plan promised, with the smoke app: a bare
+`runtime: opencode` in a file next to the application, pulled in with
+`spring.config.import: optional:agents.yaml`, overrides `application.yaml`'s `runtime: goose` and
+the application runs against OpenCode.
+
+Eight things the build taught us that the plan had not anticipated:
+
+- **The SDK's WebSocket transport cannot send a header, and Goose requires one.** The whole served
+  path turns on `X-Secret-Key`, which `WebSocketAcpClientTransport` has no way to add. Writing our
+  own was not the plan; it is now the fifth documented gap, and the class is shaped to be deleted
+  when the SDK grows the hook.
+- **A stdio connection cannot report that its agent has died.** Which made `isAlive()` a three-state
+  answer — alive, dead, cannot tell — collapsed into two, with the contract that `false` is never
+  wrong. Pool replacement is therefore real for a served agent and best effort for a stdio one, and
+  saying so is better than a health check that invents an answer.
+- **No two runtimes implement the same optional session methods.** goose has no `resume`, OpenCode
+  no `delete`, Codex all five. This was expected to be a formality and turned out to be the reason
+  `supports()` belongs in the public contract.
+- **`LoadSessionResponse` drops `configOptions` the way `NewSessionResponse` does, and is worse.**
+  It does not carry the session id either, so there is nothing to key the recovered options on. The
+  fix is to claim them immediately after the call that produced them, under a lock that serializes
+  load and resume — narrow, documented, and delete-on-sight when the SDK models the field. Without
+  it, a loaded session could not negotiate a model at all.
+- **`normalize()` is not a jail, and the workspace root has to be realpathed too.** The first is the
+  symlink an agent can create with one tool call. The second is macOS: a temp directory reached
+  through `/var`, which is a link to `/private/var`, and a jail comparing spellings that refuses
+  every path in its own workspace.
+- **The redactor printed the secret it was written to hide.** `Authorization: Bearer eyJ…` blanks
+  the word `Bearer`: one pass consumes the first token after the separator and carries on. The
+  wrapper being replaced has the same bug, unnoticed, which is the argument for the test.
+- **The pool has to count open sessions, not assigned names.** A throwaway turn never takes a name
+  but does occupy an agent for the length of a turn, and a pool counting names would have sent every
+  one of them to the same process.
+- **Replacing a connection quietly broke the stickiness it exists to preserve.** Releasing a dead
+  connection's names is right for every name but the one being served at that moment: that one had
+  just been reassigned, so the next call assigned it afresh to whichever connection was now least
+  loaded — which is precisely not the one that had just opened the session. One conversation, two
+  processes, one name. Caught by a test written after the code, and the test fails again the moment
+  the one-line re-assertion is removed. The idle sweep could reach the same outcome by landing
+  between assigning a name and opening its session, so it lets a name go only after it has been
+  missing across two sweeps — minutes apart, which no session-open is.
 
 **M4 — reach.** `RegistryAgentRuntime` with a cached registry snapshot and SHA-256-verified
 downloads; Spring AI `AcpChatModel`; Micrometer observations per turn/tool call; ACP v2 behind
@@ -647,31 +854,48 @@ negotiation and a feature flag, off by default.
 
 ## Verification
 
-170 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable.
+289 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable.
 
-**Fast tests (137)** — turn semantics, session registry concurrency and permit accounting, event
+**Fast tests (223)** — turn semantics, session registry concurrency and permit accounting, event
 mapping, permission policy, URL/header/env/secret validation, tier-3 normalization, model matching,
-every branch of the negotiated tier, adapter launch and provisioning for all three runtimes, and Boot
-binding and adapter registration via `ApplicationContextRunner`. No subprocess.
+every branch of the negotiated tier, capability gating and pagination for session operations, pool
+routing and replacement, the legacy event vocabulary, adapter launch and provisioning for all three
+runtimes, and Boot binding, `agents.yaml` loading, controller behaviour and adapter registration.
+No agent subprocess.
 
-**Wire tests (16)**, on `acp-test`'s in-memory transport with `ScriptedAgent` — a fake agent that
+Inside that figure are the security tests the M2 plan deferred, and they are the ones worth naming:
+workspace escape via `..`, via an absolute path, via a symlinked file, via a symlinked directory and
+via a write through one; terminal `cwd` confinement including through a symlink; the terminal
+allowlist not being evadable by spelling out a path; output truncation; and secret redaction in each
+shape an agent prints, including the `Bearer` case the first implementation got wrong.
+
+**Wire tests (21)**, on `acp-test`'s in-memory transport with `ScriptedAgent` — a fake agent that
 speaks raw JSON-RPC rather than the SDK's records, which is the point of it. The core's fast tests mock
-`AcpAsyncClient`, and both SDK gaps this library works around are *format* gaps, invisible to a mock:
-`configOptions` dropped from a typed response, and a `sessionUpdate` discriminator with no record. The
+`AcpAsyncClient`, and the SDK gaps this library works around are *format* gaps, invisible to a mock:
+`configOptions` dropped from a typed response — from `session/new` and from `session/load`, where it
+arrives with no session id to key it on — and a `sessionUpdate` discriminator with no record. The
 scripted agent can also be told to misbehave the way real agents do —
 `acceptsUnknownValues(true)` reproduces goose 1.51 storing a model it has never heard of — so the
 core's defenses are testable without waiting for a vendor to ship the bug again.
 
-**Runtime conformance (33 = 11 × 3)** — `AgentRuntimeContract` in `spring-acp-test`, extended once per
+**Runtime conformance (42 = 14 × 3)** — `AgentRuntimeContract` in `spring-acp-test`, extended once per
 adapter. **This suite, not the `AgentRuntime` interface, is the definition of the abstraction:** an
 interface only constrains signatures, and three adapters can satisfy one and still behave differently
 enough that an application cannot move between them. It asserts only what ACP genuinely standardizes —
 connect and negotiate, exactly-one-terminal-event, blocking call, named sessions keeping context,
 cancellation reaching the agent, a tool-using turn still terminating once, deny-by-default blocking a
 write in the agent's reviewing mode, the requested model applied by an advertised mechanism, a
-different model applied, and an unsupported model honoring both `fail` and `warn`. It never asserts a
-model name, a tool name, or how an agent phrases an answer; a test a runtime could only pass by
-behaving like Goose would make it a Goose conformance suite.
+different model applied, an unsupported model honoring both `fail` and `warn`, every optional session
+operation being askable and saying no by name when it must, closing a named session working whether
+or not the agent can be told, and — where the agent implements `session/load` — a closed conversation
+being the same conversation when it comes back. It never asserts a model name, a tool name, or how an
+agent phrases an answer; a test a runtime could only pass by behaving like Goose would make it a Goose
+conformance suite.
+
+The load test is skipped rather than asserted where `session/load` is absent, and that is the line
+this suite walks: failing goose for not having `resume`, or OpenCode for not having `delete`, would
+make it a feature matrix rather than a contract. What it does assert, for every agent that offers the
+method, is the only reason to offer it.
 
 Two deliberate concessions in it, both documented at the assertion:
 
@@ -683,15 +907,22 @@ Two deliberate concessions in it, both documented at the assertion:
   per agent would put three model catalogs into the test source.
 
 **Multi-runtime smoke** — `samples/smoke-app` with all three adapters on one classpath, run three
-times. M2's completion test; output above.
+times. M2's completion test, now also printing which optional session operations each agent has;
+that output is the table above.
+
+**The served transport (3)** — `GooseServeTests`, live against a supervised `goose serve`: the
+handshake over a socket that needs a generated secret in a header, a named session keeping context
+across turns, and the server stopping when the client that started it closes. Separate from the
+contract suite on purpose, because everything specific to this path is below the protocol and
+invisible to a scripted agent.
 
 Still planned:
 
 1. **CI that installs all three** from the registry manifest, so the live suites run somewhere other
    than a developer machine.
-2. **Security tests** for the features they guard, in M3: workspace jail escape via symlink, terminal
-   `cwd` confinement, and secret redaction in process logs. URL scheme, embedded-credential,
-   header-injection, env-name and secret-length rejection are already covered in `ValidationTests`.
+2. **A concurrency test for the pool against real agents** — `max-processes: 2` with two
+   conversations in flight. The fake-connection tests prove the routing; what they cannot prove is
+   that two agent processes on one machine stay out of each other's way.
 
 ## Repository layout
 

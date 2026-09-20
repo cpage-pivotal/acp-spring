@@ -44,6 +44,28 @@ public final class SessionRegistry {
 		});
 	}
 
+	/**
+	 * Registers a name for a session the agent already has.
+	 *
+	 * <p>Deliberately not {@link #resolve}: that one is idempotent because a caller retrying its
+	 * first prompt must not get a second conversation, whereas binding a name that is already in use
+	 * to a <em>different</em> agent-side session can only be a mistake, and doing it silently would
+	 * strand whichever session lost.
+	 *
+	 * @throws IllegalStateException if the name is already registered
+	 */
+	public AgentSession adopt(String name, String sessionId) {
+		Validation.requireName(name, "session name");
+		AgentSession adopted = new AgentSession(name, sessionId);
+		AgentSession existing = sessions.putIfAbsent(name, adopted);
+		if (existing != null) {
+			throw new IllegalStateException("Session '" + name + "' is already open as " + existing.sessionId()
+					+ "; close it before binding the name to " + sessionId);
+		}
+		logger.debug("Adopted session '{}' as {}", name, sessionId);
+		return adopted;
+	}
+
 	public Optional<AgentSession> find(String name) {
 		return Optional.ofNullable(sessions.get(name));
 	}

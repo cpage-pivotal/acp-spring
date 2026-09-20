@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.tanzu.acp.client.AgentClient;
 import org.tanzu.acp.event.AgentEvent;
+import org.tanzu.acp.session.AgentSessions;
 
 /**
  * Everything an application needs to talk to an ACP agent: a dependency, a property, and an
@@ -43,6 +44,14 @@ public class SmokeApplication {
 			agent.openSession("demo").configuration().resolutions()
 					.forEach((option, resolution) -> logger.info("Config {}: {} -> {} ({})", option,
 							resolution.requested(), resolution.applied(), resolution.mechanism()));
+
+			// Which optional session methods this particular agent has. All of them are optional in
+			// ACP and the three runtimes implement different subsets, so an application that cares
+			// asks rather than finding out from an error.
+			agent.agentInfo().ifPresent(info -> logger.info("Agent: {}", info));
+			for (AgentSessions.Operation operation : AgentSessions.Operation.values()) {
+				logger.info("Supports {}: {}", operation.method(), agent.sessions().supports(operation));
+			}
 
 			String answer = agent.prompt("Reply with exactly the word READY. Do not use tools.").call().content();
 			logger.info("Blocking call: {}", answer.strip());

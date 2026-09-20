@@ -14,9 +14,11 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.tanzu.acp.client.AgentClient;
-import org.tanzu.acp.client.AgentClientFactory;
+import org.tanzu.acp.client.AgentClientPool;
 import org.tanzu.acp.codex.CodexRuntime;
 import org.tanzu.acp.config.AgentSettings;
+import org.tanzu.acp.executor.AgentExecutor;
+import org.tanzu.acp.executor.DefaultAgentExecutor;
 import org.tanzu.acp.goose.GooseRuntime;
 import org.tanzu.acp.opencode.OpenCodeRuntime;
 import org.tanzu.acp.runtime.AgentRuntime;
@@ -102,15 +104,40 @@ public class AcpAutoConfiguration {
 				.timeout(properties.getTimeout()).model(properties.getModel())
 				.provider(properties.toProviderSpec()).mode(properties.getMode())
 				.mcpServers(properties.toMcpServerSpecs()).permissions(properties.toPermissionPolicy())
-				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getSessionTtl())
+				.filesystem(properties.toFileSystemAccess()).terminal(properties.toTerminalAccess())
+				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())
+				.pool(properties.toPoolSettings())
 				.runtimeOptions(properties.optionsFor(properties.getRuntime())).build();
 	}
 
-	/** Starts the agent when the context refreshes and stops it when the context closes. */
+	/**
+	 * The application's agent, as a pool of one or more connections.
+	 *
+	 * <p>Always pooled, even at the default of one process, because two of the pool's three jobs
+	 * apply to a single connection as much as to four: sweeping sessions nobody has touched since
+	 * the TTL, and replacing a connection whose agent has gone. The third — running unrelated
+	 * conversations at once — is the one that needs {@code spring.acp.pool.max-processes}.
+	 *
+	 * <p>Connections are opened on first use rather than at refresh, so an application whose agent
+	 * is misconfigured starts and reports it on the first prompt rather than failing to start. That
+	 * is the wrapper's rule carried over: an application healthy apart from its agent stays up.
+	 */
 	@Bean(destroyMethod = "close")
 	@ConditionalOnMissingBean
 	AgentClient acpAgentClient(SelectedRuntime selected, AgentSettings settings) {
-		logger.info("Starting ACP runtime '{}' in workspace {}", selected.runtime().id(), settings.workspace());
-		return AgentClientFactory.create(selected.runtime(), settings);
+		logger.info("ACP runtime '{}' selected, workspace {}, up to {} process(es)", selected.runtime().id(),
+				settings.workspace(), settings.pool().maxProcesses());
+		return new AgentClientPool(selected.runtime(), settings);
+	}
+
+	/**
+	 * The {@code GooseExecutor}-shaped facade, for applications migrating off the buildpack's
+	 * wrapper. Costs nothing when unused, and having it registered is what makes the migration a
+	 * change of import rather than a change of wiring.
+	 */
+	@Bean
+	@ConditionalOnMissingBean
+	AgentExecutor acpAgentExecutor(AgentClient client) {
+		return new DefaultAgentExecutor(client);
 	}
 }

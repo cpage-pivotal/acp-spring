@@ -15,6 +15,9 @@ import org.tanzu.acp.codex.CodexRuntime;
 import org.tanzu.acp.goose.GooseRuntime;
 import org.tanzu.acp.opencode.OpenCodeRuntime;
 import org.tanzu.acp.config.AgentSettings;
+import org.tanzu.acp.config.PoolSettings;
+import org.tanzu.acp.executor.AgentExecutor;
+import org.tanzu.acp.workspace.FileSystemAccess;
 import org.tanzu.acp.config.McpServerSpec;
 import org.tanzu.acp.config.OnUnsupported;
 import org.tanzu.acp.config.ProviderSpec;
@@ -212,6 +215,54 @@ class AcpAutoConfigurationTests {
 			assertThat(context.getStartupFailure()).rootCause()
 					.hasMessageContaining("More than one AgentRuntime is registered for [goose]");
 		});
+	}
+
+	@Test
+	void lendsTheAgentNothingByDefault() {
+		runner.run(context -> {
+			AgentSettings settings = context.getBean(AgentSettings.class);
+			assertThat(settings.filesystem().read()).isFalse();
+			assertThat(settings.filesystem().write()).isFalse();
+			assertThat(settings.terminal().enabled()).isFalse();
+		});
+	}
+
+	@Test
+	void bindsFilesystemAndTerminalAccess() {
+		runner.withPropertyValues("spring.acp.filesystem.enabled=true", "spring.acp.filesystem.write=true",
+				"spring.acp.terminal.enabled=true", "spring.acp.terminal.allowed-commands=mvn,git",
+				"spring.acp.terminal.output-limit=64KB", "spring.acp.terminal.command-timeout=30s").run(context -> {
+					AgentSettings settings = context.getBean(AgentSettings.class);
+					assertThat(settings.filesystem()).isEqualTo(FileSystemAccess.readWrite());
+					assertThat(settings.terminal().permits("mvn")).isTrue();
+					assertThat(settings.terminal().permits("rm")).isFalse();
+					assertThat(settings.terminal().outputByteLimit()).isEqualTo(64 * 1024);
+					assertThat(settings.terminal().commandTimeout()).isEqualTo(Duration.ofSeconds(30));
+				});
+	}
+
+	/** {@code write} without {@code enabled} still lends reads: a writer that cannot read is a trap. */
+	@Test
+	void writeImpliesRead() {
+		runner.withPropertyValues("spring.acp.filesystem.write=true").run(context -> assertThat(
+				context.getBean(AgentSettings.class).filesystem()).isEqualTo(FileSystemAccess.readWrite()));
+	}
+
+	@Test
+	void bindsThePool() {
+		runner.withPropertyValues("spring.acp.pool.max-processes=4",
+				"spring.acp.pool.max-sessions-per-process=8", "spring.acp.pool.max-restarts=2",
+				"spring.acp.pool.session-ttl=15m").run(context -> {
+					AgentSettings settings = context.getBean(AgentSettings.class);
+					assertThat(settings.pool()).isEqualTo(new PoolSettings(4, 8, 2));
+					assertThat(settings.pool().capacity()).isEqualTo(32);
+					assertThat(settings.sessionTtl()).isEqualTo(Duration.ofMinutes(15));
+				});
+	}
+
+	@Test
+	void registersTheMigrationFacade() {
+		runner.run(context -> assertThat(context).hasSingleBean(AgentExecutor.class));
 	}
 
 	@Test

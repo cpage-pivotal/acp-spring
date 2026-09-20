@@ -30,21 +30,26 @@ Flux<AgentEvent> events = agentClient.prompt()
 
 ## Status
 
-**M1 and M2 are done: the core, and all three runtimes.** One unchanged application runs against
-goose 1.51.0, codex-acp 1.12.0 and opencode 1.18.31 with `spring.acp.runtime` as the only
-difference — the milestone's completion test, and the reason the abstraction is worth having.
+**M1, M2 and M3 are done: the core, all three runtimes, and parity with the wrapper this
+replaces.** One unchanged application runs against goose 1.51.0, codex-acp 1.12.0 and opencode
+1.18.31 with `spring.acp.runtime` as the only difference — the completion test, and the reason the
+abstraction is worth having.
 
-170 tests green: 137 run anywhere (including 16 against a scripted agent speaking raw JSON-RPC over
-an in-memory transport) and 33 drive real agents, skipping themselves when one is not usable here.
-The 33 are the same 11 assertions run against each adapter: `AgentRuntimeContract`, which is the
-actual definition of the abstraction, since an interface alone cannot stop three adapters behaving
-differently enough that an application cannot move between them.
+289 tests green: 244 run anywhere (including 21 against a scripted agent speaking raw JSON-RPC over
+an in-memory transport) and 45 drive real agents, skipping themselves when one is not usable here.
+Of those, 42 are the same 14 assertions run against each adapter: `AgentRuntimeContract`, which is
+the actual definition of the abstraction, since an interface alone cannot stop three adapters
+behaving differently enough that an application cannot move between them.
 
-Not yet built: the `agents.yaml` loader, process pooling, the workspace jail and the WebSocket
-transport (M3); the registry-driven runtime, the Spring AI adapter and Micrometer (M4).
+M3 added session list/load/resume/delete (capability-gated, because no two agents implement the
+same set), a workspace jail for the filesystem and terminal methods, connection pooling with idle
+session sweeping, a supervised `goose serve` over WebSocket, a standalone `agents.yaml`, an opt-in
+HTTP endpoint, and an `AgentExecutor` facade with the old `GooseExecutor` signatures.
+
+Not yet built: the registry-driven runtime, the Spring AI adapter and Micrometer (M4).
 
 The design is in **[docs/design.md](docs/design.md)** — the feasibility analysis, the configuration
-model, the runtime SPI, four known gaps in the ACP Java SDK, and what each milestone measured.
+model, the runtime SPI, six known gaps in the ACP Java SDK, and what each milestone measured.
 
 ## Try it
 
@@ -77,13 +82,19 @@ spring:
 With that, goose asks twice, is refused twice, and writes nothing. The measurements and the full
 table are in the design doc's security section.
 
+M3 closed the half of this that *is* the client's: when `spring.acp.filesystem` or
+`spring.acp.terminal` is turned on, every path the agent asks this client to touch is confined to
+the workspace by real path, symlinks followed — because `Path.normalize()` stops `..` and stops
+nothing else, and an agent can plant a symlink with one tool call. What remains outside any
+client's reach is the agent's *own* file access, which is the operating system's to restrict.
+
 ## Why this is feasible
 
 - The `java-wrapper` in `goose-buildpack` is **already an ACP v1 client**; only its process
   supervisor is Goose-specific. This is a generalization, not a rewrite.
 - An official Java SDK exists — `com.agentclientprotocol:acp-core` (Java 17+, Reactor, stdio and
   WebSocket transports) — whose design mirrors the MCP Java SDK, so Spring Boot autoconfiguration
-  on top is idiomatic.
+  on top is idiomatic. Six gaps in it are worked around and documented rather than suppressed.
 - The [ACP registry](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json) publishes
   per-agent launch metadata, so runtimes with no hand-written adapter can still be launched from
   data.
@@ -113,6 +124,26 @@ Two things that tier turned out to require, both measured rather than guessed:
   `collaboration_mode`; `gpt-5.4-mini` is `openai/gpt-5.4-mini` on OpenCode. An adapter supplies
   candidate option ids and the core matches values across the spellings, so one property means one
   thing.
+
+## What each agent can actually do with a session
+
+Every optional session method is gated on a capability, and the three runtimes disagree — which is
+why `sessions().supports(...)` is part of the API rather than a convenience:
+
+| | `list` | `load` | `resume` | `delete` | `close` |
+| --- | --- | --- | --- | --- | --- |
+| goose 1.51.0 | yes | yes | **no** | yes | yes |
+| codex-acp 1.12.0 | yes | yes | yes | yes | yes |
+| opencode 1.18.31 | yes | yes | yes | **no** | yes |
+
+```java
+if (agentClient.sessions().supports(Operation.LOAD)) {
+    agentClient.sessions().load("review-123", storedId);   // same conversation, not a new one
+}
+```
+
+An operation the agent never advertised throws `UnsupportedAgentOperationException` naming the ACP
+method, rather than failing on the wire with a code the caller has to interpret.
 
 ## Scope
 

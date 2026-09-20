@@ -64,11 +64,19 @@ public final class ScriptedAgent implements AutoCloseable {
 	/** Mutable: a set_config_option changes the current value the way a real agent's would. */
 	private final Map<String, Select> selects = new LinkedHashMap<>();
 
+	/** Mutable: session/delete removes from it, the way a real agent's storage would. */
+	private final List<String> storedSessions = new CopyOnWriteArrayList<>();
+
+	private final List<String> listed = new CopyOnWriteArrayList<>();
+
+	private final List<String> loaded = new CopyOnWriteArrayList<>();
+
 	private final Builder script;
 
 	private ScriptedAgent(Builder script) {
 		this.script = script;
 		script.selects.forEach((id, select) -> selects.put(id, select.copy()));
+		storedSessions.addAll(script.storedSessions);
 		agent.start(inbound -> inbound.flatMap(this::dispatch)).subscribe();
 	}
 
@@ -105,6 +113,16 @@ public final class ScriptedAgent implements AutoCloseable {
 
 	public int prompts() {
 		return prompts.size();
+	}
+
+	/** Session ids this agent still has stored, after any deletes. */
+	public List<String> storedSessions() {
+		return List.copyOf(storedSessions);
+	}
+
+	/** Session ids a client asked to load or resume, in order. */
+	public List<String> loaded() {
+		return List.copyOf(loaded);
 	}
 
 	@Override
@@ -147,18 +165,78 @@ public final class ScriptedAgent implements AutoCloseable {
 			case "providers/set" -> Mono.just(setProvider(request));
 			case "session/prompt" -> prompt(request);
 			case "session/close" -> Mono.just(Map.of());
+			case "session/list" -> Mono.just(listSessions());
+			case "session/load" -> Mono.just(loadSession(request));
+			case "session/resume" -> Mono.just(loadSession(request));
+			case "session/delete" -> Mono.just(deleteSession(request));
 			default -> throw new Rejected(-32601, PROTOCOL_ERROR_UNKNOWN_METHOD + ": " + request.method());
 		};
 	}
 
 	private Map<String, Object> initialize() {
 		Map<String, Object> capabilities = new LinkedHashMap<>();
-		capabilities.put("loadSession", false);
+		capabilities.put("loadSession", script.sessionOperations.contains("load"));
 		if (script.providers) {
 			capabilities.put("providers", Map.of());
 		}
+		Map<String, Object> sessionCapabilities = new LinkedHashMap<>();
+		// ACP signals each of these by presence, so an absent key is how an agent says "no".
+		script.sessionOperations.stream().filter(operation -> !operation.equals("load"))
+				.forEach(operation -> sessionCapabilities.put(operation, Map.of()));
+		if (!sessionCapabilities.isEmpty()) {
+			capabilities.put("sessionCapabilities", sessionCapabilities);
+		}
 		return Map.of("protocolVersion", 1, "agentCapabilities", capabilities, "agentInfo",
 				Map.of("name", script.name, "version", script.version));
+	}
+
+	/** Paginated when there is more than one, because following a cursor is the interesting case. */
+	private Map<String, Object> listSessions() {
+		requireOperation("list");
+		List<String> remaining = new java.util.ArrayList<>(storedSessions);
+		remaining.removeAll(listed);
+		if (remaining.isEmpty()) {
+			return Map.of("sessions", List.of());
+		}
+		String next = remaining.get(0);
+		listed.add(next);
+		Map<String, Object> result = new LinkedHashMap<>();
+		result.put("sessions", List.of(Map.of("sessionId", next, "cwd", "/tmp", "title", "stored " + next)));
+		if (remaining.size() > 1) {
+			result.put("nextCursor", "after-" + next);
+		}
+		return result;
+	}
+
+	/**
+	 * Answers with the config options the agent advertises — which the SDK's
+	 * {@code LoadSessionResponse} does not model, so a client that sees them here got them out of
+	 * the raw payload. That is the whole reason this agent speaks JSON rather than records.
+	 */
+	private Map<String, Object> loadSession(AcpSchema.JSONRPCRequest request) {
+		requireOperation(request.method().endsWith("resume") ? "resume" : "load");
+		String sessionId = String.valueOf(asMap(request.params()).get("sessionId"));
+		if (!storedSessions.isEmpty() && !storedSessions.contains(sessionId)) {
+			throw new Rejected(-32602, "No such session: " + sessionId);
+		}
+		loaded.add(sessionId);
+		Map<String, Object> result = new LinkedHashMap<>();
+		if (!selects.isEmpty()) {
+			result.put("configOptions", selects.values().stream().map(Select::toWire).toList());
+		}
+		return result;
+	}
+
+	private Map<String, Object> deleteSession(AcpSchema.JSONRPCRequest request) {
+		requireOperation("delete");
+		storedSessions.remove(String.valueOf(asMap(request.params()).get("sessionId")));
+		return Map.of();
+	}
+
+	private void requireOperation(String operation) {
+		if (!script.sessionOperations.contains(operation)) {
+			throw new Rejected(-32601, PROTOCOL_ERROR_UNKNOWN_METHOD + ": session/" + operation);
+		}
 	}
 
 	private Map<String, Object> newSession(AcpSchema.JSONRPCRequest request) {
@@ -344,6 +422,10 @@ public final class ScriptedAgent implements AutoCloseable {
 
 		private final List<String> providerIds = new ArrayList<>();
 
+		private final List<String> sessionOperations = new ArrayList<>();
+
+		private final List<String> storedSessions = new ArrayList<>();
+
 		private List<String> reply = List.of("ok");
 
 		private String name = "scripted";
@@ -385,6 +467,27 @@ public final class ScriptedAgent implements AutoCloseable {
 			providers = true;
 			providerIds.clear();
 			providerIds.addAll(List.of(ids));
+			return this;
+		}
+
+		/**
+		 * Which optional session methods this agent implements: {@code list}, {@code load},
+		 * {@code resume}, {@code delete}, {@code close}.
+		 *
+		 * <p>Named individually because that is how ACP works — each is its own capability and the
+		 * three real runtimes implement different subsets — and because an agent that advertises
+		 * nothing is the case a client most needs to handle without failing on the wire.
+		 */
+		public Builder sessionOperations(String... operations) {
+			sessionOperations.clear();
+			sessionOperations.addAll(List.of(operations));
+			return this;
+		}
+
+		/** Session ids this agent has stored, for {@code session/list} and {@code session/load}. */
+		public Builder storedSessions(String... ids) {
+			storedSessions.clear();
+			storedSessions.addAll(List.of(ids));
 			return this;
 		}
 
