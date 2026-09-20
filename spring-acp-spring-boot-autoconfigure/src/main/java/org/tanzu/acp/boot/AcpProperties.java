@@ -17,6 +17,8 @@ import org.tanzu.acp.config.PoolSettings;
 import org.tanzu.acp.config.ProviderSpec;
 import org.tanzu.acp.config.RuntimeOptions;
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.protocol.AcpProtocol;
+import org.tanzu.acp.protocol.ProtocolSettings;
 import org.tanzu.acp.workspace.FileSystemAccess;
 import org.tanzu.acp.workspace.TerminalAccess;
 
@@ -71,6 +73,12 @@ public class AcpProperties {
 
 	private final Controller controller = new Controller();
 
+	private final Protocol protocol = new Protocol();
+
+	private final Observations observations = new Observations();
+
+	private final Registry registry = new Registry();
+
 	/**
 	 * Runtime-specific options, keyed by runtime id. Ignored by every other runtime.
 	 *
@@ -107,6 +115,10 @@ public class AcpProperties {
 
 	public PoolSettings toPoolSettings() {
 		return pool.toSettings();
+	}
+
+	public ProtocolSettings toProtocolSettings() {
+		return protocol.toSettings();
 	}
 
 	public enum PermissionMode {
@@ -339,6 +351,171 @@ public class AcpProperties {
 
 		public void setMaxTimeout(Duration maxTimeout) {
 			this.maxTimeout = maxTimeout;
+		}
+	}
+
+	/**
+	 * Which ACP version to offer, and how much to trust the answer.
+	 *
+	 * <p>There is one right value for {@code max-version} today and it is the default. The property
+	 * exists because the alternative to a flag is a code change, and ACP v2 is a published draft whose
+	 * own announcement says to gate it behind version negotiation <em>and</em> a feature flag. Raising
+	 * it offers v2; an agent that accepts is then refused, loudly, because {@code acp-core} 0.17.0
+	 * decodes the v1 wire format and a v2 turn would report as having ended for no reason. See
+	 * {@code AcpProtocol}.
+	 */
+	public static class Protocol {
+
+		/** The highest ACP version to offer on initialize. */
+		private int maxVersion = AcpProtocol.HIGHEST_SPOKEN;
+
+		/**
+		 * Fail when an agent answers a version nobody offered, rather than clamping to the offer.
+		 *
+		 * <p>Off by default because goose 1.51 does exactly that, for every offer, and an application
+		 * running goose should not have to choose between a startup failure and no negotiation at all.
+		 */
+		private boolean strict;
+
+		ProtocolSettings toSettings() {
+			return new ProtocolSettings(maxVersion, strict);
+		}
+
+		public int getMaxVersion() {
+			return maxVersion;
+		}
+
+		public void setMaxVersion(int maxVersion) {
+			this.maxVersion = maxVersion;
+		}
+
+		public boolean isStrict() {
+			return strict;
+		}
+
+		public void setStrict(boolean strict) {
+			this.strict = strict;
+		}
+	}
+
+	/** Whether turns and tool calls are reported to Micrometer. */
+	public static class Observations {
+
+		/**
+		 * Record an observation per turn and per tool call. On when Micrometer is present.
+		 *
+		 * <p>Unlike the controller, this defaults on: an observation publishes nothing and exposes
+		 * nothing, and an application that has an {@code ObservationRegistry} has already asked to be
+		 * measured.
+		 */
+		private boolean enabled = true;
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+	}
+
+	/**
+	 * The ACP agent registry: where the catalogue comes from, and what may be downloaded.
+	 *
+	 * <p>Only consulted for a {@code spring.acp.runtime} that no adapter on the classpath claims. An
+	 * application running goose, codex or opencode never touches any of this.
+	 *
+	 * <p>Nothing here names a type from {@code spring-acp-runtime-registry}, and that is load-bearing
+	 * rather than tidy. This class is instantiated by a field initializer, which runs whenever
+	 * {@code AcpProperties} is bound — so a default of {@code RegistrySettings.DEFAULT_URL} would make
+	 * an optional dependency mandatory, and an application without it would die at refresh on the very
+	 * jar it chose not to ship. Null here means "the registry module's own default", and
+	 * {@code AcpRegistryConfiguration} does the conversion behind a class condition that can hold when
+	 * the class is genuinely missing.
+	 */
+	public static class Registry {
+
+		/** Consult the registry for a runtime no adapter claims. */
+		private boolean enabled = true;
+
+		/** The published catalogue. A file: URL pins it to a snapshot you control. */
+		private URI url;
+
+		/** Where the snapshot and the downloaded agents are kept between runs. */
+		private Path cache;
+
+		/** How long a cached snapshot is used before the catalogue is fetched again. */
+		private Duration refresh;
+
+		/** Forbid every network call: use the bundled snapshot and whatever is already installed. */
+		private boolean offline;
+
+		/**
+		 * Refuse an agent the registry publishes no sha256 for.
+		 *
+		 * <p>On by default, which makes 9 of the registry's 19 binary agents need one more line of
+		 * configuration. That is the intended cost: this downloads an executable and runs it with the
+		 * application's credentials in its environment.
+		 */
+		private boolean requireChecksum = true;
+
+		/** How long one agent download may take. */
+		private Duration downloadTimeout;
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public URI getUrl() {
+			return url;
+		}
+
+		public void setUrl(URI url) {
+			this.url = url;
+		}
+
+		public Path getCache() {
+			return cache;
+		}
+
+		public void setCache(Path cache) {
+			this.cache = cache;
+		}
+
+		public Duration getRefresh() {
+			return refresh;
+		}
+
+		public void setRefresh(Duration refresh) {
+			this.refresh = refresh;
+		}
+
+		public boolean isOffline() {
+			return offline;
+		}
+
+		public void setOffline(boolean offline) {
+			this.offline = offline;
+		}
+
+		public boolean isRequireChecksum() {
+			return requireChecksum;
+		}
+
+		public void setRequireChecksum(boolean requireChecksum) {
+			this.requireChecksum = requireChecksum;
+		}
+
+		public Duration getDownloadTimeout() {
+			return downloadTimeout;
+		}
+
+		public void setDownloadTimeout(Duration downloadTimeout) {
+			this.downloadTimeout = downloadTimeout;
 		}
 	}
 
@@ -600,6 +777,18 @@ public class AcpProperties {
 
 	public Controller getController() {
 		return controller;
+	}
+
+	public Protocol getProtocol() {
+		return protocol;
+	}
+
+	public Observations getObservations() {
+		return observations;
+	}
+
+	public Registry getRegistry() {
+		return registry;
 	}
 
 	public Map<String, Map<String, Object>> getRuntimes() {

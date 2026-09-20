@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.tanzu.acp.config.AgentSettings;
 import org.tanzu.acp.event.SessionUpdateDecoder;
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.observation.AgentObservations;
 import org.tanzu.acp.process.AgentProcessSupervisor;
+import org.tanzu.acp.protocol.AcpProtocol;
 import org.tanzu.acp.runtime.AgentLaunchSpec;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.session.SessionRegistry;
@@ -46,13 +48,16 @@ public final class AgentClientFactory {
 
 	private static final String SESSION_UPDATE = "session/update";
 
-	private static final int PROTOCOL_VERSION = 1;
-
 	private AgentClientFactory() {
 	}
 
 	/** Provisions, launches and connects the runtime named by {@code settings}. */
 	public static AgentClient create(AgentRuntime runtime, AgentSettings settings) {
+		return create(runtime, settings, AgentObservations.NONE);
+	}
+
+	/** Same, with every turn this client runs reported to {@code observations}. */
+	public static AgentClient create(AgentRuntime runtime, AgentSettings settings, AgentObservations observations) {
 		runtime.provision(settings);
 
 		AgentDiagnostics diagnostics = new AgentDiagnostics();
@@ -60,8 +65,9 @@ public final class AgentClientFactory {
 			case AgentLaunchSpec.Stdio stdio ->
 				connect(runtime, settings, stdioTransport(stdio, diagnostics), diagnostics, Liveness.unknowable(),
 						() -> {
-						});
-			case AgentLaunchSpec.WebSocket served -> connectServed(runtime, settings, served, diagnostics);
+						}, observations);
+			case AgentLaunchSpec.WebSocket served -> connectServed(runtime, settings, served, diagnostics,
+					observations);
 		};
 	}
 
@@ -74,7 +80,7 @@ public final class AgentClientFactory {
 	 * readiness and reports what the agent said instead.
 	 */
 	private static AgentClient connectServed(AgentRuntime runtime, AgentSettings settings,
-			AgentLaunchSpec.WebSocket served, AgentDiagnostics diagnostics) {
+			AgentLaunchSpec.WebSocket served, AgentDiagnostics diagnostics, AgentObservations observations) {
 		AgentProcessSupervisor supervisor = served.process() == null ? null
 				: new AgentProcessSupervisor(runtime.id(), served.process(), settings.pool().maxRestarts());
 		if (supervisor != null) {
@@ -96,7 +102,7 @@ public final class AgentClientFactory {
 		} : supervisor::close;
 
 		try {
-			return connect(runtime, settings, transport, diagnostics, liveness, onClose);
+			return connect(runtime, settings, transport, diagnostics, liveness, onClose, observations);
 		}
 		catch (RuntimeException ex) {
 			onClose.run();
@@ -129,12 +135,19 @@ public final class AgentClientFactory {
 	 * not spawn — an agent on a WebSocket, a sidecar — will come in.
 	 */
 	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched) {
+		return connect(runtime, settings, launched, AgentObservations.NONE);
+	}
+
+	/** Same, reporting turns to {@code observations}. */
+	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
+			AgentObservations observations) {
 		return connect(runtime, settings, launched, new AgentDiagnostics(), Liveness.unknowable(), () -> {
-		});
+		}, observations);
 	}
 
 	private static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
-			AgentDiagnostics diagnostics, Liveness liveness, Runnable onTransportClose) {
+			AgentDiagnostics diagnostics, Liveness liveness, Runnable onTransportClose,
+			AgentObservations observations) {
 		SessionConfigRecorder recorder = new SessionConfigRecorder();
 		AcpClientTransport transport = recorder.wrap(launched);
 		SessionUpdateRouter router = new SessionUpdateRouter();
@@ -165,18 +178,16 @@ public final class AgentClientFactory {
 		AcpAsyncClient acp = spec.build();
 
 		AcpSchema.InitializeResponse initialized;
+		int protocolVersion;
+		int offered = settings.protocol().maxVersion();
 		try {
 			initialized = acp
-					.initialize(new AcpSchema.InitializeRequest(PROTOCOL_VERSION, capabilities(settings),
+					.initialize(new AcpSchema.InitializeRequest(offered, capabilities(settings),
 							new AcpSchema.Implementation(CLIENT_NAME, version()), null))
 					.block(settings.timeout());
 			if (initialized == null) {
 				throw new AgentClientException("Agent '" + runtime.id() + "' did not complete initialization");
 			}
-			logger.info("Connected to {} {} over ACP v{}",
-					initialized.agentInfo() == null ? runtime.id() : initialized.agentInfo().name(),
-					initialized.agentInfo() == null ? "" : initialized.agentInfo().version(),
-					initialized.protocolVersion());
 		}
 		catch (RuntimeException ex) {
 			// Collected before the close, not after: closing disposes the scheduler that delivers the
@@ -188,8 +199,26 @@ public final class AgentClientFactory {
 			throw new AgentClientException("Failed to initialize runtime '" + runtime.id() + "'" + reported, ex);
 		}
 
+		// Outside the catch on purpose. A version nobody can speak is a handshake that succeeded and
+		// produced something unusable, not a handshake that failed, and wrapping it in "failed to
+		// initialize" would bury the one sentence that says what to change. Reconciled rather than
+		// read, because goose 1.51 answers whatever version it is offered — see AcpProtocol.
+		try {
+			protocolVersion = AcpProtocol.negotiated(runtime.id(), offered, initialized.protocolVersion(),
+					settings.protocol().strict());
+		}
+		catch (RuntimeException ex) {
+			terminals.close();
+			closeQuietly(acp);
+			onTransportClose.run();
+			throw ex;
+		}
+		logger.info("Connected to {} {} over ACP v{}",
+				initialized.agentInfo() == null ? runtime.id() : initialized.agentInfo().name(),
+				initialized.agentInfo() == null ? "" : initialized.agentInfo().version(), protocolVersion);
+
 		return new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router, recorder, initialized,
-				liveness.knowable() ? liveness.alive() : null, () -> {
+				protocolVersion, observations, liveness.knowable() ? liveness.alive() : null, () -> {
 					terminals.close();
 					onTransportClose.run();
 				});

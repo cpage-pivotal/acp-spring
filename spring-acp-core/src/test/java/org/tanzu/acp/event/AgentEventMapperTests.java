@@ -57,6 +57,37 @@ class AgentEventMapperTests {
 	}
 
 	@Test
+	void mapsUsageUpdatesIncludingTheCostAnAgentMayAttach() {
+		// Measured against goose 1.51: it sends one of these with used=0 before the turn starts and
+		// another with the real numbers when it ends, the second one carrying a cost.
+		AcpSchema.SessionUpdate update = new AcpSchema.UsageUpdate("usage_update", 4441L, 1_050_000L,
+				new AcpSchema.Cost(0.008932, "USD"), null);
+
+		assertThat(AgentEventMapper.map(update))
+				.contains(new AgentEvent.UsageUpdated(4441L, 1_050_000L, 0.008932, "USD"));
+	}
+
+	@Test
+	void reportsHowMuchOfTheContextWindowIsGone() {
+		AgentEvent.UsageUpdated usage = new AgentEvent.UsageUpdated(500L, 1000L, null, null);
+
+		assertThat(usage.contextFraction()).hasValue(0.5);
+	}
+
+	@Test
+	void hasNoOpinionOnTheContextWindowWhenTheAgentDidNotSayHowBigItIs() {
+		assertThat(new AgentEvent.UsageUpdated(500L, 0L, null, null).contextFraction()).isEmpty();
+	}
+
+	@Test
+	void dropsAUsageUpdateThatMeasuredNothing() {
+		// "0 of 0" would read as an empty context window rather than as no measurement, and a gauge
+		// cannot tell the difference.
+		assertThat(AgentEventMapper.map(new AcpSchema.UsageUpdate("usage_update", null, null, null, null)))
+				.isEmpty();
+	}
+
+	@Test
 	void toleratesANullUpdate() {
 		assertThat(AgentEventMapper.map(null)).isEmpty();
 	}

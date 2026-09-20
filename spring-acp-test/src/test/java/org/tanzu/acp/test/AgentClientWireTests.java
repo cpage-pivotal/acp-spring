@@ -51,6 +51,66 @@ class AgentClientWireTests {
 		return AgentClientFactory.connect(new ScriptedRuntime(), settings, agent.transport());
 	}
 
+	// --- protocol version negotiation -------------------------------------------------------
+
+	@Test
+	void reportsTheVersionTheConversationIsReallyIn() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, settings().build())) {
+			assertThat(client.protocolVersion()).isEqualTo(org.tanzu.acp.protocol.AcpProtocol.V1);
+		}
+	}
+
+	@Test
+	void clampsAnAgentThatEchoesBackAVersionNobodyOffered() {
+		// goose 1.51 answers whatever it is given, so the response's own number is not evidence of
+		// anything. A mock of AcpAsyncClient cannot demonstrate this; a wire agent can.
+		try (ScriptedAgent agent = ScriptedAgent.builder().echoesProtocolVersion(true).build();
+				AgentClient client = connect(agent,
+						settings().protocol(org.tanzu.acp.protocol.ProtocolSettings.of(1)).build())) {
+			assertThat(client.protocolVersion()).isEqualTo(1);
+		}
+	}
+
+	@Test
+	void refusesToRunATurnAgainstAnAgentClaimingAVersionThisLibraryCannotSpeak() {
+		// The feature flag's honest failure: offering v2 finds out what an agent claims, and an
+		// agent that claims it is refused rather than misread, because acp-core decodes v1 shapes.
+		ScriptedAgent agent = ScriptedAgent.builder().echoesProtocolVersion(true).build();
+
+		assertThatThrownBy(() -> connect(agent,
+				settings().protocol(org.tanzu.acp.protocol.ProtocolSettings.of(
+						org.tanzu.acp.protocol.AcpProtocol.DRAFT_V2)).build()))
+								.isInstanceOf(org.tanzu.acp.protocol.UnsupportedProtocolVersionException.class)
+								.hasMessageContaining("negotiated ACP v2");
+		agent.close();
+	}
+
+	@Test
+	void anAgentThatNegotiatesDownIsTakenAtItsWord() {
+		// The case the ACP announcement says will be common for a long time: offer the draft, get v1.
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent,
+						settings().protocol(org.tanzu.acp.protocol.ProtocolSettings.of(
+								org.tanzu.acp.protocol.AcpProtocol.DRAFT_V2)).build())) {
+			assertThat(client.protocolVersion()).isEqualTo(1);
+		}
+	}
+
+	@Test
+	void namesTheModelTheAgentIsActuallySetToEvenWhenNothingAskedForOne() {
+		// An application that never set spring.acp.model is the common case, and a metric tagged
+		// "unknown" for all of them would be no use. The agent advertises what it is set to; that
+		// is the honest answer, and it is not the same as what was requested.
+		try (ScriptedAgent agent = ScriptedAgent.builder()
+				.select("model", "model", "gpt-5.4-mini", "gpt-5.4-mini", "gpt-6-astra").build();
+				AgentClient client = connect(agent, settings().build())) {
+
+			assertThat(client.openSession("s").advertised().select("model", "model"))
+					.get().extracting(AcpSchema.SessionConfigSelect::currentValue).isEqualTo("gpt-5.4-mini");
+		}
+	}
+
 	// --- the two SDK gaps -------------------------------------------------------------------
 
 	@Test

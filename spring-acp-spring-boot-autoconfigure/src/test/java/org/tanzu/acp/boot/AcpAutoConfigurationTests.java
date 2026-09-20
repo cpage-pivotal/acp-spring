@@ -129,20 +129,105 @@ class AcpAutoConfigurationTests {
 
 	@Test
 	void failsFastWhenRuntimeSpecificOptionsNameARuntimeNobodyRegistered() {
-		runner.withPropertyValues("spring.acp.runtimes.gemini.model=gemini-3").run(context -> {
+		// 'gemini' used to belong here and no longer does: the registry provider vouches for it.
+		// What must still fail is an id nothing can supply, which is the typo this check exists for.
+		runner.withPropertyValues("spring.acp.runtimes.gooze.model=gpt-5.4-mini").run(context -> {
 			assertThat(context).hasFailed();
 			assertThat(context.getStartupFailure()).rootCause()
-					.hasMessageContaining("unregistered runtime(s) [gemini]")
+					.hasMessageContaining("unregistered runtime(s) [gooze]")
 					.hasMessageContaining("[codex, goose, opencode]");
 		});
 	}
 
 	@Test
 	void failsFastWhenTheSelectedRuntimeIsNotRegistered() {
-		runner.withPropertyValues("spring.acp.runtime=gemini").run(context -> {
+		runner.withPropertyValues("spring.acp.runtime=not-an-agent").run(context -> {
 			assertThat(context).hasFailed();
-			assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("No AgentRuntime registered");
+			assertThat(context.getStartupFailure()).rootCause().hasMessageContaining("No AgentRuntime registered")
+					.hasMessageContaining("available from the ACP registry");
 		});
+	}
+
+	@Test
+	void resolvesARuntimeNoAdapterClaimsFromTheRegistry() {
+		// The M4 claim, at its smallest: an agent nobody wrote an adapter for, selected by property.
+		// Nothing is downloaded here — the entry is read from the bundled snapshot, and the agent
+		// itself would be fetched on the first turn.
+		runner.withPropertyValues("spring.acp.runtime=gemini", "spring.acp.registry.offline=true")
+				.run(context -> {
+					assertThat(context).hasNotFailed();
+					assertThat(context.getBean(SelectedRuntime.class).runtime().id()).isEqualTo("gemini");
+					assertThat(context.getBean(SelectedRuntime.class).runtime())
+							.isInstanceOf(org.tanzu.acp.registry.RegistryAgentRuntime.class);
+				});
+	}
+
+	@Test
+	void prefersACompiledAdapterOverTheRegistryForTheSameAgent() {
+		// Both can supply 'goose'. The adapter wins, because it knows things the catalogue does not:
+		// where goose hides a tool name, that its provider option has no category, and how to serve.
+		runner.withPropertyValues("spring.acp.runtime=goose", "spring.acp.registry.offline=true")
+				.run(context -> assertThat(context.getBean(SelectedRuntime.class).runtime())
+						.isInstanceOf(GooseRuntime.class));
+	}
+
+	@Test
+	void doesNotConsultTheRegistryWhenItIsTurnedOff() {
+		runner.withPropertyValues("spring.acp.runtime=gemini", "spring.acp.registry.enabled=false")
+				.run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).rootCause()
+							.hasMessageContaining("No AgentRuntime registered");
+				});
+	}
+
+	@Test
+	void worksWithoutTheRegistryModuleOnTheClasspath() {
+		// The same condition trap as the adapters: a class-level @ConditionalOnClass can hold when
+		// the class is genuinely absent, and a @Bean-level one cannot.
+		runner.withClassLoader(new FilteredClassLoader(org.tanzu.acp.registry.AgentRegistry.class))
+				.withPropertyValues("spring.acp.runtime=goose").run(context -> {
+					assertThat(context).hasNotFailed();
+					assertThat(context).hasSingleBean(AgentSettings.class);
+					assertThat(context).doesNotHaveBean(org.tanzu.acp.runtime.AgentRuntimeProvider.class);
+				});
+	}
+
+	@Test
+	void offersProtocolVersionOneUnlessTheFlagSaysOtherwise() {
+		runner.run(context -> assertThat(context.getBean(AgentSettings.class).protocol().maxVersion())
+				.isEqualTo(org.tanzu.acp.protocol.AcpProtocol.V1));
+	}
+
+	@Test
+	void bindsTheProtocolFeatureFlag() {
+		runner.withPropertyValues("spring.acp.protocol.max-version=2", "spring.acp.protocol.strict=true")
+				.run(context -> {
+					assertThat(context.getBean(AgentSettings.class).protocol().maxVersion()).isEqualTo(2);
+					assertThat(context.getBean(AgentSettings.class).protocol().strict()).isTrue();
+					assertThat(context.getBean(AgentSettings.class).protocol().offersDraft()).isTrue();
+				});
+	}
+
+	@Test
+	void registersMicrometerObservationsWhenMicrometerIsPresent() {
+		runner.run(context -> assertThat(context.getBean(org.tanzu.acp.observation.AgentObservations.class))
+				.isInstanceOf(org.tanzu.acp.observation.MicrometerAgentObservations.class));
+	}
+
+	@Test
+	void doesNotObserveWhenTheApplicationTurnsItOff() {
+		runner.withPropertyValues("spring.acp.observations.enabled=false").run(context -> assertThat(context)
+				.doesNotHaveBean(org.tanzu.acp.observation.AgentObservations.class));
+	}
+
+	@Test
+	void worksWithoutMicrometerOnTheClasspath() {
+		runner.withClassLoader(new FilteredClassLoader(io.micrometer.observation.ObservationRegistry.class))
+				.run(context -> {
+					assertThat(context).hasNotFailed();
+					assertThat(context).hasSingleBean(AgentSettings.class);
+				});
 	}
 
 	@Test

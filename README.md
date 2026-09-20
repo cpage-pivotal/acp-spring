@@ -30,26 +30,29 @@ Flux<AgentEvent> events = agentClient.prompt()
 
 ## Status
 
-**M1, M2 and M3 are done: the core, all three runtimes, and parity with the wrapper this
-replaces.** One unchanged application runs against goose 1.51.0, codex-acp 1.12.0 and opencode
-1.18.31 with `spring.acp.runtime` as the only difference — the completion test, and the reason the
-abstraction is worth having.
+**All four milestones are done.** One unchanged application runs against goose 1.51.0, codex-acp
+1.12.0 and opencode 1.18.31 with `spring.acp.runtime` as the only difference — the completion test,
+and the reason the abstraction is worth having. Since M4 it also runs against Gemini CLI, which this
+library has never had a line of code about: no adapter, just a catalogue entry.
 
-289 tests green: 244 run anywhere (including 21 against a scripted agent speaking raw JSON-RPC over
-an in-memory transport) and 45 drive real agents, skipping themselves when one is not usable here.
-Of those, 42 are the same 14 assertions run against each adapter: `AgentRuntimeContract`, which is
-the actual definition of the abstraction, since an interface alone cannot stop three adapters
-behaving differently enough that an application cannot move between them.
+391 tests green: 344 run anywhere (including 24 against a scripted agent speaking raw JSON-RPC over
+an in-memory transport), 45 drive real agents and skip themselves when one is not usable here, and
+2 download a real agent from the real registry and are opt-in. Of the live ones, 42 are the same 14
+assertions run against each adapter: `AgentRuntimeContract`, which is the actual definition of the
+abstraction, since an interface alone cannot stop three adapters behaving differently enough that an
+application cannot move between them.
 
 M3 added session list/load/resume/delete (capability-gated, because no two agents implement the
 same set), a workspace jail for the filesystem and terminal methods, connection pooling with idle
 session sweeping, a supervised `goose serve` over WebSocket, a standalone `agents.yaml`, an opt-in
 HTTP endpoint, and an `AgentExecutor` facade with the old `GooseExecutor` signatures.
 
-Not yet built: the registry-driven runtime, the Spring AI adapter and Micrometer (M4).
+M4 added the registry-driven runtime with SHA-256-verified downloads, `AcpChatModel` for Spring AI,
+a Micrometer observation per turn and per tool call, `AgentEvent.UsageUpdated`, and real ACP version
+negotiation behind a feature flag.
 
 The design is in **[docs/design.md](docs/design.md)** — the feasibility analysis, the configuration
-model, the runtime SPI, six known gaps in the ACP Java SDK, and what each milestone measured.
+model, the runtime SPI, seven known gaps in the ACP Java SDK, and what each milestone measured.
 
 ## Try it
 
@@ -62,6 +65,13 @@ mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.a
 
 Needs the corresponding agent installed and authenticated: `goose` or `opencode` on the PATH, or
 `npx` for the Codex adapter. Nothing in the sample's Java names an agent.
+
+A fourth run needs nothing installed at all, because the agent is fetched from the ACP registry,
+verified against its published SHA-256 and launched:
+
+```bash
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=gemini
+```
 
 ## A caveat worth reading before you rely on it
 
@@ -94,10 +104,10 @@ client's reach is the agent's *own* file access, which is the operating system's
   supervisor is Goose-specific. This is a generalization, not a rewrite.
 - An official Java SDK exists — `com.agentclientprotocol:acp-core` (Java 17+, Reactor, stdio and
   WebSocket transports) — whose design mirrors the MCP Java SDK, so Spring Boot autoconfiguration
-  on top is idiomatic. Six gaps in it are worked around and documented rather than suppressed.
+  on top is idiomatic. Seven gaps in it are worked around and documented rather than suppressed.
 - The [ACP registry](https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json) publishes
-  per-agent launch metadata, so runtimes with no hand-written adapter can still be launched from
-  data.
+  per-agent launch metadata, so runtimes with no hand-written adapter can be launched from data —
+  which M4 turned from a claim into `spring.acp.runtime: gemini`.
 
 ## The interesting problem
 
@@ -144,6 +154,54 @@ if (agentClient.sessions().supports(Operation.LOAD)) {
 
 An operation the agent never advertised throws `UnsupportedAgentOperationException` naming the ACP
 method, rather than failing on the wire with a code the caller has to interpret.
+
+## An agent nobody wrote an adapter for
+
+Set `spring.acp.runtime` to any of the 41 agents the ACP registry publishes, add
+`spring-acp-runtime-registry`, and the agent is resolved from a cached catalogue snapshot,
+downloaded, checked against its published SHA-256 and launched:
+
+```
+No adapter claims runtime 'gemini'; it was resolved from a runtime provider
+Connected to gemini-cli 0.60.0 over ACP v1
+```
+
+A compiled adapter always wins for the same agent, because an adapter knows things a catalogue does
+not: where goose hides a tool name, that its provider option has no category, how to run it as a
+served sidecar. The generic runtime has none of that and does not pretend to — it provisions nothing,
+never guesses a tool name from a human-readable title, and reaches the negotiated tier only through
+what ACP actually standardizes.
+
+`require-checksum` is on by default, which makes 9 of the registry's 19 binary agents need one more
+line of configuration. That is deliberate: this downloads an executable and runs it in a process
+holding your model credentials.
+
+## As a Spring AI `ChatModel`
+
+```java
+ChatResponse response = chatModel.call(new Prompt("Review the pending changes",
+        AcpChatOptions.builder().session("review-123").mode("plan").build()));
+```
+
+Add `spring-acp-spring-ai` and the agent appears wherever a Spring AI application already looks for
+a model. It is an adapter rather than a wrapper, because the two models disagree about who owns the
+conversation: a chat completion is stateless and resends the history every call, while an ACP session
+holds it — along with a file tree, a plan and tool results no message list can carry. So a named
+session sends only what the agent has not heard yet, and an unnamed one sends everything. Use one
+memory or the other, not both.
+
+## Metrics and traces
+
+With Micrometer on the classpath, every turn and every tool call becomes an observation — a timer,
+and a span parented to whatever the caller was already in:
+
+```
+acp.turn{acp.runtime=goose, acp.model=gpt-5.6-terra, acp.session.kind=named, acp.outcome=END_TURN}
+acp.tool.call{acp.runtime=goose, acp.tool.kind=READ, acp.tool.status=COMPLETED}
+```
+
+`acp.model` is the model the session is **really** using, not the one that was requested — which with
+`on-unsupported: warn` is not the same thing, and is the whole reason to tag it.
 
 ## Scope
 

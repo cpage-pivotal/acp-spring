@@ -156,7 +156,7 @@ public final class ScriptedAgent implements AutoCloseable {
 
 	private Mono<Map<String, Object>> handle(AcpSchema.JSONRPCRequest request) {
 		return switch (request.method()) {
-			case "initialize" -> Mono.just(initialize());
+			case "initialize" -> Mono.just(initialize(request));
 			case "session/new" -> Mono.just(newSession(request));
 			case "session/set_config_option" -> Mono.just(setConfigOption(request));
 			case "session/set_mode" -> Mono.just(setMode(request));
@@ -173,7 +173,7 @@ public final class ScriptedAgent implements AutoCloseable {
 		};
 	}
 
-	private Map<String, Object> initialize() {
+	private Map<String, Object> initialize(AcpSchema.JSONRPCRequest request) {
 		Map<String, Object> capabilities = new LinkedHashMap<>();
 		capabilities.put("loadSession", script.sessionOperations.contains("load"));
 		if (script.providers) {
@@ -186,8 +186,32 @@ public final class ScriptedAgent implements AutoCloseable {
 		if (!sessionCapabilities.isEmpty()) {
 			capabilities.put("sessionCapabilities", sessionCapabilities);
 		}
-		return Map.of("protocolVersion", 1, "agentCapabilities", capabilities, "agentInfo",
+		return Map.of("protocolVersion", negotiatedVersion(request), "agentCapabilities", capabilities, "agentInfo",
 				Map.of("name", script.name, "version", script.version));
+	}
+
+	/**
+	 * What this agent claims to speak, and the one place it can be told to lie about it.
+	 *
+	 * <p>{@link Builder#echoesProtocolVersion(boolean)} reproduces goose 1.51, which answers whatever
+	 * version it is offered — including versions that do not exist. A client that believed the echo
+	 * would think it was in a conversation whose wire format neither side is using, which is not
+	 * something a mock of {@code AcpAsyncClient} can be made to demonstrate.
+	 */
+	private Object negotiatedVersion(AcpSchema.JSONRPCRequest request) {
+		if (!script.echoesProtocolVersion) {
+			return 1;
+		}
+		// Two shapes, because acp-test's in-memory transport hands the agent the client's typed
+		// record rather than the map a real socket would have produced.
+		Object params = request.params();
+		if (params instanceof AcpSchema.InitializeRequest typed) {
+			return typed.protocolVersion();
+		}
+		if (params instanceof Map<?, ?> map && map.get("protocolVersion") instanceof Number offered) {
+			return offered;
+		}
+		return 1;
 	}
 
 	/** Paginated when there is more than one, because following a cursor is the interesting case. */
@@ -440,6 +464,8 @@ public final class ScriptedAgent implements AutoCloseable {
 
 		private boolean emitsUnknownUpdate;
 
+		private boolean echoesProtocolVersion;
+
 		private Duration promptDelay;
 
 		/** A {@code select} config option with an explicit set of legal values. */
@@ -526,6 +552,12 @@ public final class ScriptedAgent implements AutoCloseable {
 
 		public Builder stopReason(String reason) {
 			stopReason = reason;
+			return this;
+		}
+
+		/** Answer {@code initialize} with whatever version was offered, the way goose 1.51 does. */
+		public Builder echoesProtocolVersion(boolean echoes) {
+			echoesProtocolVersion = echoes;
 			return this;
 		}
 

@@ -43,6 +43,17 @@ public interface AgentClient extends AutoCloseable {
 	java.util.Optional<AgentInfo> agentInfo();
 
 	/**
+	 * The ACP version this connection settled on.
+	 *
+	 * <p>Not simply what the agent answered: an agent can answer a version nobody offered — goose
+	 * 1.51 echoes whatever it is given, including versions that do not exist — so this is the result
+	 * of reconciling the offer with the answer. See {@code AcpProtocol}.
+	 */
+	default int protocolVersion() {
+		return org.tanzu.acp.protocol.AcpProtocol.V1;
+	}
+
+	/**
 	 * Whether this connection is still usable.
 	 *
 	 * <p>Optimistic by contract: a transport that cannot tell answers {@code true}, because the

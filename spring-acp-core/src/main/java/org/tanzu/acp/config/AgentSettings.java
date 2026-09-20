@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.tanzu.acp.permission.PermissionPolicy;
+import org.tanzu.acp.protocol.ProtocolSettings;
 import org.tanzu.acp.workspace.FileSystemAccess;
 import org.tanzu.acp.workspace.TerminalAccess;
 
@@ -26,11 +27,14 @@ import org.tanzu.acp.workspace.TerminalAccess;
  * <p>{@link FileSystemAccess} and {@link TerminalAccess} are portable in the same sense but point
  * the other way: they say what the agent may ask <em>this</em> client to do, not what this client
  * asks of the agent. Both are off by default.
+ *
+ * <p>{@link ProtocolSettings} sits under all three: it decides which ACP version the conversation
+ * the other tiers are configuring is held in.
  */
 public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Duration timeout, String model,
 		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, PermissionPolicy permissions,
 		FileSystemAccess filesystem, TerminalAccess terminal, OnUnsupported onUnsupported, Duration sessionTtl,
-		PoolSettings pool, RuntimeOptions runtimeOptions) {
+		PoolSettings pool, RuntimeOptions runtimeOptions, ProtocolSettings protocol) {
 
 	public static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
 
@@ -61,6 +65,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		onUnsupported = onUnsupported == null ? OnUnsupported.WARN : onUnsupported;
 		provider = provider == null ? ProviderSpec.none() : provider;
 		runtimeOptions = runtimeOptions == null ? RuntimeOptions.empty() : runtimeOptions;
+		protocol = protocol == null ? ProtocolSettings.defaults() : protocol;
 
 		long distinct = mcpServers.stream().map(McpServerSpec::name).distinct().count();
 		if (distinct != mcpServers.size()) {
@@ -91,7 +96,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		return new AgentSettings(runtime, workspace, runtimeHome, options.findTimeout().orElse(timeout),
 				options.findModel().orElse(model), options.findProvider().map(provider::withId).orElse(provider),
 				options.findMode().orElse(mode), mcpServers, permissions, filesystem, terminal, onUnsupported,
-				sessionTtl, pool, runtimeOptions);
+				sessionTtl, pool, runtimeOptions, protocol);
 	}
 
 	public static final class Builder {
@@ -125,6 +130,8 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		private PoolSettings pool = PoolSettings.defaults();
 
 		private RuntimeOptions runtimeOptions = RuntimeOptions.empty();
+
+		private ProtocolSettings protocol = ProtocolSettings.defaults();
 
 		private Builder(String runtime, Path workspace) {
 			this.runtime = runtime;
@@ -204,9 +211,14 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 			return runtimeOptions(RuntimeOptions.of(runtimeOptions));
 		}
 
+		public Builder protocol(ProtocolSettings protocol) {
+			this.protocol = protocol;
+			return this;
+		}
+
 		public AgentSettings build() {
 			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers,
-					permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions);
+					permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions, protocol);
 		}
 	}
 }

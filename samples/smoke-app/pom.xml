@@ -39,6 +39,24 @@
             <artifactId>spring-acp-runtime-opencode</artifactId>
         </dependency>
 
+        <!--
+          M4. The registry runtime makes spring.acp.runtime accept an agent none of the three
+          adapters claims; the Spring AI adapter publishes the same agent as a ChatModel; actuator
+          brings the ObservationRegistry that turns every turn into a timer and a span.
+        -->
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-registry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-spring-ai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

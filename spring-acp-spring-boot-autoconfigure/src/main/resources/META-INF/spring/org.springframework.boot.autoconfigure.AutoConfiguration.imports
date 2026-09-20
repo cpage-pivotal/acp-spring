@@ -1,2 +1,3 @@
 org.tanzu.acp.boot.AcpAutoConfiguration
 org.tanzu.acp.boot.AcpWebFluxAutoConfiguration
+org.tanzu.acp.boot.AcpChatModelAutoConfiguration

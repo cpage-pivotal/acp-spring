@@ -21,7 +21,9 @@ import org.tanzu.acp.executor.AgentExecutor;
 import org.tanzu.acp.executor.DefaultAgentExecutor;
 import org.tanzu.acp.goose.GooseRuntime;
 import org.tanzu.acp.opencode.OpenCodeRuntime;
+import org.tanzu.acp.observation.AgentObservations;
 import org.tanzu.acp.runtime.AgentRuntime;
+import org.tanzu.acp.runtime.AgentRuntimeProvider;
 
 /**
  * Wires an {@link AgentClient} from {@code spring.acp.*}.
@@ -38,7 +40,8 @@ import org.tanzu.acp.runtime.AgentRuntime;
 @EnableConfigurationProperties(AcpProperties.class)
 @org.springframework.context.annotation.Import({ AcpAutoConfiguration.GooseRuntimeConfiguration.class,
 		AcpAutoConfiguration.CodexRuntimeConfiguration.class,
-		AcpAutoConfiguration.OpenCodeRuntimeConfiguration.class })
+		AcpAutoConfiguration.OpenCodeRuntimeConfiguration.class, AcpRegistryConfiguration.class,
+		AcpObservationConfiguration.class })
 public class AcpAutoConfiguration {
 
 	private static final Logger logger = LoggerFactory.getLogger(AcpAutoConfiguration.class);
@@ -90,8 +93,9 @@ public class AcpAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	SelectedRuntime acpSelectedRuntime(List<AgentRuntime> runtimes, AcpProperties properties) {
-		return SelectedRuntime.from(runtimes, properties);
+	SelectedRuntime acpSelectedRuntime(List<AgentRuntime> runtimes, List<AgentRuntimeProvider> providers,
+			AcpProperties properties) {
+		return SelectedRuntime.from(runtimes, providers, properties);
 	}
 
 	@Bean
@@ -106,7 +110,7 @@ public class AcpAutoConfiguration {
 				.mcpServers(properties.toMcpServerSpecs()).permissions(properties.toPermissionPolicy())
 				.filesystem(properties.toFileSystemAccess()).terminal(properties.toTerminalAccess())
 				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())
-				.pool(properties.toPoolSettings())
+				.pool(properties.toPoolSettings()).protocol(properties.toProtocolSettings())
 				.runtimeOptions(properties.optionsFor(properties.getRuntime())).build();
 	}
 
@@ -124,10 +128,14 @@ public class AcpAutoConfiguration {
 	 */
 	@Bean(destroyMethod = "close")
 	@ConditionalOnMissingBean
-	AgentClient acpAgentClient(SelectedRuntime selected, AgentSettings settings) {
+	AgentClient acpAgentClient(SelectedRuntime selected, AgentSettings settings,
+			org.springframework.beans.factory.ObjectProvider<AgentObservations> observations) {
 		logger.info("ACP runtime '{}' selected, workspace {}, up to {} process(es)", selected.runtime().id(),
 				settings.workspace(), settings.pool().maxProcesses());
-		return new AgentClientPool(selected.runtime(), settings);
+		// ObjectProvider rather than an optional parameter: the observations bean only exists when
+		// Micrometer does, and this bean must be constructible either way.
+		return new AgentClientPool(selected.runtime(), settings,
+				observations.getIfAvailable(() -> AgentObservations.NONE));
 	}
 
 	/**

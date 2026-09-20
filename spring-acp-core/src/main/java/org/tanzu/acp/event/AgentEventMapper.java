@@ -37,6 +37,7 @@ public final class AgentEventMapper {
 			case AcpSchema.Plan c -> Optional.of(new AgentEvent.PlanUpdated(entries(c.entries())));
 			case AcpSchema.ConfigOptionUpdate c -> Optional.of(new AgentEvent.ConfigChanged(options(c.configOptions())));
 			case AcpSchema.CurrentModeUpdate c -> Optional.of(new AgentEvent.ModeChanged(c.currentModeId()));
+			case AcpSchema.UsageUpdate c -> usage(c);
 			// user_message_chunk, available_commands_update: nothing a caller of a turn needs.
 			default -> Optional.empty();
 		};
@@ -61,5 +62,23 @@ public final class AgentEventMapper {
 
 	private static List<AcpSchema.SessionConfigOption> options(List<AcpSchema.SessionConfigOption> o) {
 		return o == null ? List.of() : List.copyOf(o);
+	}
+
+	/**
+	 * Usage is dropped when the agent sent no numbers at all.
+	 *
+	 * <p>{@code used} and {@code size} are required by the schema and boxed by the SDK, so an update
+	 * with neither is an agent sending the notification for the sake of its {@code cost} field or
+	 * for nothing. Emitting {@code 0 of 0} would read as an empty context window rather than as no
+	 * measurement, which is the wrong claim to put in front of a gauge.
+	 */
+	private static Optional<AgentEvent> usage(AcpSchema.UsageUpdate update) {
+		if (update.used() == null && update.size() == null) {
+			return Optional.empty();
+		}
+		AcpSchema.Cost cost = update.cost();
+		return Optional.of(new AgentEvent.UsageUpdated(update.used() == null ? 0L : update.used(),
+				update.size() == null ? 0L : update.size(), cost == null ? null : cost.amount(),
+				cost == null ? null : cost.currency()));
 	}
 }

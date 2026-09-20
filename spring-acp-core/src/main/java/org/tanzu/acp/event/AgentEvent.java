@@ -43,6 +43,28 @@ public sealed interface AgentEvent {
 	record ModeChanged(String modeId) implements AgentEvent {
 	}
 
+	/**
+	 * The agent's own accounting for the session: context window consumed, and cost when it says.
+	 *
+	 * <p>Deferred from M1 for a reason that turned out to be half right. goose returns token counts
+	 * on the {@code session/prompt} response, so there was nowhere for an event to come from — but
+	 * that field is goose's own and not in the schema, while {@code usage_update} <em>is</em>, and
+	 * carries the numbers an application actually wants to watch. So this comes from the
+	 * notification rather than the response, and means the same thing on every agent that sends it.
+	 *
+	 * <p>Cumulative for the session, not incremental for the turn. {@code used} counts against
+	 * {@code size}, the context window; {@code cost} is optional and absent from most agents.
+	 */
+	record UsageUpdated(long contextUsed, long contextSize, Double costAmount, String costCurrency)
+			implements AgentEvent {
+
+		/** How much of the context window is gone, when the agent said how big it is. */
+		public java.util.OptionalDouble contextFraction() {
+			return contextSize <= 0 ? java.util.OptionalDouble.empty()
+					: java.util.OptionalDouble.of((double) contextUsed / contextSize);
+		}
+	}
+
 	/** Terminal: the turn ended and the agent said why. */
 	record Completed(AcpSchema.StopReason reason) implements AgentEvent {
 	}

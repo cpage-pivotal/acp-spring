@@ -1,6 +1,6 @@
 # spring-acp — a Spring Data-style abstraction over ACP coding agents
 
-Status: **M1, M2 and M3 built and verified**; M4 proposed. Successor to the `java-wrapper` module of
+Status: **M1, M2, M3 and M4 built and verified**. Successor to the `java-wrapper` module of
 [`goose-buildpack`](https://github.com/cpage-pivotal/goose-buildpack).
 
 ## Context
@@ -89,17 +89,23 @@ is Goose-specific; every other runtime is stdio-only, so both transports must be
      AgentClient impl · SessionRegistry · ConfigResolver (3-tier) │
      PermissionPolicy · WorkspaceJail · WorkspaceFileSystem       │
      WorkspaceTerminals · AgentProcessSupervisor · AgentEvent     │
+     AcpProtocol (version negotiation) · AgentObservations        │
         │                    ▲                                   │
         │ AcpAsyncClient     │ AgentRuntime SPI                  │
         │                    │ (launch · provision · option ids)  │
-        ▼                    │                                   │
+        ▼                    │ AgentRuntimeProvider SPI           │
   com.agentclientprotocol:acp-core                               │
      StdioAcpClientTransport │ WebSocketAgentTransport (ours)     │
         │                    │                                   │
         ▼                    ├── runtime-goose  (stdio + ws)     │
   agent subprocess           ├── runtime-codex  (npx, stdio)     │
   or supervised server       ├── runtime-opencode (binary, stdio)│
-                             └── RegistryAgentRuntime (M4) ──────┘
+                             └── runtime-registry ───────────────┘
+                                 AgentRegistry · AgentInstaller
+                                 (any of 41 published agents)
+
+  Also on top of AgentClient: spring-acp-spring-ai (AcpChatModel),
+  and Micrometer observations per turn and per tool call.
 ```
 
 Decisions confirmed with the user: build on `acp-core`; native `AgentClient` API with an optional
@@ -115,13 +121,14 @@ Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org
 
 | Module | Contents |
 | --- | --- |
-| `spring-acp-core` | No Spring types on the classpath-required path. `org.tanzu.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor` |
+| `spring-acp-core` | No Spring types on the classpath-required path. `org.tanzu.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
 | `spring-acp-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
 | `spring-acp-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
 | `spring-acp-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
+| `spring-acp-runtime-registry` | `AgentRegistry`, `AgentInstaller`, `Archives`, `RegistryAgentRuntime` — any agent the ACP registry publishes, with no adapter |
 | `spring-acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
 | `spring-acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
-| `spring-acp-spring-ai` | Optional `AcpChatModel implements ChatModel` |
+| `spring-acp-spring-ai` | `AcpChatModel implements ChatModel`, `AcpChatOptions` — Spring AI 2.0.x |
 | `spring-acp-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
 
 Follow the wrapper's proven packaging trick: declare `spring-boot-*` dependencies `<optional>true</optional>`
@@ -189,6 +196,22 @@ spring:
       allow-request-overrides: false
       max-prompt-chars: 32000
       max-timeout: 10m
+
+    protocol:                   # see "ACP v2 is gated, and then refused"
+      max-version: 1            # raising this offers v2 and finds out what an agent claims
+      strict: false             # fail, rather than clamp, when an agent answers impossibly
+
+    observations:
+      enabled: true             # when Micrometer is on the classpath
+
+    registry:                   # only consulted for a runtime no adapter claims
+      enabled: true
+      url: https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json
+      cache: ${user.home}/.spring-acp/agents
+      refresh: 24h
+      offline: false            # bundled snapshot and whatever is already installed
+      require-checksum: true    # refuse an agent the registry publishes no sha256 for
+      download-timeout: 10m
 ```
 
 The same properties can arrive from a standalone `agents.yaml`, pulled in with
@@ -352,6 +375,15 @@ config.unsupported();                            // what was asked for and could
 ```
 
 ```java
+// the same agent, where a Spring AI application already looks for a model
+ChatResponse response = chatModel.call(new Prompt("Review the pending changes",
+        AcpChatOptions.builder().session("review-123").mode("plan").build()));
+
+// which ACP version this conversation is really in — not simply what the agent answered
+int version = agentClient.protocolVersion();
+```
+
+```java
 // the conversations the agent has, as opposed to the turns run in them
 AgentSessions sessions = agentClient.sessions();
 if (sessions.supports(AgentSessions.Operation.LIST)) {
@@ -381,6 +413,8 @@ public sealed interface AgentEvent {
     record PlanUpdated(List<PlanEntry> entries)               implements AgentEvent {}
     record ConfigChanged(List<SessionConfigOption> options)   implements AgentEvent {}
     record ModeChanged(String modeId)                         implements AgentEvent {}
+    record UsageUpdated(long contextUsed, long contextSize,
+                        Double costAmount, String costCurrency) implements AgentEvent {}
     record Completed(StopReason reason)                       implements AgentEvent {}
     record Failed(Throwable cause)                            implements AgentEvent {}
 }
@@ -389,9 +423,11 @@ public sealed interface AgentEvent {
 Two changes from the sketch, both made when the model met real agents. `ToolCallStarted` carries
 `title` rather than `name`, because that is honestly what ACP gives — prose written for a human — and
 the stable identifier an allowlist needs is vendor-specific and lives behind
-`AgentRuntime.toolNameOf`. `Usage` is not in the model: goose returns token counts on the
-`session/prompt` response rather than as an update, so an event would have had nowhere to come from;
-it returns with Micrometer observations in M4.
+`AgentRuntime.toolNameOf`. `UsageUpdated` arrived in M4 and not in M1, and the reason it took that
+long is the reason it is portable now: goose returns token counts on the `session/prompt` response,
+which looked like nowhere for an event to come from, but that field is goose's own and the
+`usage_update` notification — which every agent that reports usage at all sends, and which
+`acp-core` models completely — is in the schema.
 
 **Preserve the wrapper's load-bearing invariant**: every turn emits exactly one terminal event
 (`Completed` or `Failed`) — normal end, RPC error, timeout, dropped connection, or consumer
@@ -485,10 +521,191 @@ for an absent adapter — and then logs it and registers the bean anyway, so the
 an application ships only the agents it wants, the condition has to hold when the class is genuinely
 missing. There is a test for exactly that, with a `FilteredClassLoader`.
 
-`RegistryAgentRuntime` is the generic fallback: given `spring.acp.runtime: gemini` with no compiled
-adapter, resolve the entry from a cached ACP registry snapshot, honor `distribution.binary`
-(per-arch archive + SHA-256) or `distribution.npx`, and launch it with tier-1 config only. This is
-what makes "any ACP agent" a real claim rather than a roadmap item.
+### The registry runtime (M4)
+
+A second, smaller SPI sits beside `AgentRuntime`, and the difference is that it is asked a question
+rather than announcing an answer:
+
+```java
+public interface AgentRuntimeProvider {
+    Optional<AgentRuntime> forId(String runtimeId);
+    default List<String> knownIds() { return List.of(); }
+}
+```
+
+An adapter knows which agent it is and registers itself. A provider is handed the id an application
+asked for and decides whether it can build something for it — which is the shape a catalogue of 41
+agents needs, since starting 41 beans to find the one an application wants would be absurd.
+Providers are consulted only after the registered adapters, so a compiled adapter always wins for
+the same agent: an application with both `runtime-goose` and `runtime-registry` and
+`spring.acp.runtime: goose` gets the adapter, with its `_meta` tool names and its served transport,
+rather than a registry download of the same binary.
+
+`RegistryAgentRuntime` is what a provider builds. Given `spring.acp.runtime: gemini` with no
+compiled adapter, it resolves the entry from a cached registry snapshot, obtains the agent the way
+the registry says to — `distribution.binary` (per-arch archive + SHA-256), `distribution.npx` or
+`distribution.uvx` — and launches it with the arguments the registry says make it speak ACP.
+Measured: `Connected to gemini-cli 0.60.0 over ACP v1`, a fourth agent this library has never had a
+line of code about.
+
+**What it cannot do is the more useful half of the documentation.** An adapter exists to carry what
+ACP does not standardize: what an agent calls its options, where it reads its config file, which
+environment variable holds a key, how it buries a tool name. None of that is in the registry and
+none of it can be guessed. So this runtime provisions nothing, writes no files, never falls back
+from a tool identifier to a human-readable title, and reaches the negotiated tier only through the
+portable half of the option vocabulary — the ACP `category`, plus the obvious ids `model`, `mode`
+and `provider`. An agent that names its options anything else reports them unsupported, honestly,
+through the same `on-unsupported` an adapter would. Tier 3 still works, which is the point of tier 3.
+
+**The digest is the feature, not a detail of it.** This downloads an executable and runs it in a
+process holding the application's credentials with the application's workspace as its working
+directory, so `require-checksum` defaults to on. That costs something real: the catalogue publishes
+a `sha256` for **10 of its 19 binary agents** and not for the other 9, all-or-nothing per agent, so
+those nine need `require-checksum: false` written down by an operator who meant it. The refusal
+names the agent and says exactly that, because a refusal nobody can act on is just an outage. The
+24 npx and uvx agents do not go through this path at all; npm and PyPI have integrity of their own.
+
+**Unpacking is split by what the JDK can decompress, not by preference.** zip and gzip are in
+`java.util.zip`, so `.zip` and `.tar.gz` are handled in process, with every entry's destination
+checked against the real path of the install directory before it is written — an archive is a list
+of paths chosen by whoever built it, and `../../.ssh/authorized_keys` is a valid entry name. Bzip2
+and xz are not in the JDK at all, and **goose — the reference runtime — ships `.tar.bz2`**, so those
+hand off to the system `tar`, which reads all three on macOS and Linux. Pulling in Commons Compress
+for two formats would have put a second archive library on every application's classpath for an
+archive most of them never download. Two registry entries publish a bare executable with no
+container around it, so a file whose name matches no archive format is treated as the agent itself.
+
+---
+
+## Protocol version, observations, and Spring AI
+
+Three things M4 added on top of the turn, none of which changes what a turn is.
+
+### ACP v2 is gated, and then refused
+
+ACP negotiates in one exchange: the client names the highest version it speaks, and the agent
+answers with that version if it supports it or with its own latest if it does not. One integer each
+way, which makes it look like a formality. It is not, for two reasons measured here.
+
+**An agent's answer cannot be taken at its word.**
+
+| offered | goose 1.51.0 | opencode 1.18.31 | codex-acp 1.12.0 |
+| --- | --- | --- | --- |
+| 1 | 1 | 1 | 1 |
+| 2 | **2** | 1 | 1 |
+| 3 | **3** | 1 | — |
+
+goose echoes whatever it is given, including a version that does not exist, having shipped no part
+of v2. This is the same shape as goose accepting a model id it has never heard of, and it has the
+same consequence: a client that trusted the echo would believe it was in a conversation whose wire
+format neither side is using. So the negotiated version is `min(offered, answered)`, never the
+answer alone, and `spring.acp.protocol.strict` turns the clamp into a refusal for an operator who
+would rather know. Two runtimes out of three do this correctly, which is exactly why a client cannot
+rely on it.
+
+**v2 is a draft, and this library cannot speak it.** It replaces the turn-based model — a prompt
+response carries the `messageId` of the inserted message rather than a `stopReason` — and
+restructures diffs, permission subjects and message patching. `acp-core` 0.17.0 models the v1 shapes
+and declares `LATEST_PROTOCOL_VERSION = 1`, so a client that found itself in a v2 conversation would
+decode a `PromptResponse` with a null stop reason and report every turn as having ended for no
+reason. The protocol's own announcement says to gate v2 behind version negotiation **and** a feature
+flag; this gates it behind both and then refuses to proceed, because the third thing it asks for — an
+implementation of v2 — is not this library's to write while the SDK's records are v1.
+
+Which leaves `max-version: 2` doing one honest job: finding out what an agent claims, with a
+guaranteed loud failure instead of a silent misreading. The day `acp-core` models v2,
+`AcpProtocol.HIGHEST_SPOKEN` is the constant that moves. `AgentClient.protocolVersion()` reports what
+the conversation is really in, which is not simply what the agent said.
+
+### Observations: two, and only two
+
+A turn, and a tool call inside one. Both are things that take time and can fail, which is what an
+observation is for; a session is neither and a prompt is an argument.
+
+```
+acp.turn{acp.runtime, acp.model, acp.session.kind, acp.outcome}
+acp.tool.call{acp.runtime, acp.tool.kind, acp.tool.status}
+```
+
+Session names, tool call ids, tool titles, context and cost are high-cardinality, where they become
+span attributes rather than meter dimensions. An application moves one across by contributing an
+`ObservationConvention`, because that split is a deployment decision as much as a design one.
+
+Three things about the implementation are not obvious.
+
+**A reactive turn cannot be wrapped in a scope.** The idiomatic `observation.observe(() -> work())`
+opens a thread-local scope around a block, and a turn is not a block: it is subscribed on one thread
+and finished on whichever transport thread delivers the agent's last frame, minutes later. Wrapping
+it would have timed the act of asking. So the observation is started on the subscribing thread —
+where the caller's own observation is still current, which is how the turn becomes a child of it —
+and stopped from wherever the turn actually ends. Tool call observations get their parent stated
+explicitly for the mirror-image reason: they are created on a transport thread that has no current
+observation for Micrometer to infer one from.
+
+**A tool call the turn outlived is still stopped, tagged `unfinished`.** A cancelled turn produces
+one every time, and an observation left open is a leaked span and a timer that never fires.
+
+**`acp.model` is what the session is really using, and finding that out takes three sources.** The
+negotiated tier's applied value first; then what the agent says it is currently set to, for the very
+common case where the application asked for no model at all; and only then the request. A dashboard
+grouped by the model an application asked for, while `on-unsupported: warn` quietly ran it on
+another, would be worse than no dashboard — and one reading `unknown` for every application that
+never set `spring.acp.model` would be worse still. Measured on the smoke app, which sets no model:
+`acp.model=gpt-5.6-terra`.
+
+`AgentObservations` is a four-method interface in core with no Micrometer type in it, and
+`MicrometerAgentObservations` is the only class that names one — the same arrangement as the Spring
+Boot dependencies, for the same reason.
+
+### `AgentEvent.UsageUpdated`, and where usage actually comes from
+
+M1 left usage out of the event model because goose returns token counts on the `session/prompt`
+response, so an event would have had nowhere to come from. That was half right, and the other half
+is the finding:
+
+```
+goose 1.51 session/prompt response:  {"stopReason":"end_turn",
+                                      "usage":{"totalTokens":4441,"inputTokens":4436,"outputTokens":5}}
+goose 1.51 session/update:           {"sessionUpdate":"usage_update","used":4441,"size":1050000,
+                                      "cost":{"amount":0.008932,"currency":"USD"}}
+```
+
+The response field is **goose's own and not in the schema** — `PromptResponse` in the spec carries
+`stopReason` and nothing else, which is also all `acp-core` models. The notification **is** in the
+schema, and `acp-core` models it completely, cost included. So the portable source of usage is the
+notification, `AgentEvent.UsageUpdated` comes from there, and it means the same thing on every agent
+that sends one: context window consumed out of context window size, cumulative for the session, with
+an optional cost. An update carrying neither number is dropped rather than reported as `0 of 0`,
+which would read as an empty context window rather than as no measurement.
+
+### `AcpChatModel`: the two models disagree about who owns the conversation
+
+A chat completion is stateless — Spring AI sends the whole history every call, which is why
+`ChatMemory` exists. An ACP session is stateful: the conversation lives inside the agent process,
+which is also holding a file tree, a plan and a set of tool results that no message list can carry.
+So the adapter reads `AcpChatOptions.session` and behaves differently:
+
+- **no session named** — every call is a throwaway ACP session that knows nothing, so the whole
+  prompt goes over, rendered with role labels. The closest thing to chat completion semantics, and
+  the right default for an application managing history with `ChatMemory`;
+- **a session named** — the agent already has everything up to its own last reply, so only the
+  messages *after* the last assistant message are sent. Sending the history again would make the
+  agent read its own previous answers as new instructions, and bill for the whole conversation on
+  every turn.
+
+Combining a named session with a `ChatMemory` advisor therefore means two memories of one
+conversation, and the agent's is the one that matters. The default options carry no session, so one
+`ChatModel` bean is not silently one shared conversation for the whole application.
+
+`temperature`, `topP`, `topK`, `maxTokens`, `stopSequences` and the penalties have no ACP
+equivalent — the agent owns the inference call and the protocol gives a client no way into it — so
+they are logged once, by name, rather than dropped quietly. Tool calling is the same story from the
+other side: the agent has its own tools and runs them itself, so Spring AI `ToolCallback`s are not
+visible to it, and tool activity surfaces on the native `AgentClient` API instead.
+
+ACP usage goes into `ChatResponseMetadata` as key values rather than into Spring AI's `Usage`, which
+is prompt and completion tokens for one call. Putting "the whole conversation so far" in a field
+every dashboard reads as "this call" would be the wrong number in the right place.
 
 ---
 
@@ -577,6 +794,14 @@ optimistic by contract — a transport that cannot tell answers `true`, and the 
 `false` is never wrong. Replacement in the pool is real for a served agent, whose socket closes and
 whose supervisor watches the process, and best effort for a stdio one. Reporting "possibly dead" for
 every stdio agent would have made the answer useless to the only caller that needs it.
+
+**`LATEST_PROTOCOL_VERSION` is 1, and the records are v1 shapes.** *(designed around in M4.)* The
+SDK passes whatever `protocolVersion` it is given straight through and never checks the answer, so
+offering v2 is possible; decoding v2 is not. `PromptResponse` models `stopReason`, which v2 replaces
+with a `messageId`, and the `SessionUpdate` hierarchy is v1's. So the feature flag reaches the
+handshake and stops there — see "ACP v2 is gated, and then refused". Not a defect so much as the SDK
+being exactly as far along as the protocol's stable version; it is on this list because it is the
+one thing standing between the flag and a working v2.
 
 **Stderr from a process that dies immediately is sometimes lost.** The SDK subscribes to the child's
 error stream slightly after starting it, so a complaint written microseconds before the process exits
@@ -846,22 +1071,103 @@ Eight things the build taught us that the plan had not anticipated:
   between assigning a name and opening its session, so it lets a name go only after it has been
   missing across two sweeps — minutes apart, which no session-open is.
 
-**M4 — reach.** `RegistryAgentRuntime` with a cached registry snapshot and SHA-256-verified
-downloads; Spring AI `AcpChatModel`; Micrometer observations per turn/tool call; ACP v2 behind
-negotiation and a feature flag, off by default.
+**M4 — reach. Done.** The abstraction now reaches agents nobody wrote an adapter for, applications
+that already have a `ChatModel`, and operators who want to see what their agents cost. 391 tests:
+344 run anywhere, 45 drive real agents and skip when one is unusable, and 2 download a real agent
+from the real registry and are opt-in.
+
+| Step | Delivered | Where |
+| --- | --- | --- |
+| 1 | `AcpProtocol`, `ProtocolSettings`, `UnsupportedProtocolVersionException`, `AgentClient.protocolVersion()` | `core/protocol` |
+| 2 | `AgentObservations` SPI, `MicrometerAgentObservations`, two documented observations and their conventions | `core/observation` |
+| 3 | `AgentEvent.UsageUpdated`, mapped from the `usage_update` notification | `core/event` |
+| 4 | `AgentRuntimeProvider` SPI; `SelectedRuntime` consults it after the adapters | `core/runtime`, `spring-boot-autoconfigure` |
+| 5 | `AgentRegistry` with a bundled snapshot, `RegistrySettings`, `Platform` | `runtime-registry` |
+| 6 | `AgentInstaller` and `Archives` — SHA-256, zip/tar.gz in process, bz2/xz through the system tar | `runtime-registry` |
+| 7 | `RegistryAgentRuntime` — binary, npx and uvx distributions | `runtime-registry` |
+| 8 | `AcpChatModel`, `AcpChatOptions`, `AcpChatModelAutoConfiguration` | `spring-ai`, `spring-boot-autoconfigure` |
+| 9 | `spring.acp.protocol`, `.observations`, `.registry`; smoke app extended with all three | `spring-boot-autoconfigure`, `samples/smoke-app` |
+
+The completion test, run a fourth time, against an agent this library has never had a line of code
+about:
+
+```
+No adapter claims runtime 'gemini'; it was resolved from a runtime provider
+Connected to gemini-cli 0.60.0 over ACP v1
+```
+
+(The turn after it fails with "Gemini API key is missing or not configured" on this machine, which
+is the agent asking for a credential rather than anything the library got wrong.)
+
+And the rest of M4 on the same run of the smoke app, which sets no model and names no agent:
+
+```
+Via Spring AI ChatModel: READY
+ACP protocol: v1
+Observed 2 turn(s) as [acp.model=gpt-5.6-terra, acp.outcome=END_TURN, acp.runtime=goose,
+                       acp.session.kind=ephemeral] in 4521ms
+Observed 1 turn(s) as [acp.model=gpt-5.6-terra, acp.outcome=END_TURN, acp.runtime=goose,
+                       acp.session.kind=named] in 3180ms
+Observed 1 tool call(s) as [acp.runtime=goose, acp.tool.kind=unknown, acp.tool.status=COMPLETED]
+```
+
+Eight things the build taught us that the plan had not anticipated:
+
+- **goose answers whatever protocol version it is offered, including ones that do not exist.**
+  Offered 3, it answers 3. OpenCode and Codex both clamp correctly, which is exactly why a client
+  cannot rely on the answer: two out of three getting it right is how this stays invisible until it
+  matters. Negotiation is `min(offered, answered)`, and the plan's one-line "let `initialize()`
+  negotiate" turned into a class with a table of measurements behind it.
+- **Half the registry's binary agents publish no checksum.** 10 of 19 do and 9 do not, all-or-nothing
+  per agent. The plan said "per-arch URLs and SHA-256" as though it were a property of the data. So
+  `require-checksum` is a property rather than a constant, on by default, and the refusal has to name
+  the agent and say how to proceed — otherwise the feature is "any ACP agent, except these nine, for
+  reasons the error does not give".
+- **The JDK cannot decompress the reference runtime's archive.** goose ships `.tar.bz2`, and there is
+  no bzip2 in `java.util.zip`. The split — zip and gzip in process, bz2 and xz through the system
+  `tar` — is the JDK's line, not a preference, and it is the alternative to putting Commons Compress
+  on every application's classpath for an archive most never download.
+- **The usage the plan deferred was the wrong usage.** goose's token counts are on the
+  `session/prompt` response, which is goose's own field and not in the schema; `usage_update` is in
+  the schema, is modelled completely by the SDK, cost and all, and carries the numbers an application
+  actually wants to watch. M1 deferred the event for want of a source and the source was there.
+- **An observation cannot wrap a reactive turn in a scope.** `observe(() -> …)` would have timed the
+  act of subscribing, because a turn is started on one thread and finished on the transport thread
+  minutes later. Start-and-stop, with the parent captured at subscribe time and stated explicitly for
+  tool calls, is the only shape that measures the turn.
+- **The turn released its session in the router after it released the turn permit, and that is a
+  race.** `FluxCreate` runs the downstream's `onComplete` before the sink's `onDispose`, so a caller
+  blocking on a turn is freed — and can start the next one — while this turn's registration is still
+  in the router. The next turn then fails with "already has an active turn" for a turn that had
+  finished. Found by `GooseServeTests` failing about one run in ten, against a fast local socket;
+  fixed by unregistering before the sink completes, with a test that fails again the moment that line
+  moves back.
+- **A property class for an optional module must not name that module's types.** `AcpProperties`
+  instantiates its nested blocks from field initializers, so a `Registry` block defaulting to
+  `RegistrySettings.DEFAULT_URL` would make the optional jar mandatory and kill an application at
+  refresh on the very dependency it chose not to ship. Null means "the module's own default", and the
+  conversion happens behind the class-level condition. Same trap as M2's `@ConditionalOnClass` bean
+  method, one layer up.
+- **"Unregistered runtime" quietly changed meaning, and two old tests caught it.** With a registry
+  provider on the classpath, `spring.acp.runtime: gemini` is no longer a typo — so the M1 test that
+  pinned it as one failed, correctly. Which raised the question the fix had to answer: an id a
+  provider merely *enumerates* must not pass validation, or a tier-3 block would be valid on a machine
+  with the registry jar and invalid on one without it.
 
 ---
 
 ## Verification
 
-289 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable.
+391 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable,
+and two opt in with `-Dspring-acp.test.registry.live=true` because they download 24 MB.
 
-**Fast tests (223)** — turn semantics, session registry concurrency and permit accounting, event
+**Fast tests (344)** — turn semantics, session registry concurrency and permit accounting, event
 mapping, permission policy, URL/header/env/secret validation, tier-3 normalization, model matching,
 every branch of the negotiated tier, capability gating and pagination for session operations, pool
 routing and replacement, the legacy event vocabulary, adapter launch and provisioning for all three
-runtimes, and Boot binding, `agents.yaml` loading, controller behaviour and adapter registration.
-No agent subprocess.
+runtimes, protocol version reconciliation, observation tagging and tool call lifecycle, registry
+parsing, digest verification, archive unpacking, the Spring AI message-splitting rule, and Boot
+binding, `agents.yaml` loading, controller behaviour and adapter registration. No real agent.
 
 Inside that figure are the security tests the M2 plan deferred, and they are the ones worth naming:
 workspace escape via `..`, via an absolute path, via a symlinked file, via a symlinked directory and
@@ -869,14 +1175,15 @@ via a write through one; terminal `cwd` confinement including through a symlink;
 allowlist not being evadable by spelling out a path; output truncation; and secret redaction in each
 shape an agent prints, including the `Bearer` case the first implementation got wrong.
 
-**Wire tests (21)**, on `acp-test`'s in-memory transport with `ScriptedAgent` — a fake agent that
+**Wire tests (24)**, on `acp-test`'s in-memory transport with `ScriptedAgent` — a fake agent that
 speaks raw JSON-RPC rather than the SDK's records, which is the point of it. The core's fast tests mock
 `AcpAsyncClient`, and the SDK gaps this library works around are *format* gaps, invisible to a mock:
 `configOptions` dropped from a typed response — from `session/new` and from `session/load`, where it
 arrives with no session id to key it on — and a `sessionUpdate` discriminator with no record. The
 scripted agent can also be told to misbehave the way real agents do —
-`acceptsUnknownValues(true)` reproduces goose 1.51 storing a model it has never heard of — so the
-core's defenses are testable without waiting for a vendor to ship the bug again.
+`acceptsUnknownValues(true)` reproduces goose 1.51 storing a model it has never heard of, and
+`echoesProtocolVersion(true)` reproduces it answering a version nobody offered — so the core's
+defenses are testable without waiting for a vendor to ship the bug again.
 
 **Runtime conformance (42 = 14 × 3)** — `AgentRuntimeContract` in `spring-acp-test`, extended once per
 adapter. **This suite, not the `AgentRuntime` interface, is the definition of the abstraction:** an
@@ -906,9 +1213,29 @@ Two deliberate concessions in it, both documented at the assertion:
   handshake and then fails inside a turn. It also supplies the model to ask for, since hardcoding one
   per agent would put three model catalogs into the test source.
 
-**Multi-runtime smoke** — `samples/smoke-app` with all three adapters on one classpath, run three
-times. M2's completion test, now also printing which optional session operations each agent has;
-that output is the table above.
+**Registry tests (41, 2 opt-in)** — the catalogue read from the bundled snapshot with no network;
+npx, uvx and per-platform binary entries, including an entry that publishes no digest; one unreadable
+entry costing that agent rather than the catalogue; tar.gz, zip, tar.bz2 through the system tar, and
+a bare executable; the executable bit surviving; a digest mismatch refused; an unverifiable artifact
+refused by default and installed when told; an archive entry aimed at `../escaped` refused before
+anything is written; and a stale or unreachable catalogue falling back rather than failing.
+
+Two of them are the whole claim in one test: an agent is built into a `.tar.gz`, published through a
+`file:` registry, and then goes through the ordinary `AgentClientFactory.create` path — resolve,
+verify, unpack, chmod, spawn, handshake, prompt — with the second asserting that a digest mismatch
+stops all of that before `exec`. The agent is fifteen lines of shell, deliberately: a test that
+downloaded goose would be testing goose, a CDN and a network. Two things about being a fake had to be
+learned the hard way and are commented where they bit — the shell's builtin `printf` block-buffers
+into a pipe, so the handshake sat in a buffer until the test timed out; and `acp-core` issues
+*string* request ids, which a digit-matching `sed` silently did not echo back.
+
+The opt-in pair reach the published catalogue and a real release host, and prove the one thing no
+offline test can: that the digests third parties publish match the bytes they serve.
+
+**Multi-runtime smoke** — `samples/smoke-app` with all three adapters, the registry runtime, the
+Spring AI adapter and actuator on one classpath. M2's completion test, now run a fourth time against
+`gemini` — an agent with no adapter — and printing the negotiated ACP version and the turn and tool
+call timers at the end.
 
 **The served transport (3)** — `GooseServeTests`, live against a supervised `goose serve`: the
 handshake over a socket that needs a generated secret in a header, a named session keeping context
@@ -919,10 +1246,14 @@ invisible to a scripted agent.
 Still planned:
 
 1. **CI that installs all three** from the registry manifest, so the live suites run somewhere other
-   than a developer machine.
+   than a developer machine. The registry runtime now makes that a few lines rather than a script.
 2. **A concurrency test for the pool against real agents** — `max-processes: 2` with two
    conversations in flight. The fake-connection tests prove the routing; what they cannot prove is
    that two agent processes on one machine stay out of each other's way.
+3. **A registry agent in the conformance suite.** `AgentRuntimeContract` runs against the three
+   adapters; running it against `RegistryAgentRuntime` would say how much of the abstraction survives
+   with no adapter knowledge at all, which is a more honest measure of "any ACP agent" than a
+   handshake. It needs a registry agent this machine has credentials for, which is the obstacle.
 
 ## Repository layout
 
@@ -935,6 +1266,7 @@ spring-acp/
 ├── spring-acp-runtime-goose/
 ├── spring-acp-runtime-codex/
 ├── spring-acp-runtime-opencode/
+├── spring-acp-runtime-registry/
 ├── spring-acp-spring-boot-autoconfigure/
 ├── spring-acp-spring-boot-starter/
 ├── spring-acp-spring-ai/

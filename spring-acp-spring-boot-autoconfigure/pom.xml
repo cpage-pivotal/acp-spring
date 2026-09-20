@@ -46,6 +46,24 @@
             <artifactId>spring-acp-runtime-opencode</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- The generic, registry-driven runtime: any published agent, no adapter. -->
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-runtime-registry</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Both optional, and both wired only when their types are genuinely on the classpath. -->
+        <dependency>
+            <groupId>org.tanzu.acp</groupId>
+            <artifactId>spring-acp-spring-ai</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- The HTTP endpoint is opt-in twice over: this dependency, then spring.acp.controller.enabled. -->
         <dependency>

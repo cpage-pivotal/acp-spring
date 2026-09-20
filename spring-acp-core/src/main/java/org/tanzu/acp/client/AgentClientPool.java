@@ -74,7 +74,13 @@ public final class AgentClientPool implements AgentClient {
 
 	/** A pool over the given runtime, connecting through {@link AgentClientFactory}. */
 	public AgentClientPool(AgentRuntime runtime, AgentSettings settings) {
-		this(runtime.id(), settings, () -> AgentClientFactory.create(runtime, settings));
+		this(runtime, settings, org.tanzu.acp.observation.AgentObservations.NONE);
+	}
+
+	/** Same, with every turn on every connection reported to {@code observations}. */
+	public AgentClientPool(AgentRuntime runtime, AgentSettings settings,
+			org.tanzu.acp.observation.AgentObservations observations) {
+		this(runtime.id(), settings, () -> AgentClientFactory.create(runtime, settings, observations));
 	}
 
 	/**
@@ -118,6 +124,19 @@ public final class AgentClientPool implements AgentClient {
 	@Override
 	public boolean isAlive() {
 		return !closed.get() && slots.stream().anyMatch(slot -> !slot.exhausted());
+	}
+
+	/**
+	 * The version an open connection negotiated, or v1 when none is open.
+	 *
+	 * <p>Like {@link #agentInfo()}, this will not start an agent to find out: every connection in a
+	 * pool runs the same runtime with the same settings, so the first one to have spoken is the
+	 * answer for all of them.
+	 */
+	@Override
+	public int protocolVersion() {
+		return connected().findFirst().map(AgentClient::protocolVersion)
+				.orElse(org.tanzu.acp.protocol.AcpProtocol.V1);
 	}
 
 	@Override

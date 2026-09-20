@@ -25,9 +25,25 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!--
+          Optional, like the Spring Boot dependencies: AgentObservations names no Micrometer type,
+          and MicrometerAgentObservations is the only class that does. An application without
+          Micrometer never loads it and never needs it on the classpath.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-observation</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

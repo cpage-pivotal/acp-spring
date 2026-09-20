@@ -5,10 +5,15 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
 import org.tanzu.acp.client.AgentClient;
 import org.tanzu.acp.event.AgentEvent;
 import org.tanzu.acp.session.AgentSessions;
+
+import io.micrometer.core.instrument.MeterRegistry;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Everything an application needs to talk to an ACP agent: a dependency, a property, and an
@@ -23,6 +28,13 @@ import org.tanzu.acp.session.AgentSessions;
  * mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
  * mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
  * }</pre>
+ *
+ * <p>Or a fourth time, against an agent none of the three adapters has ever heard of — resolved
+ * from the ACP registry, downloaded, verified against its published sha256 and launched:
+ *
+ * <pre>{@code
+ * mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=gemini
+ * }</pre>
  */
 @SpringBootApplication
 public class SmokeApplication {
@@ -34,7 +46,7 @@ public class SmokeApplication {
 	}
 
 	@Bean
-	ApplicationRunner demo(AgentClient agent) {
+	ApplicationRunner demo(AgentClient agent, ChatModel chatModel, MeterRegistry meters) {
 		return args -> {
 			logger.info("Runtime: {}", agent.runtimeId());
 
@@ -65,6 +77,22 @@ public class SmokeApplication {
 							logger.info("Turn ended: {}", event);
 						}
 					}).blockLast();
+
+			// The same agent, behind Spring AI. Nothing here names an agent either, so a Spring AI
+			// application gets a coding agent wherever it already has a ChatModel.
+			logger.info("Via Spring AI ChatModel: {}",
+					chatModel.call("Reply with exactly the word READY. Do not use tools.").strip());
+
+			// And the negotiated version, which is not simply what the agent answered: goose 1.51
+			// echoes back whatever version it is offered, including ones that do not exist.
+			logger.info("ACP protocol: v{}", agent.protocolVersion());
+
+			// Every turn above produced a timer and a span. Printed here because a metric nobody
+			// looks at proves nothing.
+			meters.find("acp.turn").timers().forEach(timer -> logger.info("Observed {} turn(s) as {} in {}ms",
+					timer.count(), timer.getId().getTags(), (long) timer.totalTime(MILLISECONDS)));
+			meters.find("acp.tool.call").timers().forEach(timer -> logger.info("Observed {} tool call(s) as {}",
+					timer.count(), timer.getId().getTags()));
 		};
 	}
 }

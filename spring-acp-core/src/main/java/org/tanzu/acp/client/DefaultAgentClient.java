@@ -14,6 +14,7 @@ import org.tanzu.acp.config.AgentSettings;
 import org.tanzu.acp.config.ConfigResolver;
 import org.tanzu.acp.config.SessionConfiguration;
 import org.tanzu.acp.event.AgentEvent;
+import org.tanzu.acp.observation.AgentObservations;
 import org.tanzu.acp.runtime.AgentRuntime;
 import org.tanzu.acp.runtime.AgentRuntime.PortableOption;
 import org.tanzu.acp.session.AgentSession;
@@ -53,6 +54,10 @@ public final class DefaultAgentClient implements AgentClient {
 
 	private final AgentSessions sessionOperations;
 
+	private final int protocolVersion;
+
+	private final AgentObservations observations;
+
 	/** Null when the transport cannot tell; see {@code AgentClientFactory.Liveness}. */
 	private final java.util.function.BooleanSupplier alive;
 
@@ -63,6 +68,16 @@ public final class DefaultAgentClient implements AgentClient {
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
 			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
 			AcpSchema.InitializeResponse initialized, java.util.function.BooleanSupplier alive, Runnable onClose) {
+		this(acp, runtime, settings, sessions, router, recorder, initialized,
+				org.tanzu.acp.protocol.AcpProtocol.V1, AgentObservations.NONE, alive, onClose);
+	}
+
+	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
+			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
+			AcpSchema.InitializeResponse initialized, int protocolVersion, AgentObservations observations,
+			java.util.function.BooleanSupplier alive, Runnable onClose) {
+		this.protocolVersion = protocolVersion;
+		this.observations = observations == null ? AgentObservations.NONE : observations;
 		this.acp = acp;
 		this.runtime = runtime;
 		this.settings = settings;
@@ -82,6 +97,11 @@ public final class DefaultAgentClient implements AgentClient {
 	@Override
 	public boolean isAlive() {
 		return !closed.get() && (alive == null || alive.getAsBoolean());
+	}
+
+	@Override
+	public int protocolVersion() {
+		return protocolVersion;
 	}
 
 	@Override
@@ -313,7 +333,8 @@ public final class DefaultAgentClient implements AgentClient {
 					}
 					throw ex;
 				}
-				return AgentTurn.on(acp, router).prompt(session, prompt, effective.timeout())
+				return AgentTurn.on(acp, router, observations)
+						.prompt(session, prompt, effective.timeout(), turnContext(session, effective, ephemeral))
 						.doFinally(signal -> {
 							session.endTurn();
 							if (ephemeral) {
@@ -337,6 +358,38 @@ public final class DefaultAgentClient implements AgentClient {
 				throw new AgentClientException("Interrupted waiting for session '" + session.name() + "'", ex);
 			}
 		}
+	}
+
+	/**
+	 * What an observation is told about this turn.
+	 *
+	 * <p>The model reported is the one the session is <em>really</em> using, and the order the three
+	 * sources are tried in is the whole point. The negotiated tier's applied value first; then what
+	 * the agent says it is currently set to, for the common case where the application asked for no
+	 * model at all and the agent is running its own default; and only then the request. A dashboard
+	 * grouped by the model an application asked for, while {@code on-unsupported: warn} quietly ran
+	 * it on another, would be worse than having no dashboard — and one that said "unknown" for every
+	 * application that never set {@code spring.acp.model} would be worse still.
+	 */
+	private static AgentObservations.TurnContext turnContext(AgentSession session, AgentSettings effective,
+			boolean ephemeral) {
+		String model = session.configuration().applied(PortableOption.MODEL)
+				.or(() -> currentModelOf(session)).orElseGet(effective::model);
+		return new AgentObservations.TurnContext(effective.runtime(), session.name(), model, ephemeral);
+	}
+
+	/**
+	 * The model the agent says this session is set to, when it advertises one.
+	 *
+	 * <p>Matched by the portable {@code model} category as well as the id, because that pair is all
+	 * ACP standardizes — an adapter's candidate ids belong to the resolver, and a tag is not worth
+	 * threading one through for.
+	 */
+	private static Optional<String> currentModelOf(AgentSession session) {
+		return session.advertised().select("model", "model")
+				.map(AcpSchema.SessionConfigSelect::currentValue).filter(value -> !value.isBlank())
+				.or(() -> Optional.ofNullable(session.advertised().findModels().orElse(null))
+						.map(AcpSchema.SessionModelState::currentModelId));
 	}
 
 	private record DefaultAgentResponse(String content, AgentEvent.Completed completion) implements AgentResponse {

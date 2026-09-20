@@ -28,6 +28,7 @@
 
         <spring-boot.version>4.1.0</spring-boot.version>
         <acp.version>0.17.0</acp.version>
+        <spring-ai.version>2.0.1</spring-ai.version>
         <mockito.version>5.23.0</mockito.version>
     </properties>
 
@@ -36,8 +37,10 @@
         <module>spring-acp-runtime-goose</module>
         <module>spring-acp-runtime-codex</module>
         <module>spring-acp-runtime-opencode</module>
+        <module>spring-acp-runtime-registry</module>
         <module>spring-acp-spring-boot-autoconfigure</module>
         <module>spring-acp-spring-boot-starter</module>
+        <module>spring-acp-spring-ai</module>
         <module>spring-acp-test</module>
         <module>samples/smoke-app</module>
     </modules>
@@ -48,6 +51,14 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
                 <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -92,6 +103,16 @@
             <dependency>
                 <groupId>org.tanzu.acp</groupId>
                 <artifactId>spring-acp-runtime-opencode</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.tanzu.acp</groupId>
+                <artifactId>spring-acp-runtime-registry</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.tanzu.acp</groupId>
+                <artifactId>spring-acp-spring-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
