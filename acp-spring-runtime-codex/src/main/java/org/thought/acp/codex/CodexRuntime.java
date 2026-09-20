@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.thought.acp.config.AgentSettings;
 import org.thought.acp.config.ProviderEnvironment;
+import org.thought.acp.config.ProviderSpec;
 import org.thought.acp.config.RuntimeOptions;
 import org.thought.acp.runtime.AgentLaunchSpec;
 import org.thought.acp.runtime.AgentRuntime;
@@ -60,6 +61,9 @@ public class CodexRuntime implements AgentRuntime {
 
 	private static final String CONFIG_FILE = "config.toml";
 
+	/** The name a bring-your-own endpoint gets in {@code config.toml} when the application named none. */
+	private static final String DEFAULT_PROVIDER_KEY = "acp";
+
 	/** Codex's credential store, which lives in the same directory as its config. */
 	private static final String AUTH_FILE = "auth.json";
 
@@ -104,7 +108,7 @@ public class CodexRuntime implements AgentRuntime {
 	 */
 	@Override
 	public void provision(AgentSettings settings) {
-		Map<String, Object> config = settings.runtimeOptions().section("config-toml");
+		Map<String, Object> config = configFor(settings);
 		if (config.isEmpty()) {
 			return;
 		}
@@ -119,6 +123,67 @@ public class CodexRuntime implements AgentRuntime {
 		catch (IOException ex) {
 			throw new UncheckedIOException("Could not write " + CONFIG_FILE + " under " + home, ex);
 		}
+	}
+
+	/**
+	 * What to write into {@code config.toml}: the application's own {@code config-toml} block, over a
+	 * description of its endpoint when it configured one.
+	 *
+	 * <p>Codex has no environment variable for "talk to this URL instead"; a provider it was not built
+	 * knowing about exists only as a {@code [model_providers.*]} table, and the model that endpoint
+	 * serves is not in any list Codex advertises. So for a bring-your-own endpoint the adapter writes
+	 * both, and only then — against OpenAI proper the model belongs on the wire, where the protocol
+	 * can say what was applied.
+	 *
+	 * <p>No {@code wire_api}: codex-acp 1.12 removed the completions dialect and <em>refuses to
+	 * start</em> on a config that names it, so the only value left is the default, and writing a key
+	 * whose only legal value is the default is a promise to break again when it moves. This is worth
+	 * knowing when choosing a runtime for a gateway: Codex now speaks the Responses API only, so an
+	 * OpenAI-compatible endpoint that serves {@code /chat/completions} and nothing else answers its
+	 * first turn with a 404, and there is nothing this adapter can configure to change that. goose
+	 * reaches the same endpoint over completions.
+	 *
+	 * <p>{@code env_key} names the variable {@link #environment} already exports, so the key itself
+	 * never reaches the file.
+	 *
+	 * <p>Tier 3 is applied last and therefore wins, as everywhere else — including wholesale, if an
+	 * application would rather describe its providers itself.
+	 */
+	private static Map<String, Object> configFor(AgentSettings settings) {
+		Map<String, Object> config = new LinkedHashMap<>(endpointConfig(settings));
+		config.putAll(settings.runtimeOptions().section("config-toml"));
+		return config;
+	}
+
+	private static Map<String, Object> endpointConfig(AgentSettings settings) {
+		ProviderSpec provider = settings.provider();
+		if (!provider.isByo() || !isOpenAiCompatible(provider)) {
+			return Map.of();
+		}
+		String id = providerKey(provider);
+		Map<String, Object> endpoint = new LinkedHashMap<>();
+		endpoint.put("name", id);
+		endpoint.put("base_url", provider.findApiBase().orElseThrow().toString());
+		endpoint.put("env_key", ProviderEnvironment.apiKeyVariable(provider.apiType()));
+
+		Map<String, Object> config = new LinkedHashMap<>();
+		startingModel(settings).ifPresent(model -> config.put("model", model));
+		config.put("model_provider", id);
+		config.put("model_providers", Map.of(id, endpoint));
+		return config;
+	}
+
+	/** Codex names the table after the provider; an application that did not name one gets ours. */
+	private static String providerKey(ProviderSpec provider) {
+		return provider.findId().orElse(DEFAULT_PROVIDER_KEY);
+	}
+
+	private static boolean isOpenAiCompatible(ProviderSpec provider) {
+		return provider.findApiType().filter("openai"::equalsIgnoreCase).isPresent();
+	}
+
+	private static Optional<String> startingModel(AgentSettings settings) {
+		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
 	}
 
 	/** Points the managed home at the credentials the inherited one already holds, if it has any. */
@@ -162,11 +227,16 @@ public class CodexRuntime implements AgentRuntime {
 
 	/**
 	 * The provider's credentials are on the process environment whether or not {@code providers/set}
-	 * worked, so a provider request is never simply unsupported here.
+	 * worked, so a provider request is never simply unsupported here — and for an endpoint of the
+	 * application's own, {@link #provision} named the model in {@code config.toml} as well.
 	 */
 	@Override
 	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
-		return option == PortableOption.PROVIDER && settings.provider().hasCredentials();
+		return switch (option) {
+			case PROVIDER -> settings.provider().hasCredentials();
+			case MODEL -> !endpointConfig(settings).isEmpty() && startingModel(settings).isPresent();
+			case MODE -> false;
+		};
 	}
 
 	@Override
@@ -192,7 +262,7 @@ public class CodexRuntime implements AgentRuntime {
 		if (explicit.isPresent()) {
 			return explicit;
 		}
-		return options.section("config-toml").isEmpty() ? Optional.empty() : Optional.of(managedHome(settings));
+		return configFor(settings).isEmpty() ? Optional.empty() : Optional.of(managedHome(settings));
 	}
 
 	private Path managedHome(AgentSettings settings) {

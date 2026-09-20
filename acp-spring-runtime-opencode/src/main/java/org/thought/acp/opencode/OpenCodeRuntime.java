@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.thought.acp.config.AgentSettings;
 import org.thought.acp.config.ProviderEnvironment;
+import org.thought.acp.config.ProviderSpec;
 import org.thought.acp.config.RuntimeOptions;
 import org.thought.acp.runtime.AgentLaunchSpec;
 import org.thought.acp.runtime.AgentRuntime;
@@ -59,6 +60,12 @@ public class OpenCodeRuntime implements AgentRuntime {
 
 	private static final String CONFIG_FILE = "opencode.json";
 
+	/** What OpenCode loads to talk to an OpenAI-compatible endpoint it has no built-in entry for. */
+	private static final String COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible";
+
+	/** The name a bring-your-own endpoint gets in the config when the application named none. */
+	private static final String DEFAULT_PROVIDER_KEY = "acp";
+
 	private static final Logger logger = LoggerFactory.getLogger(OpenCodeRuntime.class);
 
 	private final String executable;
@@ -85,7 +92,8 @@ public class OpenCodeRuntime implements AgentRuntime {
 	}
 
 	/**
-	 * Writes {@code opencode.json} into the runtime home when tier 3 asked for one.
+	 * Writes {@code opencode.json} into the runtime home when tier 3 asked for one, or when the
+	 * application named an endpoint of its own.
 	 *
 	 * <p>Safe to relocate in a way Codex's home is not: {@code OPENCODE_CONFIG} names the config file
 	 * alone, and OpenCode keeps its credentials elsewhere, so pointing it at a file this library owns
@@ -93,7 +101,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 */
 	@Override
 	public void provision(AgentSettings settings) {
-		Map<String, Object> config = settings.runtimeOptions().section("config");
+		Map<String, Object> config = configFor(settings);
 		if (config.isEmpty()) {
 			return;
 		}
@@ -106,6 +114,53 @@ public class OpenCodeRuntime implements AgentRuntime {
 		catch (IOException ex) {
 			throw new UncheckedIOException("Could not write " + CONFIG_FILE + " to " + file, ex);
 		}
+	}
+
+	/**
+	 * The application's own {@code config} block, over a description of its endpoint when it
+	 * configured one.
+	 *
+	 * <p>OpenCode reaches a provider it was not built knowing about through the Vercel AI SDK's
+	 * OpenAI-compatible package, declared in its config rather than through the environment, and its
+	 * model ids are {@code provider/model} — so the endpoint and the model it serves are one entry.
+	 * The key itself stays out of the file: {@code {env:...}} is OpenCode's own indirection, pointed
+	 * at the variable {@link #environment} already exports.
+	 *
+	 * <p>Only for a bring-your-own endpoint. Against a provider OpenCode ships with, the model is a
+	 * value it advertises and belongs on the wire, where the protocol reports what was applied.
+	 */
+	private static Map<String, Object> configFor(AgentSettings settings) {
+		Map<String, Object> config = new LinkedHashMap<>(endpointConfig(settings));
+		config.putAll(settings.runtimeOptions().section("config"));
+		return config;
+	}
+
+	private static Map<String, Object> endpointConfig(AgentSettings settings) {
+		ProviderSpec provider = settings.provider();
+		if (!provider.isByo() || provider.findApiType().isEmpty()) {
+			return Map.of();
+		}
+		String id = provider.findId().orElse(DEFAULT_PROVIDER_KEY);
+		Map<String, Object> options = new LinkedHashMap<>();
+		options.put("baseURL", provider.findApiBase().orElseThrow().toString());
+		provider.findApiKey().ifPresent(
+				key -> options.put("apiKey", "{env:" + ProviderEnvironment.apiKeyVariable(provider.apiType()) + "}"));
+
+		Map<String, Object> endpoint = new LinkedHashMap<>();
+		endpoint.put("npm", COMPATIBLE_PACKAGE);
+		endpoint.put("name", id);
+		endpoint.put("options", options);
+		startingModel(settings)
+				.ifPresent(model -> endpoint.put("models", Map.of(model, Map.of("name", model))));
+
+		Map<String, Object> config = new LinkedHashMap<>();
+		config.put("provider", Map.of(id, endpoint));
+		startingModel(settings).ifPresent(model -> config.put("model", id + "/" + model));
+		return config;
+	}
+
+	private static Optional<String> startingModel(AgentSettings settings) {
+		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
 	}
 
 	@Override
@@ -126,8 +181,12 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 */
 	@Override
 	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
-		return option == PortableOption.PROVIDER
-				&& (settings.model() != null && !settings.model().isBlank() || settings.provider().hasCredentials());
+		return switch (option) {
+			case PROVIDER -> settings.model() != null && !settings.model().isBlank()
+					|| settings.provider().hasCredentials();
+			case MODEL -> !endpointConfig(settings).isEmpty() && startingModel(settings).isPresent();
+			case MODE -> false;
+		};
 	}
 
 	@Override
@@ -139,7 +198,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 		Map<String, String> env = new LinkedHashMap<>();
 		RuntimeOptions options = settings.runtimeOptions();
 
-		if (!options.section("config").isEmpty()) {
+		if (!configFor(settings).isEmpty()) {
 			env.put(CONFIG_ENV, configFile(settings).toString());
 		}
 		env.putAll(ProviderEnvironment.of(settings.provider()));

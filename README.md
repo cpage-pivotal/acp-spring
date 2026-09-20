@@ -135,6 +135,27 @@ Two things that tier turned out to require, both measured rather than guessed:
   candidate option ids and the core matches values across the spellings, so one property means one
   thing.
 
+And one place where reading first is exactly wrong:
+
+- **Your own endpoint, your own models.** Point `spring.acp.provider.base-url` at a gateway or a
+  model server you run, and the agent's built-in catalogue stops being evidence — goose advertises
+  ~32 OpenAI ids and repopulates them from the endpoint *after* the provider is set, so the same
+  model was refused by two sessions and accepted by a third seconds later. With a `base-url` set, the
+  endpoint's own `/models` listing decides and the model is applied whether or not the agent
+  advertised it. Four properties, no runtime-specific block:
+
+```yaml
+spring:
+  acp:
+    runtime: goose
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider:
+      id: openai
+      api-type: openai
+      base-url: https://gateway.example.com/team-x/openai
+      api-key: ${GENAI_API_KEY}
+```
+
 ## What each agent can actually do with a session
 
 Every optional session method is gated on a capability, and the three runtimes disagree — which is

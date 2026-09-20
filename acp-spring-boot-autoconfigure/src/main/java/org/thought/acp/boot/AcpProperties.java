@@ -524,7 +524,13 @@ public class AcpProperties {
 	 *
 	 * <p>{@code id} is a negotiated request the agent may decline. The rest is provisioning: it goes
 	 * over the wire when the agent advertises the providers capability, and into the agent process's
-	 * environment when it does not. Fixed when the process starts, never per request.
+	 * environment — or its config file — when it does not. Fixed when the process starts, never per
+	 * request.
+	 *
+	 * <p>Setting {@code base-url} says the application has an endpoint of its own, and that endpoint
+	 * becomes the authority on which models exist: {@code spring.acp.model} is checked against its
+	 * {@code /models} listing rather than against the catalogue the agent shipped with, and is applied
+	 * even though the agent never advertised it. Nothing else has to be configured for that.
 	 */
 	public static class Provider {
 
@@ -534,7 +540,11 @@ public class AcpProperties {
 		/** The API dialect, which also names the environment variables the credentials travel in. */
 		private String apiType;
 
-		/** HTTPS, or plain HTTP only for loopback and .apps.internal. */
+		/**
+		 * An OpenAI-style base URL, up to and including the version segment — {@code /v1} is added
+		 * when it is not there, so a platform's {@code …/openai} and a README's {@code …/v1} mean the
+		 * same endpoint. HTTPS, or plain HTTP only for loopback and .apps.internal.
+		 */
 		private URI baseUrl;
 
 		/** Sent to the provider, never logged. */

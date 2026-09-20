@@ -12,9 +12,13 @@ import java.util.Map;
  * is unavoidable, so the guess is a rule rather than a table: an api type of {@code openai} becomes
  * {@code OPENAI_API_KEY} and {@code OPENAI_BASE_URL}, {@code azure_openai} becomes
  * {@code AZURE_OPENAI_API_KEY}, and so on. That rule is right for every provider the three
- * first-party runtimes support, and where it is wrong the adapter renames the variable (Goose reads
- * {@code OPENAI_HOST}, not {@code OPENAI_BASE_URL}) or the application overrides it outright through
+ * first-party runtimes support. Where an agent spells the same two things differently, its adapter
+ * builds the map itself from {@link ProviderSpec#findApiBase()} rather than from a special case
+ * here — vendor knowledge belongs in the adapter — and an application can override any of it through
  * the tier-3 {@code env} block, which is applied last and wins.
+ *
+ * <p>The base URL carried here is the canonical one, so an agent that reads {@code OPENAI_BASE_URL}
+ * gets the form its SDK expects whichever way the property was written.
  */
 public final class ProviderEnvironment {
 
@@ -38,23 +42,15 @@ public final class ProviderEnvironment {
 	/**
 	 * The environment a provider needs, or an empty map when nothing was configured or no api type
 	 * says what to call the variables.
-	 *
-	 * @param baseUrlVariable the name to carry the base URL under, for a runtime that does not use
-	 * the derived one
 	 */
-	public static Map<String, String> of(ProviderSpec provider, String baseUrlVariable) {
+	public static Map<String, String> of(ProviderSpec provider) {
 		if (provider == null || !provider.hasCredentials() || provider.findApiType().isEmpty()) {
 			return Map.of();
 		}
 		String apiType = provider.apiType();
 		Map<String, String> env = new LinkedHashMap<>();
 		provider.findApiKey().ifPresent(key -> env.put(apiKeyVariable(apiType), key));
-		provider.findBaseUrl().ifPresent(url -> env
-				.put(baseUrlVariable == null ? baseUrlVariable(apiType) : baseUrlVariable, url.toString()));
+		provider.findApiBase().ifPresent(url -> env.put(baseUrlVariable(apiType), url.toString()));
 		return Map.copyOf(env);
-	}
-
-	public static Map<String, String> of(ProviderSpec provider) {
-		return of(provider, null);
 	}
 }

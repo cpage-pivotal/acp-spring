@@ -60,10 +60,26 @@ public class GooseRuntime implements AgentRuntime {
 	public static final String ID = "goose";
 
 	/**
-	 * Goose names the endpoint of an OpenAI-compatible provider {@code OPENAI_HOST}, not the
-	 * {@code OPENAI_BASE_URL} the derivation rule would produce.
+	 * Goose names an OpenAI-compatible endpoint {@code OPENAI_HOST}, not the
+	 * {@code OPENAI_BASE_URL} the derivation rule would produce, and it means scheme, authority
+	 * <em>and</em> any path prefix the endpoint is published under — everything up to the API version.
+	 * Goose appends the version and the route itself, which is why the version segment is stripped
+	 * from the canonical base URL rather than passed on.
+	 *
+	 * <p>The route is deliberately left to Goose. It chooses per model — measured against one
+	 * endpoint and one process, {@code gpt-5.6-terra} went to {@code /v1/responses} and
+	 * {@code deepseek-…} to {@code /v1/chat/completions} — and that choice is better informed than
+	 * anything this adapter could make: the Responses API keeps reasoning items across a turn, which
+	 * is worth having wherever it exists. Setting {@code OPENAI_BASE_PATH} here would pin every model
+	 * to one dialect, so an application that genuinely needs that pins it itself through the tier-3
+	 * {@code env} block.
 	 */
 	private static final String OPENAI_HOST = "OPENAI_HOST";
+
+	/** Goose's own names for the provider and model it starts with. */
+	private static final String GOOSE_PROVIDER = "GOOSE_PROVIDER";
+
+	private static final String GOOSE_MODEL = "GOOSE_MODEL";
 
 	/** {@code goose serve} refuses to start without this, which is the behaviour we want. */
 	private static final String SECRET_KEY_ENV = "GOOSE_SERVER__SECRET_KEY";
@@ -210,16 +226,76 @@ public class GooseRuntime implements AgentRuntime {
 		env.put("GOOSE_DISABLE_KEYRING", "1");
 		env.put("GOOSE_TELEMETRY_ENABLED", "false");
 
-		ProviderSpec provider = settings.provider();
-		env.putAll(ProviderEnvironment.of(provider, baseUrlVariable(provider)));
+		env.putAll(providerEnvironment(settings));
 
 		RuntimeOptions options = settings.runtimeOptions();
 		env.putAll(options.textSection("env"));
 		return env;
 	}
 
-	private static String baseUrlVariable(ProviderSpec provider) {
-		return provider.findApiType().filter("openai"::equalsIgnoreCase).map(t -> OPENAI_HOST).orElse(null);
+	/**
+	 * The provider's credentials in Goose's spelling, and — for an endpoint of the application's own —
+	 * the provider and model to start with.
+	 *
+	 * <p>The second half is only done for a bring-your-own endpoint, and that restriction is the whole
+	 * design. Against a vendor the agent knows, the model belongs on the wire, where the protocol can
+	 * report what was applied and {@code ConfigResolver} can tell a typo from a model; forcing
+	 * {@code GOOSE_MODEL} there would replace a checked answer with an unchecked one. Against a
+	 * private endpoint there is nothing to check it against but the endpoint, whose catalogue Goose
+	 * populates asynchronously after the provider is set — so a session opened in the first moments of
+	 * a process can be told a model it serves does not exist. Naming it at launch is what makes the
+	 * first turn behave like the tenth.
+	 */
+	private Map<String, String> providerEnvironment(AgentSettings settings) {
+		ProviderSpec provider = settings.provider();
+		Map<String, String> env = new LinkedHashMap<>(ProviderEnvironment.of(provider));
+
+		provider.findApiBase().filter(base -> isOpenAiCompatible(provider)).ifPresent(base -> {
+			env.remove(ProviderEnvironment.baseUrlVariable(provider.apiType()));
+			env.put(OPENAI_HOST, endpoint(base));
+		});
+
+		if (provider.isByo()) {
+			provider.findApiType().or(provider::findId).ifPresent(id -> env.put(GOOSE_PROVIDER, id));
+			startingModel(settings).ifPresent(model -> env.put(GOOSE_MODEL, model));
+		}
+		return env;
+	}
+
+	/**
+	 * The canonical base URL without its version segment: scheme, authority, and whatever path prefix
+	 * the endpoint is published under, which is the whole of what Goose wants to be told.
+	 */
+	private static String endpoint(URI base) {
+		String text = base.toString();
+		String path = base.getRawPath() == null ? "" : base.getRawPath();
+		String prefix = path.lastIndexOf('/') <= 0 ? "" : path.substring(0, path.lastIndexOf('/'));
+		return text.substring(0, text.length() - path.length()) + prefix;
+	}
+
+	private static boolean isOpenAiCompatible(ProviderSpec provider) {
+		return provider.findApiType().filter("openai"::equalsIgnoreCase).isPresent();
+	}
+
+	private static Optional<String> startingModel(AgentSettings settings) {
+		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
+	}
+
+	/**
+	 * What {@link #providerEnvironment} already carried, declared so the resolver can price it.
+	 *
+	 * <p>Kept in step with that method rather than restating its conditions: a runtime that claims
+	 * more here than it sets there turns {@code on-unsupported: fail} into a lie, which is what
+	 * {@code AgentRuntimeContract} checks.
+	 */
+	@Override
+	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+		ProviderSpec provider = settings.provider();
+		return switch (option) {
+			case MODEL -> provider.isByo() && startingModel(settings).isPresent();
+			case PROVIDER -> provider.isByo() && provider.findApiType().or(provider::findId).isPresent();
+			case MODE -> false;
+		};
 	}
 
 	/**

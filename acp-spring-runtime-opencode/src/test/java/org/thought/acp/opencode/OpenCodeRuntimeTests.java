@@ -93,6 +93,37 @@ class OpenCodeRuntimeTests {
 	}
 
 	@Test
+	void anEndpointOfTheApplicationsOwnBecomesAProviderOpenCodeCanLoad() throws Exception {
+		ProviderSpec provider = new ProviderSpec("acme", "openai",
+				java.net.URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
+		AgentSettings settings = settings().provider(provider).model("llm-1").build();
+
+		runtime.provision(settings);
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+
+		Path file = home.resolve("opencode.json");
+		assertThat(spec.env()).containsEntry(OpenCodeRuntime.CONFIG_ENV, file.toString());
+		assertThat(Files.readString(file)).contains("\"@ai-sdk/openai-compatible\"")
+				.contains("\"baseURL\": \"https://gateway.example.com/team-x/openai/v1\"")
+				// OpenCode's own indirection, so the key stays in the environment.
+				.contains("\"apiKey\": \"{env:OPENAI_API_KEY}\"")
+				// Its model ids are provider/model, so the endpoint and its model are one entry.
+				.contains("\"model\": \"acme/llm-1\"");
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
+	}
+
+	@Test
+	void aVendorOpenCodeAlreadyKnowsIsLeftToTheWire() {
+		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+				.model("gpt-5.4-mini").build();
+
+		runtime.provision(settings);
+
+		assertThat(home.resolve("opencode.json")).doesNotExist();
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isFalse();
+	}
+
+	@Test
 	void extraArgumentsAreAppended() {
 		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime
 				.launch(settings().runtimeOptions(Map.of("args", List.of("--print-logs"))).build());

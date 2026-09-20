@@ -126,6 +126,56 @@ class CodexRuntimeTests {
 	}
 
 	@Test
+	void anEndpointOfTheApplicationsOwnBecomesAModelProviderCodexCanUse() throws Exception {
+		// Codex has no environment variable for "talk to this URL instead": a provider it was not
+		// built knowing about exists only as a table in config.toml, and so does the model it serves.
+		ProviderSpec provider = new ProviderSpec("acme", "openai",
+				URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
+		AgentSettings settings = settings().provider(provider).model("acme/llm-1").build();
+
+		runtime.provision(settings);
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+
+		assertThat(spec.env()).containsEntry(CodexRuntime.HOME_ENV, home.toString()).containsEntry("OPENAI_API_KEY",
+				"sk-x");
+		assertThat(Files.readString(home.resolve("config.toml")))
+				.contains("model = \"acme/llm-1\"")
+				.contains("model_provider = \"acme\"")
+				.contains("[model_providers.acme]")
+				.contains("base_url = \"https://gateway.example.com/team-x/openai/v1\"")
+				// The key stays in the environment; the file only names the variable.
+				.contains("env_key = \"OPENAI_API_KEY\"")
+				// codex-acp 1.12 refuses to start on `wire_api = "chat"`, and `responses` is its
+				// default, so naming the dialect at all is a promise to break when it moves again.
+				.doesNotContain("wire_api");
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
+	}
+
+	@Test
+	void aVendorCodexAlreadyKnowsGetsNoModelProviderTable() {
+		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+				.model("gpt-5.6").build();
+
+		runtime.provision(settings);
+
+		assertThat(home.resolve("config.toml")).doesNotExist();
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isFalse();
+	}
+
+	@Test
+	void theApplicationsOwnCodexConfigStillWins() throws Exception {
+		ProviderSpec provider = new ProviderSpec("acme", "openai", URI.create("https://ai.example.com/v1"), "sk-x",
+				Map.of());
+		AgentSettings settings = settings().provider(provider).model("acme/llm-1")
+				.runtimeOptions(Map.of("config-toml", Map.of("model", "something-else"))).build();
+
+		runtime.provision(settings);
+
+		assertThat(Files.readString(home.resolve("config.toml"))).contains("model = \"something-else\"")
+				.doesNotContain("model = \"acme/llm-1\"").contains("[model_providers.acme]");
+	}
+
+	@Test
 	void extraArgumentsAreAppendedRatherThanReplacingTheAdapter() {
 		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime
 				.launch(settings().runtimeOptions(Map.of("args", List.of("--verbose"))).build());

@@ -55,13 +55,70 @@ class GooseRuntimeTests {
 
 	@Test
 	void goosesOwnNameForAnOpenAiEndpointIsUsed() {
-		// Goose reads OPENAI_HOST, not the OPENAI_BASE_URL the derivation rule would produce.
+		// Goose reads OPENAI_HOST, not the OPENAI_BASE_URL the derivation rule would produce, and it
+		// appends the version segment itself.
 		ProviderSpec provider = new ProviderSpec("acme-ai", "openai", URI.create("https://ai.example.com/v1"), "sk-x",
 				Map.of());
 		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().provider(provider).build());
 
-		assertThat(spec.env()).containsEntry("OPENAI_HOST", "https://ai.example.com/v1")
+		assertThat(spec.env()).containsEntry("OPENAI_HOST", "https://ai.example.com")
 				.containsEntry("OPENAI_API_KEY", "sk-x").doesNotContainKey("OPENAI_BASE_URL");
+	}
+
+	@Test
+	void anEndpointPublishedUnderAPathKeepsThatPath() {
+		// A gateway that gives every endpoint its own prefix, which is the shape that made the
+		// single-variable mapping wrong: the prefix has to survive into OPENAI_HOST.
+		ProviderSpec provider = new ProviderSpec("acme-ai", "openai",
+				URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().provider(provider).build());
+
+		assertThat(spec.env()).containsEntry("OPENAI_HOST", "https://gateway.example.com/team-x/openai");
+	}
+
+	@Test
+	void theRouteIsLeftToGooseSoAModelThatWantsTheResponsesApiGetsIt() {
+		// Measured: from one prefixed OPENAI_HOST, goose sent gpt-5.6-terra to /v1/responses and
+		// deepseek to /v1/chat/completions. Pinning OPENAI_BASE_PATH would take that choice away and
+		// cost every reasoning model its reasoning items.
+		ProviderSpec provider = new ProviderSpec("acme-ai", "openai",
+				URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
+
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().provider(provider).build());
+
+		assertThat(spec.env()).doesNotContainKey("OPENAI_BASE_PATH");
+	}
+
+	@Test
+	void anApplicationThatMustPinTheDialectStillCan() {
+		ProviderSpec provider = new ProviderSpec("acme-ai", "openai", URI.create("https://ai.example.com/v1"), "sk-x",
+				Map.of());
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().provider(provider)
+				.runtimeOptions(Map.of("env.OPENAI_BASE_PATH", "v1/chat/completions")).build());
+
+		assertThat(spec.env()).containsEntry("OPENAI_BASE_PATH", "v1/chat/completions");
+	}
+
+	@Test
+	void anEndpointOfTheApplicationsOwnNamesItsProviderAndModelAtLaunch() {
+		ProviderSpec provider = new ProviderSpec("acme-ai", "openai", URI.create("https://ai.example.com/v1"), "sk-x",
+				Map.of());
+		AgentSettings settings = settings().provider(provider).model("acme/llm-1").build();
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+
+		assertThat(spec.env()).containsEntry("GOOSE_PROVIDER", "openai").containsEntry("GOOSE_MODEL", "acme/llm-1");
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
+	}
+
+	@Test
+	void aVendorTheAgentAlreadyKnowsLeavesTheModelToTheWire() {
+		// Nothing carried out of band, because the protocol can do it and report what happened.
+		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+				.model("gpt-5.6").build();
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+
+		assertThat(spec.env()).doesNotContainKey("GOOSE_MODEL").doesNotContainKey("GOOSE_PROVIDER");
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isFalse();
 	}
 
 	@Test

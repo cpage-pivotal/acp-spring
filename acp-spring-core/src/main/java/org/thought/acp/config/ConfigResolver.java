@@ -36,6 +36,16 @@ import reactor.core.publisher.Mono;
  *
  * <p>Four mechanisms are tried in order of how much the protocol guarantees about them:
  *
+ * <p><strong>Where the advertised list is not the authority.</strong> Reading before writing assumes
+ * the agent knows what exists, which stops being true the moment an application points it at an
+ * endpoint of its own: the list Goose 1.51 advertises is its own built-in catalogue of vendor models,
+ * and a private gateway's models are not in it. Worse, it is not even stable — Goose repopulates that
+ * list from the endpoint <em>after</em> the provider is set, so of three sessions opened seconds
+ * apart against one process, the third accepted a model the first two had refused. So when
+ * {@link ProviderSpec#isByo()}, the model is checked against {@link ModelCatalog} — the endpoint's own
+ * listing — and sent whether or not the agent advertised it. What the agent then does with it is
+ * reported honestly; what is no longer done is refusing a model that demonstrably exists.
+ *
  * <ol>
  * <li>{@code session/set_config_option} against an advertised option — the modern path, and the only
  * one all three first-party runtimes support;</li>
@@ -53,12 +63,19 @@ public final class ConfigResolver {
 
 	private final OnUnsupported onUnsupported;
 
+	private final ModelCatalog catalog;
+
 	/** One warning per option per runtime, not one per session. */
 	private final Set<String> warned = ConcurrentHashMap.newKeySet();
 
 	public ConfigResolver(AgentRuntime runtime, OnUnsupported onUnsupported) {
+		this(runtime, onUnsupported, ModelCatalog.endpoint());
+	}
+
+	public ConfigResolver(AgentRuntime runtime, OnUnsupported onUnsupported, ModelCatalog catalog) {
 		this.runtime = runtime;
 		this.onUnsupported = onUnsupported == null ? OnUnsupported.WARN : onUnsupported;
+		this.catalog = catalog == null ? ModelCatalog.none() : catalog;
 	}
 
 	/**
@@ -86,13 +103,21 @@ public final class ConfigResolver {
 		if (value == null || value.isBlank()) {
 			return Mono.just(OptionResolution.notRequested(option));
 		}
+		Optional<String> refusal = endpointRefusal(settings, option, value);
+		if (refusal.isPresent()) {
+			return unsupported(option, value, refusal.get(), null);
+		}
 		return viaConfigOption(client, session, settings, option, value)
 				.switchIfEmpty(Mono.defer(() -> viaLegacyState(client, session, option, value)))
 				.switchIfEmpty(Mono.defer(() -> viaProviders(client, settings, option, value)))
 				.switchIfEmpty(Mono.defer(() -> viaRuntime(settings, option, value)))
 				.switchIfEmpty(Mono.defer(() -> unsupported(option, value, noMechanism(session), null)))
+				// A mechanism that failed must not hide one that already succeeded: Codex rejects
+				// providers/set over an SDK field-name mismatch, while its config.toml has been
+				// carrying that same provider since launch.
 				.onErrorResume(error -> error instanceof UnsupportedAgentOptionException ? Mono.error(error)
-						: unsupported(option, value, "the agent rejected it: " + rootMessage(error), error));
+						: viaRuntime(settings, option, value).switchIfEmpty(Mono.defer(() -> unsupported(option,
+								value, "the agent rejected it: " + rootMessage(error), error))));
 	}
 
 	/**
@@ -120,28 +145,63 @@ public final class ConfigResolver {
 			present = candidate.get();
 			Optional<String> matched = SelectMatcher.match(present, value, qualifier);
 			if (matched.isPresent()) {
-				return set(client, session, option, value, present.id(), matched.get());
+				return set(client, session, option, value, present.id(), matched.get(), Mechanism.CONFIG_OPTION);
 			}
 		}
 
-		if (present != null) {
-			return unsupported(option, value, "the agent's '" + present.id() + "' option offers "
-					+ SelectMatcher.examples(present), null);
+		if (present == null) {
+			return Mono.empty();
 		}
-		return Mono.empty();
+		if (sendsUnadvertised(settings, option)) {
+			// The option exists, the value is not in its list, and the list is not the authority here.
+			return set(client, session, option, value, present.id(), value, Mechanism.ENDPOINT);
+		}
+		return unsupported(option, value, "the agent's '" + present.id() + "' option offers "
+				+ SelectMatcher.examples(present), null);
+	}
+
+	/**
+	 * Whether a value the agent did not advertise should be sent regardless.
+	 *
+	 * <p>Only the model, and only for an endpoint the application named. Mode and provider are the
+	 * agent's own vocabulary, which it does know the whole of; inventing values for those would be
+	 * guessing rather than deferring to something better informed.
+	 */
+	private static boolean sendsUnadvertised(AgentSettings settings, PortableOption option) {
+		return option == PortableOption.MODEL && settings.provider().isByo();
+	}
+
+	/**
+	 * Why the endpoint says this model is wrong, when it is in a position to say so.
+	 *
+	 * <p>This is the check that replaces the advertised list for a bring-your-own endpoint, and it is
+	 * a better one: it names the models actually being served rather than the ones the agent shipped
+	 * knowing about, and it fires before a turn is spent instead of arriving as agent prose inside
+	 * one. An endpoint that publishes no listing refuses nothing.
+	 */
+	private Optional<String> endpointRefusal(AgentSettings settings, PortableOption option, String value) {
+		if (option != PortableOption.MODEL || !settings.provider().isByo()) {
+			return Optional.empty();
+		}
+		return catalog.modelsOf(settings.provider())
+				.filter(models -> models.stream().noneMatch(model -> model.equalsIgnoreCase(value)))
+				.map(models -> "the endpoint at " + settings.provider().findApiBase().orElseThrow() + " serves "
+						+ String.join(", ", models));
 	}
 
 	private Mono<OptionResolution> set(AcpAsyncClient client, AgentSession session, PortableOption option,
-			String requested, String configId, String value) {
+			String requested, String configId, String value, Mechanism mechanism) {
 		return client
 				.setSessionConfigOption(
 						new AcpSchema.SetSessionConfigOptionRequest(session.sessionId(), configId, value, null, null))
 				.map(response -> {
 					session.advertised(session.advertised().withConfigOptions(response.configOptions()));
-					logger.debug("Set {}='{}' on session {} via config option '{}'", option.propertyName(), value,
-							session.sessionId(), configId);
-					return OptionResolution.applied(option, requested, value, Mechanism.CONFIG_OPTION,
-							"session/set_config_option " + configId);
+					logger.debug("Set {}='{}' on session {} via config option '{}'{}", option.propertyName(), value,
+							session.sessionId(), configId,
+							mechanism == Mechanism.ENDPOINT ? " (not advertised; the endpoint serves it)" : "");
+					return OptionResolution.applied(option, requested, value, mechanism,
+							"session/set_config_option " + configId
+									+ (mechanism == Mechanism.ENDPOINT ? " (not advertised by the agent)" : ""));
 				});
 	}
 

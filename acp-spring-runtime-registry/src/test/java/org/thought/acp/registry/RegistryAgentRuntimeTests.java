@@ -71,8 +71,10 @@ class RegistryAgentRuntimeTests {
 
 		AgentLaunchSpec.Stdio stdio = (AgentLaunchSpec.Stdio) runtime("gemini").launch(settings);
 
+		// Canonical rather than verbatim: an agent nobody wrote an adapter for reads OPENAI_BASE_URL
+		// with its SDK's assumptions, and those include the version segment.
 		assertThat(stdio.env()).containsEntry("OPENAI_API_KEY", "sk-secret").containsEntry("OPENAI_BASE_URL",
-				"https://ai.example.com");
+				"https://ai.example.com/v1");
 	}
 
 	@Test

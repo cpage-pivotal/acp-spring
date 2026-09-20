@@ -253,6 +253,10 @@ guarantees about each:
 | 3 | `providers/set`, gated on the agent advertising `providers` | Codex only |
 | 4 | the adapter's own out-of-band mapping, already applied at launch | Codex, OpenCode (see below) |
 
+A fifth applies only to `model`, and only when the application named its own endpoint: the value is
+sent whether or not the agent advertised it, because the agent's catalogue is not what knows. See
+[Bring-your-own endpoints](#bring-your-own-endpoints-and-who-gets-to-say-which-models-exist).
+
 Measured against **goose 1.51.0**, **codex-acp 1.12.0** and **opencode 1.18.31**:
 
 | | `configOptions` ids | `modes`/`models` | `providers/*` |
@@ -305,6 +309,102 @@ Resolution results are exposed on `AgentSession.configuration()` as one `OptionR
 option, carrying what was requested, what the agent took, and which mechanism carried it —
 so `warn` does not hide the difference between the model an application asked for and the model it is
 talking to. `AgentClient.openSession(name)` makes that readable without spending a turn.
+
+### Bring-your-own endpoints, and who gets to say which models exist
+
+`spring.acp.provider.base-url` points an agent at an endpoint of the application's own — a platform
+gateway, a proxy, a self-hosted model server. It is ordinary configuration, not an escape hatch, and
+four properties are the whole of it:
+
+```yaml
+spring:
+  acp:
+    runtime: goose
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider:
+      id: openai
+      api-type: openai
+      base-url: https://gateway.example.com/team-x/openai   # canonical: ends at the version segment
+      api-key: ${GENAI_API_KEY}
+```
+
+**Read-before-write has an exception, and this is it.** Tier 2 exists because an agent's advertised
+list is the only thing that can tell a model from a typo. That reasoning fails the moment the
+endpoint is not the agent's own vendor: goose 1.51 advertises its built-in catalogue of ~32 OpenAI
+model ids, and nothing a private gateway serves is in it. Measured against a Tanzu GenAI endpoint,
+refusing on that basis is also *unstable* — goose repopulates the list from the endpoint after the
+provider is set, so of three sessions opened seconds apart in one process, the first two refused a
+model the third accepted. So when `ProviderSpec.isByo()`:
+
+* the **endpoint's own `/models` listing** decides (`ModelCatalog`, one `GET` per endpoint per
+  process, cached, never fatal — an endpoint that publishes no listing refuses nothing);
+* a model the agent never advertised is **sent anyway**, recorded as `Mechanism.ENDPOINT` rather than
+  `CONFIG_OPTION` so `AgentSession.configuration()` still says exactly what happened;
+* the failure message names what is really being served:
+  `cannot honor model='deepseek-v4-flash': the endpoint at https://…/openai/v1 serves
+  deepseek-ai/DeepSeek-V4-Flash-0731`.
+
+This applies to `model` only. Mode and provider are the agent's own vocabulary, which it does know
+the whole of; inventing values there would be guessing rather than deferring to something better
+informed.
+
+**One canonical shape, three vendor spellings.** `base-url` is stored as written and read through
+`ProviderSpec.findApiBase()`, which appends `/v1` when the URL does not already end in a version
+segment — platforms hand out `…/openai`, READMEs show `…/v1`, and both mean the same endpoint. Each
+adapter derives its own spelling from that one shape; core never learns any of them:
+
+| Runtime | How the endpoint and its model reach the agent |
+| --- | --- |
+| goose | `OPENAI_HOST` (origin **and** any path prefix, version segment stripped — goose appends the route), and `GOOSE_PROVIDER`/`GOOSE_MODEL` at launch |
+| codex | a `[model_providers.<id>]` table in `config.toml` (no `wire_api`, see below), plus `model` and `model_provider`; the key stays in the environment via `env_key` |
+| opencode | an `@ai-sdk/openai-compatible` provider in `opencode.json` with `options.baseURL` and `{env:…}` for the key; the model id is `<provider>/<model>` |
+| registry | `OPENAI_BASE_URL` + `OPENAI_API_KEY`, the derived names, and nothing more — nothing here knows an unseen agent's config format |
+
+`OPENAI_HOST` is the endpoint *minus its version segment*: goose reads it as host plus optional
+prefix and appends the version and route itself. The original single-variable mapping passed the base
+URL through verbatim, which sent a path-prefixed endpoint's requests to
+`…/team-x/v1/chat/completions` — the prefix had to survive, and the version had to go.
+
+**The route is deliberately not pinned.** `OPENAI_BASE_PATH` would fix the dialect, and an early cut
+of this set it to `v1/chat/completions` — which works everywhere and is quietly the wrong default.
+Goose chooses per model, and measured against one endpoint in one process it sent `gpt-5.6-terra` to
+`/v1/responses` and `deepseek-ai/DeepSeek-V4-Flash-0731` to `/v1/chat/completions`. That choice is
+better informed than anything this adapter could make, and it is not cosmetic: the Responses API
+carries reasoning items across a turn, so pinning completions costs every reasoning model its
+reasoning continuity and its cache hits. Prefer Responses where it exists, in other words, by not
+taking the decision. An application that must pin one dialect — a gateway that implements only one,
+say — still can, through the tier-3 `env` block, which is applied last and wins.
+
+The dialect is not always the agent's choice to make, though. Codex 1.12 has only one:
+
+**Measured against the same Tanzu GenAI endpoint, all three runtimes, and it is not a clean sweep.**
+
+goose and OpenCode both reach it and answer; Codex is wired correctly and still cannot. codex-acp
+1.12 dropped the chat-completions dialect — `wire_api = "chat"` makes it refuse to *start* ("no
+longer supported"), and its only remaining wire API is `responses`, which an OpenAI-compatible
+gateway serving `/chat/completions` answers with a 404 inside the first turn. So this adapter writes
+no `wire_api` at all (the one legal value is the default), and the pairing is a runtime-selection
+fact rather than something configuration can fix. It is worth stating plainly because it is exactly
+the kind of difference `spring.acp.runtime` is supposed to hide and here genuinely cannot: the
+endpoint has to speak the dialect the agent speaks.
+
+The same run found a flaw in the resolver, not the adapters. Codex advertises the `providers`
+capability, so `providers/set` is tried — and fails, because acp-core 0.17.0 sends `id` where Codex
+expects `providerId` (the same field-name mismatch already documented for `providers/list`). A
+*failed* mechanism used to skip straight to unsupported, reporting `provider: UNSUPPORTED` for a
+session whose `config.toml` had been naming that provider since launch. An error now falls through to
+the adapter's out-of-band declaration first, and only then to unsupported.
+
+**Why the model is named at launch at all.** For a BYO endpoint the adapters also carry
+`model` out of band, and declare it through `appliedOutOfBand`. It is belt and braces on purpose: it
+makes the first session behave like the tenth on an agent whose catalogue arrives late, and it is the
+only mechanism at all on an agent with no model option. `AgentRuntimeContract` asserts the two halves
+agree — whatever an adapter claims it carried at launch must actually appear in the environment or
+the files it wrote — because an adapter that over-claims turns a failed model request into a silent
+default.
+
+Against a vendor the agent already knows, none of this happens: the model goes over the wire, where
+the protocol can report what was applied.
 
 ### Tier 3 — runtime-specific escape hatch (`spring.acp.runtimes.<id>.*`)
 

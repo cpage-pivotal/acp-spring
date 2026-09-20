@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -61,8 +62,22 @@ class ConfigResolverTests {
 	}
 
 	private SessionConfiguration resolve(AgentRuntime runtime, AgentSettings settings) {
-		return new ConfigResolver(runtime, settings.onUnsupported()).apply(client, session, settings)
+		return resolve(runtime, settings, ModelCatalog.none());
+	}
+
+	private SessionConfiguration resolve(AgentRuntime runtime, AgentSettings settings, ModelCatalog catalog) {
+		return new ConfigResolver(runtime, settings.onUnsupported(), catalog).apply(client, session, settings)
 				.block(Duration.ofSeconds(5));
+	}
+
+	/** A provider pointed at an endpoint of the application's own. */
+	private static ProviderSpec byo() {
+		return new ProviderSpec("acme", "openai", URI.create("https://gateway.example.com/team-x/openai"), "k",
+				Map.of());
+	}
+
+	private static ModelCatalog serving(String... models) {
+		return provider -> Optional.of(List.of(models));
 	}
 
 	// --- the good path ----------------------------------------------------------------------
@@ -229,6 +244,37 @@ class ConfigResolverTests {
 	}
 
 	@Test
+	void aMechanismThatFailedDoesNotHideOneThatAlreadySucceeded() {
+		// Measured against codex-acp 1.12: providers/set fails on an SDK field-name mismatch while
+		// the adapter's own config file has been carrying that provider since launch. Reporting it
+		// unsupported would fire on-unsupported=fail on a session that is talking to the right
+		// provider.
+		when(client.getAgentCapabilities()).thenReturn(NegotiatedCapabilities.fromAgent(
+				new AcpSchema.AgentCapabilities(false, null, null, null, new AcpSchema.ProvidersCapabilities(), null)));
+		when(client.setProvider(any())).thenReturn(Mono.error(new IllegalStateException("Invalid params")));
+		AgentRuntime carriedAtLaunch = new FakeRuntime() {
+			@Override
+			public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+				return option == PortableOption.PROVIDER;
+			}
+		};
+
+		SessionConfiguration resolved = resolve(carriedAtLaunch, settings(b -> b.provider(byo())));
+
+		assertThat(resolved.of(PortableOption.PROVIDER).mechanism()).isEqualTo(Mechanism.OUT_OF_BAND);
+	}
+
+	@Test
+	void anAgentThatRejectsAnOptionNobodyCarriedIsStillUnsupported() {
+		advertise(select("model", "model", "a", "a", "b"));
+		when(client.setSessionConfigOption(any())).thenReturn(Mono.error(new IllegalStateException("Invalid params")));
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(), settings(b -> b.model("b")));
+
+		assertThat(resolved.of(PortableOption.MODEL).mechanism()).isEqualTo(Mechanism.UNSUPPORTED);
+	}
+
+	@Test
 	void theResolutionIsRecordedOnTheSessionForTheApplicationToRead() {
 		advertise(select("model", "model", "a", "a", "b"));
 		acceptsConfigOption();
@@ -236,6 +282,82 @@ class ConfigResolverTests {
 		resolve(new FakeRuntime(), settings(b -> b.model("b")));
 
 		assertThat(session.configuration().applied(PortableOption.MODEL)).contains("b");
+	}
+
+	// --- an endpoint of the application's own ------------------------------------------------
+
+	@Test
+	void sendsAModelTheAgentNeverAdvertisedWhenTheApplicationNamedTheEndpoint() {
+		// The agent's list is its own built-in catalogue of vendor models. It cannot contain what a
+		// private gateway serves, so it does not get a vote.
+		advertise(select("model", "model", "gpt-4o", "gpt-4o", "gpt-4o-mini"));
+		acceptsConfigOption();
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(),
+				settings(b -> b.provider(byo()).model("acme/llm-1")), serving("acme/llm-1"));
+
+		assertThat(resolved.of(PortableOption.MODEL).mechanism()).isEqualTo(Mechanism.ENDPOINT);
+		assertThat(resolved.applied(PortableOption.MODEL)).contains("acme/llm-1");
+	}
+
+	@Test
+	void sendsItEvenWhenTheEndpointPublishesNoListing() {
+		// Plenty of gateways serve completions and nothing else. Trusting the application beats
+		// refusing a model that is probably there.
+		advertise(select("model", "model", "gpt-4o", "gpt-4o"));
+		acceptsConfigOption();
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(),
+				settings(b -> b.provider(byo()).model("acme/llm-1")), ModelCatalog.none());
+
+		assertThat(resolved.of(PortableOption.MODEL).mechanism()).isEqualTo(Mechanism.ENDPOINT);
+	}
+
+	@Test
+	void theEndpointsOwnListingIsWhatRefusesAModelInstead() {
+		advertise(select("model", "model", "gpt-4o", "gpt-4o"));
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(),
+				settings(b -> b.provider(byo()).model("acme/llm-2")), serving("acme/llm-1"));
+
+		assertThat(resolved.of(PortableOption.MODEL).mechanism()).isEqualTo(Mechanism.UNSUPPORTED);
+		// The message names what is really being served, not what the agent shipped knowing about.
+		assertThat(resolved.of(PortableOption.MODEL).detail()).contains("acme/llm-1")
+				.contains("https://gateway.example.com/team-x/openai/v1").doesNotContain("gpt-4o");
+		verify(client, never()).setSessionConfigOption(any());
+	}
+
+	@Test
+	void anEndpointThatRefusesAModelStillFailsUnderOnUnsupportedFail() {
+		advertise(select("provider", "provider", "acme", "acme"), select("model", "model", "gpt-4o", "gpt-4o"));
+		acceptsConfigOption();
+		AgentSettings strict = settings(
+				b -> b.provider(byo()).model("acme/llm-2").onUnsupported(OnUnsupported.FAIL));
+
+		assertThatThrownBy(() -> resolve(new FakeRuntime(), strict, serving("acme/llm-1")))
+				.isInstanceOf(UnsupportedAgentOptionException.class).hasMessageContaining("acme/llm-1");
+	}
+
+	@Test
+	void theAdvertisedListStillDecidesWhenNoEndpointWasNamed() {
+		// The guard the whole design rests on: against a vendor the agent knows, an unadvertised
+		// model is still a typo, and still caught before a turn is spent on it.
+		advertise(select("model", "model", "gpt-4o", "gpt-4o"));
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(),
+				settings(b -> b.provider("openai").model("gpt-4-o")), serving("gpt-4-o"));
+
+		assertThat(resolved.of(PortableOption.MODEL).mechanism()).isEqualTo(Mechanism.UNSUPPORTED);
+	}
+
+	@Test
+	void anEndpointDoesNotLicenseInventingModesOrProviders() {
+		advertise(select("mode", "mode", "build", "build"));
+
+		SessionConfiguration resolved = resolve(new FakeRuntime(), settings(b -> b.provider(byo()).mode("plan")),
+				ModelCatalog.none());
+
+		assertThat(resolved.of(PortableOption.MODE).mechanism()).isEqualTo(Mechanism.UNSUPPORTED);
 	}
 
 	private static AcpSchema.SessionConfigSelect select(String id, String category, String current, String... values) {

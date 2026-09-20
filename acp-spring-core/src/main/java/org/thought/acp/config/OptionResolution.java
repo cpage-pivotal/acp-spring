@@ -39,6 +39,13 @@ public record OptionResolution(PortableOption option, String requested, String a
 		/** {@code session/set_config_option} against an option the agent advertised. The good path. */
 		CONFIG_OPTION(true),
 
+		/**
+		 * {@code session/set_config_option} with a value the agent never advertised, because the
+		 * application named an endpoint of its own and the endpoint — not the agent's built-in
+		 * catalogue — is what knows which models exist.
+		 */
+		ENDPOINT(true),
+
 		/** {@code session/set_mode}, for an agent that returns {@code modes} but no mode config option. */
 		SESSION_MODE(true),
 

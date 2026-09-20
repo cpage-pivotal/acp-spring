@@ -1,8 +1,12 @@
 package org.thought.acp.test;
 
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
@@ -15,9 +19,11 @@ import org.thought.acp.client.AgentClientFactory;
 import org.thought.acp.config.AgentSettings;
 import org.thought.acp.config.OnUnsupported;
 import org.thought.acp.config.OptionResolution;
+import org.thought.acp.config.ProviderSpec;
 import org.thought.acp.config.SessionConfiguration;
 import org.thought.acp.config.UnsupportedAgentOptionException;
 import org.thought.acp.event.AgentEvent;
+import org.thought.acp.runtime.AgentLaunchSpec;
 import org.thought.acp.runtime.AgentRuntime;
 import org.thought.acp.runtime.AgentRuntime.PortableOption;
 import org.thought.acp.session.AgentSessions;
@@ -59,8 +65,18 @@ public abstract class AgentRuntimeContract {
 	/** Agents are slow, and a live turn against a hosted model is slower than a local test. */
 	protected static final Duration TURN_TIMEOUT = Duration.ofMinutes(3);
 
+	/**
+	 * An endpoint shaped like the ones platforms hand out — a path prefix, no version segment — and
+	 * unresolvable on purpose, because nothing here connects to it.
+	 */
+	private static final String CONTRACT_ENDPOINT = "https://gateway.example.invalid/team-x/openai";
+
 	@TempDir
 	protected Path workspace;
+
+	/** Where an adapter may write the files its agent reads at startup, per test. */
+	@TempDir
+	protected Path runtimeHome;
 
 	private AgentClient client;
 
@@ -379,6 +395,56 @@ public abstract class AgentRuntimeContract {
 				.user("What number did I ask you to remember? Reply with digits only.").call().content();
 
 		assertThat(recalled).contains("8675309");
+	}
+
+	/**
+	 * An endpoint the application named reaches the agent, one way or another.
+	 *
+	 * <p>The portable claim is not that every agent takes a base URL the same way — Goose splits it
+	 * across two variables, Codex will only read it out of a {@code [model_providers.*]} table,
+	 * OpenCode wants a provider declared in its own JSON — but that naming one is never silently
+	 * dropped. An adapter that ignored {@code spring.acp.provider.base-url} would leave the
+	 * application talking to a vendor it did not choose, with a key that does not work there, and
+	 * nothing in the configuration to say so.
+	 *
+	 * <p>The second assertion is the one that keeps {@code on-unsupported} honest:
+	 * {@link AgentRuntime#appliedOutOfBand} is a claim about what launching did, and it must be the
+	 * same answer as what launching actually wrote. An adapter that over-claims turns a failed model
+	 * request into a silent default; one that under-claims fails a configuration that is working.
+	 *
+	 * <p>No agent is started: this is about what the adapter hands the process.
+	 */
+	@Test
+	@DisplayName("an endpoint the application named is carried to the agent, and declared honestly")
+	void anEndpointOfTheApplicationsOwnIsCarriedToTheAgent() throws Exception {
+		String model = "acp-spring-contract-model";
+		AgentSettings settings = AgentSettings.builder(runtime().id(), workspace).runtimeHome(runtimeHome)
+				.provider(new ProviderSpec(null, "openai", URI.create(CONTRACT_ENDPOINT), "sk-contract", Map.of()))
+				.model(model).build();
+
+		runtime().provision(settings);
+		String carried = String.join("\n", carriedBy(runtime().launch(settings), settings));
+
+		assertThat(carried).contains("gateway.example.invalid/team-x/openai");
+		assertThat(runtime().appliedOutOfBand(PortableOption.MODEL, settings))
+				.describedAs("appliedOutOfBand(MODEL) must say whether launching really carried the model")
+				.isEqualTo(carried.contains(model));
+	}
+
+	/** Everything the adapter hands the agent that a human could read: its environment and its files. */
+	private List<String> carriedBy(AgentLaunchSpec launch, AgentSettings settings) throws IOException {
+		List<String> carried = new java.util.ArrayList<>(switch (launch) {
+			case AgentLaunchSpec.Stdio stdio -> stdio.env().values();
+			case AgentLaunchSpec.WebSocket socket -> socket.process().env().values();
+		});
+		if (Files.isDirectory(settings.runtimeHome())) {
+			try (java.util.stream.Stream<Path> files = Files.walk(settings.runtimeHome())) {
+				for (Path file : files.filter(Files::isRegularFile).toList()) {
+					carried.add(Files.readString(file));
+				}
+			}
+		}
+		return carried;
 	}
 
 	private SessionConfiguration configurationOf(AgentClient agent, String session) {

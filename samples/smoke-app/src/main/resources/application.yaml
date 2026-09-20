@@ -10,6 +10,17 @@ spring:
     # machine's credentials are guaranteed to reach.
     on-unsupported: warn
 
+    # An endpoint of your own — a platform gateway, a proxy, a model server you run. Four
+    # properties, no runtime-specific block: the endpoint's own /models listing is what validates
+    # `model` here, so an id no agent has ever heard of is applied rather than refused.
+    #
+    # provider:
+    #   id: openai
+    #   api-type: openai
+    #   base-url: https://gateway.example.com/team-x/openai
+    #   api-key: ${GENAI_API_KEY}
+    # model: deepseek-ai/DeepSeek-V4-Flash-0731
+
     timeout: 3m
 
     # How to answer an agent that asks permission to use a tool. Worth knowing what this does and
