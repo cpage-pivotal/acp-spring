@@ -41,14 +41,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * phrases an answer. A test that a runtime could only pass by behaving like Goose would make the
  * suite a Goose conformance suite.
  *
- * <p>To add a runtime: extend this, return the adapter and a model it advertises, and gate the class
- * on the agent being installed.
+ * <p>To add a runtime: extend this, return the adapter, name the cheap end of its catalog, and gate
+ * the class on the agent being installed. The model itself is discovered, not declared.
  *
  * <pre>{@code
  * @EnabledIf("available")
  * class OpenCodeContractTests extends AgentRuntimeContract {
  *     protected AgentRuntime runtime() { return new OpenCodeRuntime(); }
- *     protected String supportedModel() { return "openai/gpt-5.4-mini"; }
+ *     protected List<String> preferredModels() { return List.of("openai/gpt-5.4-mini"); }
  * }
  * }</pre>
  */
@@ -68,19 +68,44 @@ public abstract class AgentRuntimeContract {
 	/**
 	 * A model this agent really offers, spelled the way an application would spell it.
 	 *
-	 * <p>Discovered rather than hardcoded, and specifically the model the agent is <em>already</em>
-	 * configured with. Pinning one per agent would put three model catalogs into this source file and
-	 * break whenever a vendor retires a name. Picking any other advertised model is worse than it
-	 * sounds: an agent advertises what its vendor sells, not what this machine's key can reach, and the
-	 * difference surfaces inside the turn, as a provider error, which reads like a bug in this library.
-	 * A system property overrides.
+	 * <p>Discovered rather than hardcoded. Pinning one per agent would put three model catalogs into
+	 * this source file and break whenever a vendor retires a name, so the order is: an explicit system
+	 * property, then the first of {@link #preferredModels()} the agent actually advertises, then the
+	 * model the agent is <em>already</em> configured with.
+	 *
+	 * <p>That last fallback matters: an agent advertises what its vendor sells, not what this
+	 * machine's key can reach, and the difference surfaces inside the turn, as a provider error, which
+	 * reads like a bug in this library. A preference is therefore only ever taken from the advertised
+	 * list, and never invented.
 	 */
 	protected String supportedModel() {
-		return System.getProperty("spring-acp.test." + runtime().id() + ".model",
-				AgentProbe.of(runtime()).currentModel().orElseThrow(
-						() -> new IllegalStateException("runtime '" + runtime().id()
-								+ "' advertised no models, so there is nothing portable to negotiate over; set "
-								+ "-Dspring-acp.test." + runtime().id() + ".model to name one")));
+		String requested = System.getProperty("spring-acp.test." + runtime().id() + ".model");
+		if (requested != null && !requested.isBlank()) {
+			return requested;
+		}
+		AgentProbe probe = AgentProbe.of(runtime());
+		return preferredModels().stream().filter(probe.models()::contains).findFirst()
+				.or(probe::currentModel)
+				.orElseThrow(() -> new IllegalStateException("runtime '" + runtime().id()
+						+ "' advertised no models, so there is nothing portable to negotiate over; set "
+						+ "-Dspring-acp.test." + runtime().id() + ".model to name one"));
+	}
+
+	/**
+	 * Models this suite would rather spend its turns on, most preferred first.
+	 *
+	 * <p>The contract runs several live turns per runtime, and nothing it asserts needs a frontier
+	 * model: the questions are whether a turn terminates exactly once, whether cancellation reaches
+	 * the agent, and whether a permission denial is honoured. A runtime names the cheap end of its own
+	 * catalog here — cheap enough to be worth the saving, capable enough to still follow an
+	 * instruction and call a tool — and any name the agent does not advertise is simply skipped, so
+	 * this list going stale costs nothing but the saving.
+	 *
+	 * <p>This is a testing economy, not a recommendation: nothing here reaches
+	 * {@code spring.acp.model} or any runtime default. An application picks its own model.
+	 */
+	protected List<String> preferredModels() {
+		return List.of();
 	}
 
 	/** A provider id to qualify {@link #supportedModel()} with, when the agent needs one. */

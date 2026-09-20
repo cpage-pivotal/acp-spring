@@ -24,6 +24,19 @@ class CodexContractTests extends AgentRuntimeContract {
 	}
 
 	/**
+	 * The cheap end of the catalog Codex advertised when this was written.
+	 *
+	 * <p>Nothing the contract asserts needs a frontier model — it is measuring turn termination,
+	 * cancellation and permission denial, not answer quality — and the suite runs several live turns
+	 * per build. If the account's Codex stops offering this name the base class falls back to the
+	 * model Codex is already configured with, so the suite keeps running and only the saving lapses.
+	 */
+	@Override
+	protected java.util.List<String> preferredModels() {
+		return java.util.List.of("gpt-5.6-luna");
+	}
+
+	/**
 	 * {@code plan}, not {@code read-only}.
 	 *
 	 * <p>Measured: {@code mode: read-only} — "always ask to edit external files" — lets Codex write
