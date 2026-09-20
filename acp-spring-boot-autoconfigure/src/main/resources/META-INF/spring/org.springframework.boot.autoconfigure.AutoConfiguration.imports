@@ -1,0 +1,3 @@
+org.thought.acp.boot.AcpAutoConfiguration
+org.thought.acp.boot.AcpWebFluxAutoConfiguration
+org.thought.acp.boot.AcpChatModelAutoConfiguration

@@ -1,4 +1,4 @@
-# spring-acp — a Spring Data-style abstraction over ACP coding agents
+# acp-spring — a Spring Data-style abstraction over ACP coding agents
 
 Status: **M1, M2, M3 and M4 built and verified**. Successor to the `java-wrapper` module of
 [`goose-buildpack`](https://github.com/cpage-pivotal/goose-buildpack).
@@ -19,7 +19,7 @@ for now; this plan covers the library and the configuration model only.
 
 Three findings, verified this session:
 
-1. **`java-wrapper` is already an ACP client.** `java-wrapper/src/main/java/org/tanzu/goose/cf/acp/`
+1. **`java-wrapper` is already an ACP client.** `java-wrapper/src/main/java/org/thought/goose/cf/acp/`
    speaks JSON-RPC ACP v1 — `initialize`, `session/new`, `session/prompt`, `session/cancel`,
    `session/set_config_option`, `session/close`, inbound `session/request_permission`. Its own
    javadoc calls `AcpTransport` a seam "so everything above it can be tested without a socket," and
@@ -85,7 +85,7 @@ is Goose-specific; every other runtime is stdio-only, so both transports must be
         ▼
   AgentClientPool ── N connections, sticky sessions, idle sweep, replacement
         ▼
-  spring-acp-core ──────────────────────────────────────────────┐
+  acp-spring-core ──────────────────────────────────────────────┐
      AgentClient impl · SessionRegistry · ConfigResolver (3-tier) │
      PermissionPolicy · WorkspaceJail · WorkspaceFileSystem       │
      WorkspaceTerminals · AgentProcessSupervisor · AgentEvent     │
@@ -104,7 +104,7 @@ is Goose-specific; every other runtime is stdio-only, so both transports must be
                                  AgentRegistry · AgentInstaller
                                  (any of 41 published agents)
 
-  Also on top of AgentClient: spring-acp-spring-ai (AcpChatModel),
+  Also on top of AgentClient: acp-spring-ai (AcpChatModel),
   and Micrometer observations per turn and per tool call.
 ```
 
@@ -116,20 +116,20 @@ Spring AI `ChatModel` adapter; config bindable from both `application.yaml` and 
 
 ## Module layout
 
-Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org.tanzu.acp` — do
+Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org.thought.acp` — do
 **not** squat `org.springframework`. Packages organized by feature, not layer.
 
 | Module | Contents |
 | --- | --- |
-| `spring-acp-core` | No Spring types on the classpath-required path. `org.tanzu.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
-| `spring-acp-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
-| `spring-acp-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
-| `spring-acp-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
-| `spring-acp-runtime-registry` | `AgentRegistry`, `AgentInstaller`, `Archives`, `RegistryAgentRuntime` — any agent the ACP registry publishes, with no adapter |
-| `spring-acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
-| `spring-acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
-| `spring-acp-spring-ai` | `AcpChatModel implements ChatModel`, `AcpChatOptions` — Spring AI 2.0.x |
-| `spring-acp-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
+| `acp-spring-core` | No Spring types on the classpath-required path. `org.thought.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
+| `acp-spring-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
+| `acp-spring-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
+| `acp-spring-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
+| `acp-spring-runtime-registry` | `AgentRegistry`, `AgentInstaller`, `Archives`, `RegistryAgentRuntime` — any agent the ACP registry publishes, with no adapter |
+| `acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
+| `acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
+| `acp-spring-ai` | `AcpChatModel implements ChatModel`, `AcpChatOptions` — Spring AI 2.0.x |
+| `acp-spring-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
 
 Follow the wrapper's proven packaging trick: declare `spring-boot-*` dependencies `<optional>true</optional>`
 in core so the library works without Spring on the classpath, and keep a Spring-free settings mirror
@@ -158,10 +158,10 @@ spring:
     on-unsupported: warn        # fail | warn | ignore
 
     provider:                   # → config option, else providers/set, else env
-      id: tanzu_ai
+      id: acme_ai
       api-type: openai
-      base-url: ${TANZU_AI_ENDPOINT}
-      api-key: ${TANZU_AI_API_KEY}
+      base-url: ${ACME_AI_ENDPOINT}
+      api-key: ${ACME_AI_API_KEY}
 
     mcp-servers:                # → session/new mcpServers[] verbatim
       - name: internal-tools
@@ -207,7 +207,7 @@ spring:
     registry:                   # only consulted for a runtime no adapter claims
       enabled: true
       url: https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json
-      cache: ${user.home}/.spring-acp/agents
+      cache: ${user.home}/.acp-spring/agents
       refresh: 24h
       offline: false            # bundled snapshot and whatever is already installed
       require-checksum: true    # refuse an agent the registry publishes no sha256 for
@@ -961,7 +961,7 @@ green: 137 run anywhere, 33 drive real agents and skip when one is unusable.
 | 5 | `RuntimeOptions`, `ProviderSpec`, `ProviderEnvironment`, `SessionConfiguration` | `core/config` |
 | 6 | `CodexRuntime` (npx, `CODEX_HOME`, TOML) and `OpenCodeRuntime` (`opencode.json`) | `runtime-codex`, `runtime-opencode` |
 | 7 | `AgentClient.openSession`, per-session rather than per-turn negotiation | `core/client` |
-| 8 | `ScriptedAgent` and `AgentRuntimeContract` — the TCK | `spring-acp-test` |
+| 8 | `ScriptedAgent` and `AgentRuntimeContract` — the TCK | `acp-spring-test` |
 | 9 | Multi-runtime smoke app, three agents on one classpath | `samples/smoke-app` |
 
 The completion test, run three times with nothing changed but one property:
@@ -1023,7 +1023,7 @@ drive real agents and skip when one is unusable.
 | 6 | `AgentExecutor` + `LegacyEventFormat`, the `GooseExecutor` migration path | `core/executor` |
 | 7 | `GooseRuntime` over `goose serve`, generated secret, supervised sidecar | `runtime-goose` |
 | 8 | `AgentsConfigDataLoader`, `AcpController`, `AcpWebFluxAutoConfiguration`, pool/fs/terminal properties | `spring-boot-autoconfigure` |
-| 9 | Three contract tests, the security suites, and session operations in `ScriptedAgent` | `spring-acp-test`, `core` |
+| 9 | Three contract tests, the security suites, and session operations in `ScriptedAgent` | `acp-spring-test`, `core` |
 
 The served transport, verified end to end against a real `goose serve`: handshake, a turn that
 terminates exactly once, a named session keeping context across turns over the socket, and the
@@ -1159,7 +1159,7 @@ Eight things the build taught us that the plan had not anticipated:
 ## Verification
 
 391 tests. `mvn test` runs all of them; the live ones skip themselves when an agent is not usable,
-and two opt in with `-Dspring-acp.test.registry.live=true` because they download 24 MB.
+and two opt in with `-Dacp-spring.test.registry.live=true` because they download 24 MB.
 
 **Fast tests (344)** — turn semantics, session registry concurrency and permit accounting, event
 mapping, permission policy, URL/header/env/secret validation, tier-3 normalization, model matching,
@@ -1185,7 +1185,7 @@ scripted agent can also be told to misbehave the way real agents do —
 `echoesProtocolVersion(true)` reproduces it answering a version nobody offered — so the core's
 defenses are testable without waiting for a vendor to ship the bug again.
 
-**Runtime conformance (42 = 14 × 3)** — `AgentRuntimeContract` in `spring-acp-test`, extended once per
+**Runtime conformance (42 = 14 × 3)** — `AgentRuntimeContract` in `acp-spring-test`, extended once per
 adapter. **This suite, not the `AgentRuntime` interface, is the definition of the abstraction:** an
 interface only constrains signatures, and three adapters can satisfy one and still behave differently
 enough that an application cannot move between them. It asserts only what ACP genuinely standardizes —
@@ -1258,18 +1258,18 @@ Still planned:
 ## Repository layout
 
 ```
-spring-acp/
+acp-spring/
 ├── pom.xml                                  # reactor
 ├── README.md
 ├── docs/design.md                           # this document
-├── spring-acp-core/
-├── spring-acp-runtime-goose/
-├── spring-acp-runtime-codex/
-├── spring-acp-runtime-opencode/
-├── spring-acp-runtime-registry/
-├── spring-acp-spring-boot-autoconfigure/
-├── spring-acp-spring-boot-starter/
-├── spring-acp-spring-ai/
-├── spring-acp-test/
+├── acp-spring-core/
+├── acp-spring-runtime-goose/
+├── acp-spring-runtime-codex/
+├── acp-spring-runtime-opencode/
+├── acp-spring-runtime-registry/
+├── acp-spring-boot-autoconfigure/
+├── acp-spring-boot-starter/
+├── acp-spring-ai/
+├── acp-spring-test/
 └── samples/smoke-app/
 ```

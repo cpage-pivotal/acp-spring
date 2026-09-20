@@ -1,4 +1,4 @@
-# spring-acp
+# acp-spring
 
 A Spring library that talks to **any** [Agent Client Protocol](https://agentclientprotocol.com)
 coding agent — Goose, Codex, OpenCode, and others — behind one programming model and one
@@ -158,7 +158,7 @@ method, rather than failing on the wire with a code the caller has to interpret.
 ## An agent nobody wrote an adapter for
 
 Set `spring.acp.runtime` to any of the 41 agents the ACP registry publishes, add
-`spring-acp-runtime-registry`, and the agent is resolved from a cached catalogue snapshot,
+`acp-spring-runtime-registry`, and the agent is resolved from a cached catalogue snapshot,
 downloaded, checked against its published SHA-256 and launched:
 
 ```
@@ -183,7 +183,7 @@ ChatResponse response = chatModel.call(new Prompt("Review the pending changes",
         AcpChatOptions.builder().session("review-123").mode("plan").build()));
 ```
 
-Add `spring-acp-spring-ai` and the agent appears wherever a Spring AI application already looks for
+Add `acp-spring-ai` and the agent appears wherever a Spring AI application already looks for
 a model. It is an adapter rather than a wrapper, because the two models disagree about who owns the
 conversation: a chat completion is stateless and resends the history every call, while an ACP session
 holds it — along with a file tree, a plan and tool results no message list can carry. So a named

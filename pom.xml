@@ -5,12 +5,12 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.tanzu.acp</groupId>
-    <artifactId>spring-acp</artifactId>
+    <groupId>org.thought.acp</groupId>
+    <artifactId>acp-spring</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>Spring ACP</name>
+    <name>ACP Spring</name>
     <description>Spring abstraction over Agent Client Protocol coding agents</description>
 
     <licenses>
@@ -33,15 +33,15 @@
     </properties>
 
     <modules>
-        <module>spring-acp-core</module>
-        <module>spring-acp-runtime-goose</module>
-        <module>spring-acp-runtime-codex</module>
-        <module>spring-acp-runtime-opencode</module>
-        <module>spring-acp-runtime-registry</module>
-        <module>spring-acp-spring-boot-autoconfigure</module>
-        <module>spring-acp-spring-boot-starter</module>
-        <module>spring-acp-spring-ai</module>
-        <module>spring-acp-test</module>
+        <module>acp-spring-core</module>
+        <module>acp-spring-runtime-goose</module>
+        <module>acp-spring-runtime-codex</module>
+        <module>acp-spring-runtime-opencode</module>
+        <module>acp-spring-runtime-registry</module>
+        <module>acp-spring-boot-autoconfigure</module>
+        <module>acp-spring-boot-starter</module>
+        <module>acp-spring-ai</module>
+        <module>acp-spring-test</module>
         <module>samples/smoke-app</module>
     </modules>
 
@@ -76,48 +76,48 @@
             </dependency>
 
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-core</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-spring-boot-autoconfigure</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-boot-autoconfigure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-runtime-goose</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-runtime-goose</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-spring-boot-starter</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-runtime-codex</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-runtime-codex</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-runtime-opencode</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-runtime-opencode</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-runtime-registry</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-runtime-registry</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-spring-ai</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.tanzu.acp</groupId>
-                <artifactId>spring-acp-test</artifactId>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -63,4 +63,4 @@ spring:
 
 logging:
   level:
-    org.tanzu.acp: INFO
+    org.thought.acp: INFO

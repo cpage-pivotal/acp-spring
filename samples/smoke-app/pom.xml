@@ -6,20 +6,20 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.tanzu.acp</groupId>
-        <artifactId>spring-acp</artifactId>
+        <groupId>org.thought.acp</groupId>
+        <artifactId>acp-spring</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>spring-acp-smoke-app</artifactId>
-    <name>Spring ACP Smoke App</name>
+    <artifactId>acp-spring-smoke-app</artifactId>
+    <name>ACP Spring Smoke App</name>
     <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
     <dependencies>
         <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-spring-boot-starter</artifactId>
+            <groupId>org.thought.acp</groupId>
+            <artifactId>acp-spring-boot-starter</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -31,12 +31,12 @@
           on one classpath, and nothing but spring.acp.runtime chooses between them.
         -->
         <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-runtime-codex</artifactId>
+            <groupId>org.thought.acp</groupId>
+            <artifactId>acp-spring-runtime-codex</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-runtime-opencode</artifactId>
+            <groupId>org.thought.acp</groupId>
+            <artifactId>acp-spring-runtime-opencode</artifactId>
         </dependency>
 
         <!--
@@ -45,12 +45,12 @@
           brings the ObservationRegistry that turns every turn into a timer and a span.
         -->
         <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-runtime-registry</artifactId>
+            <groupId>org.thought.acp</groupId>
+            <artifactId>acp-spring-runtime-registry</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.tanzu.acp</groupId>
-            <artifactId>spring-acp-spring-ai</artifactId>
+            <groupId>org.thought.acp</groupId>
+            <artifactId>acp-spring-ai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
