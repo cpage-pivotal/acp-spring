@@ -12,6 +12,7 @@ import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.thought.acp.config.McpServerSpec;
+import org.thought.acp.config.McpSettings;
 import org.thought.acp.config.OnUnsupported;
 import org.thought.acp.config.PoolSettings;
 import org.thought.acp.config.ProviderSpec;
@@ -63,6 +64,8 @@ public class AcpProperties {
 	/** MCP servers offered to every session. Passed through ACP verbatim. */
 	private List<McpServer> mcpServers = new ArrayList<>();
 
+	private final Mcp mcp = new Mcp();
+
 	private final Permissions permissions = new Permissions();
 
 	private final FileSystem filesystem = new FileSystem();
@@ -91,6 +94,10 @@ public class AcpProperties {
 
 	public List<McpServerSpec> toMcpServerSpecs() {
 		return mcpServers.stream().map(McpServer::toSpec).toList();
+	}
+
+	public McpSettings toMcpSettings() {
+		return new McpSettings(mcp.getOnServerFailure(), mcp.getDetectTimeout());
 	}
 
 	public PermissionPolicy toPermissionPolicy() {
@@ -631,6 +638,38 @@ public class AcpProperties {
 		}
 	}
 
+	/**
+	 * What to do about an MCP server the agent reports it could not load.
+	 *
+	 * <p>Only Goose can report one at all today, and only for an agent this application started;
+	 * everywhere else these settings are inert, because nothing ever reports a failure. See "MCP
+	 * servers fail silently" in {@code docs/design.md}.
+	 */
+	public static class Mcp {
+
+		/** {@code warn} logs it and opens the session anyway; {@code fail} refuses the session. */
+		private McpSettings.OnServerFailure onServerFailure = McpSettings.OnServerFailure.WARN;
+
+		/** How long session opening waits for such a report. Only paid when {@code fail}. */
+		private Duration detectTimeout = McpSettings.DEFAULT_DETECT_TIMEOUT;
+
+		public McpSettings.OnServerFailure getOnServerFailure() {
+			return onServerFailure;
+		}
+
+		public void setOnServerFailure(McpSettings.OnServerFailure onServerFailure) {
+			this.onServerFailure = onServerFailure;
+		}
+
+		public Duration getDetectTimeout() {
+			return detectTimeout;
+		}
+
+		public void setDetectTimeout(Duration detectTimeout) {
+			this.detectTimeout = detectTimeout;
+		}
+	}
+
 	/** One MCP server. {@code url} selects HTTP transport; {@code command} selects stdio. */
 	public static class McpServer {
 
@@ -759,6 +798,10 @@ public class AcpProperties {
 
 	public void setOnUnsupported(OnUnsupported onUnsupported) {
 		this.onUnsupported = onUnsupported;
+	}
+
+	public Mcp getMcp() {
+		return mcp;
 	}
 
 	public List<McpServer> getMcpServers() {

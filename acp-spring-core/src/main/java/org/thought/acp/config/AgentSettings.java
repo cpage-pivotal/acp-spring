@@ -32,7 +32,8 @@ import org.thought.acp.workspace.TerminalAccess;
  * the other tiers are configuring is held in.
  */
 public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Duration timeout, String model,
-		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, PermissionPolicy permissions,
+		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, McpSettings mcp,
+		PermissionPolicy permissions,
 		FileSystemAccess filesystem, TerminalAccess terminal, OnUnsupported onUnsupported, Duration sessionTtl,
 		PoolSettings pool, RuntimeOptions runtimeOptions, ProtocolSettings protocol) {
 
@@ -59,6 +60,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		sessionTtl = sessionTtl == null ? DEFAULT_SESSION_TTL : sessionTtl;
 		pool = pool == null ? PoolSettings.defaults() : pool;
 		mcpServers = mcpServers == null ? List.of() : List.copyOf(mcpServers);
+		mcp = mcp == null ? McpSettings.defaults() : mcp;
 		permissions = permissions == null ? PermissionPolicy.deny() : permissions;
 		filesystem = filesystem == null ? FileSystemAccess.none() : filesystem;
 		terminal = terminal == null ? TerminalAccess.disabled() : terminal;
@@ -95,7 +97,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		}
 		return new AgentSettings(runtime, workspace, runtimeHome, options.findTimeout().orElse(timeout),
 				options.findModel().orElse(model), options.findProvider().map(provider::withId).orElse(provider),
-				options.findMode().orElse(mode), mcpServers, permissions, filesystem, terminal, onUnsupported,
+				options.findMode().orElse(mode), mcpServers, mcp, permissions, filesystem, terminal, onUnsupported,
 				sessionTtl, pool, runtimeOptions, protocol);
 	}
 
@@ -116,6 +118,8 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		private String mode;
 
 		private List<McpServerSpec> mcpServers = List.of();
+
+		private McpSettings mcp = McpSettings.defaults();
 
 		private PermissionPolicy permissions = PermissionPolicy.deny();
 
@@ -172,6 +176,11 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 			return this;
 		}
 
+		public Builder mcp(McpSettings mcp) {
+			this.mcp = mcp;
+			return this;
+		}
+
 		public Builder permissions(PermissionPolicy permissions) {
 			this.permissions = permissions;
 			return this;
@@ -217,7 +226,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		}
 
 		public AgentSettings build() {
-			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers,
+			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers, mcp,
 					permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions, protocol);
 		}
 	}

@@ -12,6 +12,7 @@ import org.thought.acp.config.AdvertisedSessionConfig;
 import org.thought.acp.config.AgentOptions;
 import org.thought.acp.config.AgentSettings;
 import org.thought.acp.config.ConfigResolver;
+import org.thought.acp.config.McpServerSpec;
 import org.thought.acp.config.SessionConfiguration;
 import org.thought.acp.event.AgentEvent;
 import org.thought.acp.observation.AgentObservations;
@@ -65,6 +66,9 @@ public final class DefaultAgentClient implements AgentClient {
 
 	private final Runnable onClose;
 
+	/** Set once by the factory before this client is handed out, or left null. */
+	private volatile org.thought.acp.process.AgentLogWatcher watcher;
+
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
 			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
 			AcpSchema.InitializeResponse initialized, java.util.function.BooleanSupplier alive, Runnable onClose) {
@@ -92,6 +96,23 @@ public final class DefaultAgentClient implements AgentClient {
 		this.alive = alive;
 		this.onClose = onClose == null ? () -> {
 		} : onClose;
+	}
+
+	/**
+	 * Gives this client the watcher on the agent's own log.
+	 *
+	 * <p>Not a constructor parameter because it is optional, runtime-specific and already the
+	 * eleventh thing this class is handed; set once, by {@code AgentClientFactory}, before anything
+	 * can call {@link #notices()}.
+	 */
+	void watch(org.thought.acp.process.AgentLogWatcher watcher) {
+		this.watcher = watcher;
+	}
+
+	@Override
+	public java.util.List<org.thought.acp.runtime.AgentNotice> notices() {
+		org.thought.acp.process.AgentLogWatcher current = watcher;
+		return current == null ? List.of() : current.notices();
 	}
 
 	@Override
@@ -196,7 +217,10 @@ public final class DefaultAgentClient implements AgentClient {
 	 */
 	private AgentSession openSession(String name, AgentSettings effective) {
 		AtomicReference<AdvertisedSessionConfig> advertised = new AtomicReference<>();
+		java.util.concurrent.atomic.AtomicBoolean opened = new java.util.concurrent.atomic.AtomicBoolean();
 		AgentSession session = sessions.resolve(name, n -> {
+			opened.set(true);
+			logMcpServers(effective, "session/new");
 			AcpSchema.NewSessionResponse response = acp
 					.newSession(new AcpSchema.NewSessionRequest(effective.workspace().toString(),
 							effective.mcpServers().stream().map(m -> m.toAcp()).toList()))
@@ -211,8 +235,67 @@ public final class DefaultAgentClient implements AgentClient {
 		if (advertised.get() != null) {
 			session.advertised(advertised.get());
 		}
+		if (opened.get()) {
+			failIfAnMcpServerDidNotLoad(name, session, effective);
+		}
 		configure(session, effective);
 		return session;
+	}
+
+	/**
+	 * Refuses a session whose MCP servers the agent says it could not load.
+	 *
+	 * <p>Off unless the application asks for it, and it can only ever act on a report the agent
+	 * actually made — silence opens the session, because silence is the normal case and the whole
+	 * point of the feature is that this library never infers an MCP failure it was not told about.
+	 *
+	 * <p>The wait is what makes it reliable rather than a coin toss: the agent writes the line and
+	 * answers {@code session/new} within the same tenth of a second, in no guaranteed order. The
+	 * session is closed on the way out, because an application that asked to fail did not ask to
+	 * leave a half-equipped session open on the agent.
+	 *
+	 * <p>Only ever on the turn that opened the session. A named session is resolved again on every
+	 * prompt, and waiting out the detection window each time would charge every later turn for a
+	 * report that can only arrive when the servers are first handed over.
+	 */
+	private void failIfAnMcpServerDidNotLoad(String name, AgentSession session, AgentSettings effective) {
+		org.thought.acp.process.AgentLogWatcher current = watcher;
+		if (current == null || effective.mcpServers().isEmpty()
+				|| effective.mcp().onServerFailure() != org.thought.acp.config.McpSettings.OnServerFailure.FAIL) {
+			return;
+		}
+		for (org.thought.acp.config.McpServerSpec server : effective.mcpServers()) {
+			Optional<org.thought.acp.runtime.AgentNotice> failure = current.awaitNotice(server.name(),
+					effective.mcp().detectTimeout());
+			if (failure.isEmpty()) {
+				continue;
+			}
+			sessions.remove(name);
+			closeRemote(session.sessionId());
+			throw new AgentClientException("Agent '" + runtime.id() + "' could not load MCP server '"
+					+ server.name() + "', so this session would have run without its tools; the agent reported: "
+					+ failure.get().detail());
+		}
+	}
+
+	/**
+	 * Names the MCP servers this session asks the agent to connect to.
+	 *
+	 * <p>At INFO on purpose, and not something the library can do better. An agent that fails to
+	 * connect to an MCP server reports nothing over ACP — {@code session/new} succeeds, no
+	 * {@code session/update} is sent, and on goose 1.51 not even a line on stderr — so the application
+	 * gets a working session whose model silently has no tools, and the only symptom is the model
+	 * saying so in prose. This cannot detect that. It does put what was requested in the log beside
+	 * it, which is most of the distance to the diagnosis. See "MCP servers fail silently" in
+	 * {@code docs/design.md}.
+	 */
+	private static void logMcpServers(AgentSettings effective, String method) {
+		if (effective.mcpServers().isEmpty() || !logger.isInfoEnabled()) {
+			return;
+		}
+		logger.info("Handing {} MCP server(s) to the agent on {}: {}. The agent does not report back "
+				+ "whether it connected to them.", effective.mcpServers().size(), method,
+				effective.mcpServers().stream().map(McpServerSpec::describe).toList());
 	}
 
 	/**

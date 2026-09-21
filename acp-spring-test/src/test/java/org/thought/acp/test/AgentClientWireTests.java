@@ -51,6 +51,23 @@ class AgentClientWireTests {
 		return AgentClientFactory.connect(new ScriptedRuntime(), settings, agent.transport());
 	}
 
+	private AgentClient connect(ScriptedAgent agent, AgentSettings settings,
+			org.thought.acp.process.AgentLogWatcher watcher) {
+		return AgentClientFactory.connect(new ScriptedRuntime(), settings, agent.transport(),
+				org.thought.acp.observation.AgentObservations.NONE, watcher);
+	}
+
+	/** A watcher over a log written by hand, standing in for one the agent wrote. */
+	private org.thought.acp.process.AgentLogWatcher watcher(java.nio.file.Path logs) {
+		org.thought.acp.process.AgentLogWatcher watcher = new org.thought.acp.process.AgentLogWatcher(logs,
+				line -> line.startsWith("FAILED ")
+						? java.util.Optional.of(org.thought.acp.runtime.AgentNotice
+								.warning(line.substring(7).split(" ")[0], line))
+						: java.util.Optional.empty());
+		watcher.start();
+		return watcher;
+	}
+
 	// --- protocol version negotiation -------------------------------------------------------
 
 	@Test
@@ -231,6 +248,90 @@ class AgentClientWireTests {
 						assertThat(http.url()).isEqualTo("https://tools.example.com/mcp");
 					});
 			assertThat(agent.newSessions().get(0).cwd()).isEqualTo(workspace.toString());
+		}
+	}
+
+	@Test
+	void anMcpServerTheAgentCouldNotLoadFailsTheSessionWhenTheApplicationAsksItTo() throws java.io.IOException {
+		// The failure this whole path exists for: the agent answers session/new normally and says
+		// nothing over the wire, so the only evidence is the line it wrote to its own log.
+		java.nio.file.Path logs = java.nio.file.Files.createDirectories(workspace.resolve("logs"));
+		java.nio.file.Files.writeString(logs.resolve("agent.log"), "FAILED finops-mcp refused the connection\n");
+
+		McpServerSpec server = new McpServerSpec.Http("finops-mcp",
+				java.net.URI.create("https://tools.example.com/mcp"), Map.of());
+		AgentSettings settings = settings().mcpServers(List.of(server))
+				.mcp(new org.thought.acp.config.McpSettings(
+						org.thought.acp.config.McpSettings.OnServerFailure.FAIL, Duration.ofSeconds(2)))
+				.build();
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				org.thought.acp.process.AgentLogWatcher watcher = watcher(logs);
+				AgentClient client = connect(agent, settings, watcher)) {
+
+			assertThatThrownBy(() -> client.prompt().session("s").user("hi").call())
+					.hasMessageContaining("finops-mcp").hasMessageContaining("refused the connection");
+			assertThat(client.notices()).isNotEmpty();
+		}
+	}
+
+	@Test
+	void aFailureAboutSomeOtherServerDoesNotFailThisSession() throws java.io.IOException {
+		java.nio.file.Path logs = java.nio.file.Files.createDirectories(workspace.resolve("logs"));
+		java.nio.file.Files.writeString(logs.resolve("agent.log"), "FAILED some-other-mcp refused the connection\n");
+
+		McpServerSpec server = new McpServerSpec.Http("finops-mcp",
+				java.net.URI.create("https://tools.example.com/mcp"), Map.of());
+		AgentSettings settings = settings().mcpServers(List.of(server))
+				.mcp(new org.thought.acp.config.McpSettings(
+						org.thought.acp.config.McpSettings.OnServerFailure.FAIL, Duration.ofMillis(250)))
+				.build();
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("done").build();
+				org.thought.acp.process.AgentLogWatcher watcher = watcher(logs);
+				AgentClient client = connect(agent, settings, watcher)) {
+
+			assertThat(client.prompt().session("s").user("hi").call().content()).isEqualTo("done");
+		}
+	}
+
+	@Test
+	void theDefaultIsToOpenTheSessionAndLetTheApplicationReadTheNotice() throws java.io.IOException {
+		java.nio.file.Path logs = java.nio.file.Files.createDirectories(workspace.resolve("logs"));
+		java.nio.file.Files.writeString(logs.resolve("agent.log"), "FAILED finops-mcp refused the connection\n");
+
+		McpServerSpec server = new McpServerSpec.Http("finops-mcp",
+				java.net.URI.create("https://tools.example.com/mcp"), Map.of());
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("done").build();
+				org.thought.acp.process.AgentLogWatcher watcher = watcher(logs);
+				AgentClient client = connect(agent, settings().mcpServers(List.of(server)).build(), watcher)) {
+			watcher.poll();
+
+			assertThat(client.prompt().session("s").user("hi").call().content()).isEqualTo("done");
+			assertThat(client.notices()).singleElement()
+					.satisfies(notice -> assertThat(notice.subject()).isEqualTo("finops-mcp"));
+		}
+	}
+
+	@Test
+	void anAgentThatReportsNothingOpensTheSessionEvenUnderFail() throws java.io.IOException {
+		java.nio.file.Path logs = java.nio.file.Files.createDirectories(workspace.resolve("logs"));
+
+		McpServerSpec server = new McpServerSpec.Http("finops-mcp",
+				java.net.URI.create("https://tools.example.com/mcp"), Map.of());
+		AgentSettings settings = settings().mcpServers(List.of(server))
+				.mcp(new org.thought.acp.config.McpSettings(
+						org.thought.acp.config.McpSettings.OnServerFailure.FAIL, Duration.ofMillis(250)))
+				.build();
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("done").build();
+				org.thought.acp.process.AgentLogWatcher watcher = watcher(logs);
+				AgentClient client = connect(agent, settings, watcher)) {
+
+			// Silence is the normal case, and nothing here infers a failure from it.
+			assertThat(client.prompt().session("s").user("hi").call().content()).isEqualTo("done");
+			assertThat(client.notices()).isEmpty();
 		}
 	}
 

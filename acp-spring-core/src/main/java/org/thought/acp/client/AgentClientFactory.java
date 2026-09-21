@@ -9,6 +9,7 @@ import org.thought.acp.config.AgentSettings;
 import org.thought.acp.event.SessionUpdateDecoder;
 import org.thought.acp.permission.PermissionPolicy;
 import org.thought.acp.observation.AgentObservations;
+import org.thought.acp.process.AgentLogWatcher;
 import org.thought.acp.process.AgentProcessSupervisor;
 import org.thought.acp.protocol.AcpProtocol;
 import org.thought.acp.runtime.AgentLaunchSpec;
@@ -65,10 +66,29 @@ public final class AgentClientFactory {
 			case AgentLaunchSpec.Stdio stdio ->
 				connect(runtime, settings, stdioTransport(stdio, diagnostics), diagnostics, Liveness.unknowable(),
 						() -> {
-						}, observations);
+						}, observations, logWatcher(runtime, settings));
 			case AgentLaunchSpec.WebSocket served -> connectServed(runtime, settings, served, diagnostics,
 					observations);
 		};
+	}
+
+	/**
+	 * Starts watching the agent's own log, if this client started the agent and the adapter knows
+	 * where the log is.
+	 *
+	 * <p>Both conditions matter. An adapter that reports no log directory is the normal case — every
+	 * runtime but Goose today — and a client that attached to an agent somebody else launched cannot
+	 * know what environment that process has, so it would be tailing a guess. The watcher exists at
+	 * all because of what the protocol leaves out: an MCP server the agent could not load is reported
+	 * nowhere on the wire, and on goose 1.51.0 nowhere on stdout or stderr either.
+	 */
+	private static AgentLogWatcher logWatcher(AgentRuntime runtime, AgentSettings settings) {
+		return runtime.logDirectory(settings).map(directory -> {
+			AgentLogWatcher watcher = new AgentLogWatcher(directory, runtime::noticeOf);
+			watcher.start();
+			logger.debug("Watching {} for {}'s own diagnostics", directory, runtime.id());
+			return watcher;
+		}).orElse(null);
 	}
 
 	/**
@@ -101,10 +121,14 @@ public final class AgentClientFactory {
 		Runnable onClose = supervisor == null ? () -> {
 		} : supervisor::close;
 
+		// Only a server this library started has an environment it knows, and therefore a log it can
+		// find; an attached one is somebody else's process.
+		AgentLogWatcher watcher = supervisor == null ? null : logWatcher(runtime, settings);
 		try {
-			return connect(runtime, settings, transport, diagnostics, liveness, onClose, observations);
+			return connect(runtime, settings, transport, diagnostics, liveness, onClose, observations, watcher);
 		}
 		catch (RuntimeException ex) {
+			closeQuietly(watcher);
 			onClose.run();
 			throw ex;
 		}
@@ -141,13 +165,26 @@ public final class AgentClientFactory {
 	/** Same, reporting turns to {@code observations}. */
 	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
 			AgentObservations observations) {
+		return connect(runtime, settings, launched, observations, null);
+	}
+
+	/**
+	 * Same, also watching a log that belongs to the agent on the other end of {@code launched}.
+	 *
+	 * <p>Separate from {@link #create} because there the rule can be enforced — this library started
+	 * the process, so it knows the environment and therefore the path. Here the caller is asserting
+	 * that the watcher belongs to this agent, which only a caller that knows both can do. The
+	 * watcher is closed with the client.
+	 */
+	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
+			AgentObservations observations, AgentLogWatcher watcher) {
 		return connect(runtime, settings, launched, new AgentDiagnostics(), Liveness.unknowable(), () -> {
-		}, observations);
+		}, observations, watcher);
 	}
 
 	private static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
 			AgentDiagnostics diagnostics, Liveness liveness, Runnable onTransportClose,
-			AgentObservations observations) {
+			AgentObservations observations, AgentLogWatcher watcher) {
 		SessionConfigRecorder recorder = new SessionConfigRecorder();
 		AcpClientTransport transport = recorder.wrap(launched);
 		SessionUpdateRouter router = new SessionUpdateRouter();
@@ -195,6 +232,7 @@ public final class AgentClientFactory {
 			String reported = diagnostics.settledSummary();
 			terminals.close();
 			closeQuietly(acp);
+			closeQuietly(watcher);
 			onTransportClose.run();
 			throw new AgentClientException("Failed to initialize runtime '" + runtime.id() + "'" + reported, ex);
 		}
@@ -210,6 +248,7 @@ public final class AgentClientFactory {
 		catch (RuntimeException ex) {
 			terminals.close();
 			closeQuietly(acp);
+			closeQuietly(watcher);
 			onTransportClose.run();
 			throw ex;
 		}
@@ -217,11 +256,15 @@ public final class AgentClientFactory {
 				initialized.agentInfo() == null ? runtime.id() : initialized.agentInfo().name(),
 				initialized.agentInfo() == null ? "" : initialized.agentInfo().version(), protocolVersion);
 
-		return new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router, recorder, initialized,
-				protocolVersion, observations, liveness.knowable() ? liveness.alive() : null, () -> {
+		DefaultAgentClient client = new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router,
+				recorder, initialized, protocolVersion, observations, liveness.knowable() ? liveness.alive() : null,
+				() -> {
 					terminals.close();
+					closeQuietly(watcher);
 					onTransportClose.run();
 				});
+		client.watch(watcher);
+		return client;
 	}
 
 	private static AcpClientTransport stdioTransport(AgentLaunchSpec.Stdio stdio, AgentDiagnostics diagnostics) {
@@ -327,6 +370,12 @@ public final class AgentClientFactory {
 	private static String version() {
 		String implementation = AgentClientFactory.class.getPackage().getImplementationVersion();
 		return implementation == null ? "0.1.0-SNAPSHOT" : implementation;
+	}
+
+	private static void closeQuietly(AgentLogWatcher watcher) {
+		if (watcher != null) {
+			watcher.close();
+		}
 	}
 
 	private static void closeQuietly(AcpAsyncClient acp) {

@@ -40,6 +40,12 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `acp-spring
 - **Don't pin the OpenAI wire API.** goose picks per model (gpt-5.6-terra → `/v1/responses`, deepseek → `/v1/chat/completions`) from `OPENAI_HOST` alone, so the adapter sets no `OPENAI_BASE_PATH`: Responses keeps reasoning items across a turn and is worth preferring wherever it exists. An application that must pin one dialect uses the tier-3 `env` block.
 - **Not every runtime can reach every endpoint.** Verified live against a Tanzu GenAI (OpenAI-compatible) endpoint: goose and opencode answer; codex-acp 1.12 speaks only the Responses API (`wire_api = "chat"` now makes it refuse to start), so a gateway serving only `/chat/completions` 404s inside its first turn. The adapter is wired correctly; the dialect is the constraint.
 - **SDK gaps are worked around, not suppressed** (e.g. `configOptions` dropped from `session/new`/`session/load` responses, `sessionUpdate` discriminator with no record). These are wire-format gaps invisible to mocks, hence `ScriptedAgent` wire tests; see "Known gaps" in `docs/design.md`.
+- **An MCP server the agent cannot load is reported nowhere on the wire.** `session/new` succeeds,
+  no `session/update` arrives, and goose writes nothing to stdout or stderr — only to its own log
+  file. Hence `AgentRuntime.logDirectory`/`noticeOf` (declarations; `AgentLogWatcher` does the
+  reading), `AgentClient.notices()`, and `spring.acp.mcp.on-server-failure`. Goose-only, and only
+  for an agent this client started. `tools/mcp-silence-check.py` re-measures it after a goose
+  upgrade.
 - **`permissions.policy: deny` does not stop an agent writing files.** Combine with an agent mode that asks first (`mode: plan`). Workspace jail confines fs/terminal requests by real path (symlinks followed), not just `normalize()`.
 - Optional session operations throw `UnsupportedAgentOperationException` naming the ACP method rather than failing on the wire.
 - ACP v2 is gated behind a flag and refused; target v1.

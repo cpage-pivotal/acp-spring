@@ -54,6 +54,41 @@ public interface AgentRuntime {
 	}
 
 	/**
+	 * Where this agent writes its own log, if it writes one this client can find.
+	 *
+	 * <p>Exists because of a failure the protocol does not report at all. An agent that cannot
+	 * connect to an MCP server answers {@code session/new} normally, sends no {@code session/update}
+	 * and — measured against goose 1.51.0 on both of its transports — writes nothing to stdout or
+	 * stderr either. It does write {@code Failed to load extension <name>} to a log file. Watching
+	 * that file is the only way a client learns what the agent already knows.
+	 *
+	 * <p>A declaration, not an action: the core does the watching, exactly as it does the option
+	 * setting that {@link #configIdsFor} only names. Return empty unless <em>this</em> client can
+	 * know the path — an adapter that attaches to an agent somebody else started does not know what
+	 * environment that process has, and guessing would watch the wrong file.
+	 *
+	 * @see #noticeOf(String)
+	 */
+	default Optional<java.nio.file.Path> logDirectory(AgentSettings settings) {
+		return Optional.empty();
+	}
+
+	/**
+	 * What one line of that log means to a client, if it means anything.
+	 *
+	 * <p>The file-based twin of {@link #toolNameOf}: a pure function over the agent's own output,
+	 * reading vendor detail the protocol never standardized. Most lines mean nothing to a client and
+	 * return empty; a client is not a log aggregator, and an adapter that reported everything would
+	 * make the warnings that matter unfindable.
+	 *
+	 * <p>The line arrives already redacted, and what is returned is logged, so an implementation must
+	 * not put anything back that a secret could hide in.
+	 */
+	default Optional<AgentNotice> noticeOf(String logLine) {
+		return Optional.empty();
+	}
+
+	/**
 	 * The {@code session/set_config_option} ids this runtime uses for a portable option, most
 	 * specific first, or empty if it has none.
 	 *

@@ -65,6 +65,18 @@ public interface AgentClient extends AutoCloseable {
 	}
 
 	/**
+	 * What the agent reported about itself outside the protocol, most recently seen last.
+	 *
+	 * <p>Empty for every runtime that cannot report anything, which is all of them but Goose today,
+	 * and empty for a client that attached to an agent it did not start. A non-empty list is the
+	 * agent's own words — the motivating case is an MCP server it could not load, which ACP has no
+	 * way to tell a client about at all. See {@code AgentLogWatcher}.
+	 */
+	default java.util.List<org.thought.acp.runtime.AgentNotice> notices() {
+		return java.util.List.of();
+	}
+
+	/**
 	 * Closes the named sessions that have been idle longer than the configured TTL.
 	 *
 	 * <p>On the interface rather than hidden in a lifecycle bean because a session costs memory on

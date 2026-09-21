@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.thought.acp.client.AgentClient;
 import org.thought.acp.client.AgentClientFactory;
 import org.thought.acp.config.AgentSettings;
+import org.thought.acp.config.McpServerSpec;
 import org.thought.acp.config.OnUnsupported;
 import org.thought.acp.config.OptionResolution;
 import org.thought.acp.config.ProviderSpec;
@@ -419,6 +420,66 @@ public abstract class AgentRuntimeContract {
 				.user("What number did I ask you to remember? Reply with digits only.").call().content();
 
 		assertThat(recalled).contains("8675309");
+	}
+
+	/**
+	 * An MCP server the agent cannot reach is either reported, or admitted to be unreportable.
+	 *
+	 * <p>The one assertion in this suite about something ACP does <em>not</em> standardize, and it
+	 * earns its place because the protocol's silence here is total. An agent that fails to connect
+	 * to an MCP server answers {@code session/new} normally, sends no {@code session/update}, and —
+	 * measured on goose 1.51.0 across both its transports — writes nothing to stdout or stderr
+	 * either. The application gets a session whose model quietly has no tools, and finds out from
+	 * the model's prose.
+	 *
+	 * <p>So an adapter may answer this in one of two ways, and both are honest. It can decline to
+	 * report — {@link AgentRuntime#logDirectory} empty, which is where every adapter starts and
+	 * where most of them stay — and this test skips. Or it can claim it reports, in which case the
+	 * claim is tested against a real agent and a server that is really unreachable, because a
+	 * detector nobody has pointed at the failure is a detector nobody knows is broken.
+	 *
+	 * <p>This is the test that goes red the day the agent rewords its own diagnostics. It only runs
+	 * live, so the day it goes red is a release day rather than a commit — a real limitation of
+	 * depending on another program's log, stated here rather than papered over.
+	 */
+	@Test
+	@DisplayName("an MCP server the agent cannot reach is reported, or the adapter does not claim to")
+	void anUnreachableMcpServerIsReportedOrNotClaimed() {
+		org.junit.jupiter.api.Assumptions.assumeTrue(
+				runtime().logDirectory(settings().build()).isPresent(),
+				"this adapter does not claim to read the agent's own diagnostics");
+
+		// Port 9 is the discard port: reserved, and nothing there answers.
+		String name = "acp-spring-contract-mcp";
+		McpServerSpec unreachable = new McpServerSpec.Http(name, URI.create("http://127.0.0.1:9/mcp"), Map.of());
+
+		try (AgentClient agent = AgentClientFactory.create(runtime(),
+				settings().mcpServers(List.of(unreachable)).build())) {
+			agent.openSession("contract-mcp");
+
+			assertThat(noticeAbout(agent, name, Duration.ofSeconds(20)))
+					.describedAs("the adapter reports a log directory, so a server the agent could not "
+							+ "load must produce a notice naming it")
+					.isTrue();
+		}
+	}
+
+	/** Polls, because the agent writes its log on its own schedule and the watcher reads it on another. */
+	private static boolean noticeAbout(AgentClient agent, String server, Duration timeout) {
+		long deadline = System.nanoTime() + timeout.toNanos();
+		while (System.nanoTime() < deadline) {
+			if (agent.notices().stream().anyMatch(notice -> notice.concerns(server))) {
+				return true;
+			}
+			try {
+				Thread.sleep(200);
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/**

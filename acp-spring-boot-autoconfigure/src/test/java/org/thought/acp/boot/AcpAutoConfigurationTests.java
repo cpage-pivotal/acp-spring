@@ -82,6 +82,23 @@ class AcpAutoConfigurationTests {
 	}
 
 	@Test
+	void defaultsToCarryingOnWhenTheAgentCannotLoadAnMcpServer() {
+		runner.run(context -> assertThat(context.getBean(AgentSettings.class).mcp())
+				.isEqualTo(org.thought.acp.config.McpSettings.defaults()));
+	}
+
+	@Test
+	void anApplicationThatWouldRatherNotStartWithoutItsToolsSaysSo() {
+		runner.withPropertyValues("spring.acp.mcp.on-server-failure=fail",
+				"spring.acp.mcp.detect-timeout=750ms").run(context -> {
+					org.thought.acp.config.McpSettings mcp = context.getBean(AgentSettings.class).mcp();
+					assertThat(mcp.onServerFailure())
+							.isEqualTo(org.thought.acp.config.McpSettings.OnServerFailure.FAIL);
+					assertThat(mcp.detectTimeout()).isEqualTo(java.time.Duration.ofMillis(750));
+				});
+	}
+
+	@Test
 	void rejectsAPlainHttpMcpServerOnTheOpenInternet() {
 		runner.withPropertyValues("spring.acp.mcp-servers[0].name=remote",
 				"spring.acp.mcp-servers[0].url=http://tools.example.com/mcp")

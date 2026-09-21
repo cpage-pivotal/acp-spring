@@ -152,7 +152,18 @@ public final class DefaultAgentSessions implements AgentSessions {
 		return new AdvertisedSessionConfig(recorder.claimUnattributed(), response.modes(), response.models());
 	}
 
+	/**
+	 * The MCP servers to re-declare on this attach, named in the log on the way past.
+	 *
+	 * <p>{@code session/load} and {@code session/resume} carry them exactly as {@code session/new}
+	 * does, and fail to connect just as silently; see the note on {@code DefaultAgentClient}.
+	 */
 	private List<AcpSchema.McpServer> mcpServers() {
+		if (!settings.mcpServers().isEmpty() && logger.isInfoEnabled()) {
+			logger.info("Handing {} MCP server(s) to the agent on re-attach: {}. The agent does not report "
+					+ "back whether it connected to them.", settings.mcpServers().size(),
+					settings.mcpServers().stream().map(org.thought.acp.config.McpServerSpec::describe).toList());
+		}
 		return settings.mcpServers().stream().map(m -> m.toAcp()).toList();
 	}
 

@@ -15,7 +15,10 @@ import org.thought.acp.config.AgentSettings;
 import org.thought.acp.config.ProviderEnvironment;
 import org.thought.acp.config.ProviderSpec;
 import org.thought.acp.config.RuntimeOptions;
+import java.util.regex.Matcher;
+
 import org.thought.acp.runtime.AgentLaunchSpec;
+import org.thought.acp.runtime.AgentNotice;
 import org.thought.acp.runtime.AgentRuntime;
 import org.thought.acp.runtime.ToolNames;
 
@@ -87,6 +90,18 @@ public class GooseRuntime implements AgentRuntime {
 	private static final String SECRET_KEY_HEADER = "X-Secret-Key";
 
 	private static final String SERVE_WEBSOCKET = "websocket";
+
+	/**
+	 * goose's own wording for an extension that did not start, with the name and the reason.
+	 *
+	 * <p>The one string in this class that depends on goose's internals rather than its interface,
+	 * and it carries no compatibility promise. {@code GooseRuntimeTests} pins it against captured
+	 * lines and the live contract test catches the day it changes; between releases a goose that
+	 * reworded this goes quiet again, which is worth knowing and is why the upstream fix — the
+	 * warning arriving over ACP — is the one that ends this.
+	 */
+	private static final java.util.regex.Pattern EXTENSION_FAILURE = java.util.regex.Pattern
+			.compile("Failed to load extension ([^:]+): (.*)");
 
 	private static final String DEFAULT_SERVE_HOST = "127.0.0.1";
 
@@ -191,6 +206,91 @@ public class GooseRuntime implements AgentRuntime {
 	@Override
 	public Optional<String> toolNameOf(AcpSchema.ToolCallUpdate toolCall) {
 		return ToolNames.fromRawInputOrTitle(toolCall);
+	}
+
+	/**
+	 * Where goose writes its own log.
+	 *
+	 * <p>Measured against 1.51.0 on both transports: {@code $XDG_STATE_HOME/goose/logs/cli/<date>/}
+	 * — {@code goose serve} uses the same {@code cli} subdirectory as {@code goose acp} — with
+	 * {@code ~/.local/state} standing in when {@code XDG_STATE_HOME} is unset.
+	 *
+	 * <p>This deliberately <em>reads</em> the location rather than choosing one. Pointing
+	 * {@code XDG_STATE_HOME} at {@link AgentSettings#runtimeHome()} would make the path certain and
+	 * would also move goose's session storage, which lives under the same root — an ephemeral
+	 * per-client directory would quietly break {@code session/load} and {@code session/resume}
+	 * across restarts. Trading one silent failure for another is not a fix. A deployment that puts
+	 * the log somewhere else says so with the tier-3 {@code log-dir}.
+	 *
+	 * @see #noticeOf(String)
+	 */
+	@Override
+	public Optional<Path> logDirectory(AgentSettings settings) {
+		Optional<Path> configured = settings.runtimeOptions().text("log-dir").map(Paths::get);
+		if (configured.isPresent()) {
+			return configured.map(Path::toAbsolutePath);
+		}
+		String state = System.getenv("XDG_STATE_HOME");
+		Path root = state == null || state.isBlank() ? Paths.get(System.getProperty("user.home"), ".local", "state")
+				: Paths.get(state);
+		return Optional.of(root.resolve("goose").resolve("logs").toAbsolutePath());
+	}
+
+	/**
+	 * Reads the one thing in that log a client cannot learn any other way.
+	 *
+	 * <p>goose logs JSON lines. An extension it could not start produces, at WARN from
+	 * {@code goose::agents::agent}:
+	 *
+	 * <pre>{@code
+	 * {"timestamp":"…","level":"WARN","fields":{"message":
+	 *     "Failed to load extension finops-mcp: failed to initialize MCP client: …"}}
+	 * }</pre>
+	 *
+	 * <p>and nothing at all on stdout, on stderr, or over ACP — the session opens normally and the
+	 * model simply has no tools. Matched on the message prefix rather than parsed as JSON, because
+	 * the interesting part is one sentence and a brittle dependency on one field's path buys
+	 * nothing over a brittle dependency on one sentence's wording.
+	 *
+	 * <p>Only this line is reported. goose's log carries plenty else that is none of a client's
+	 * business, and an adapter that forwarded it all would bury the warning it exists to surface.
+	 */
+	@Override
+	public Optional<AgentNotice> noticeOf(String logLine) {
+		if (logLine == null) {
+			return Optional.empty();
+		}
+		Matcher matcher = EXTENSION_FAILURE.matcher(logLine);
+		if (!matcher.find()) {
+			return Optional.empty();
+		}
+		String name = matcher.group(1).strip();
+		String detail = unescape(untilEndOfMessage(matcher.group(2)));
+		return Optional.of(AgentNotice.warning(name,
+				"could not load MCP server '" + name + "': " + detail));
+	}
+
+	/**
+	 * The message without the rest of the JSON record around it.
+	 *
+	 * <p>The message is a JSON string, so it ends at the first quote the agent did not escape —
+	 * whether what follows is another field or the end of the line.
+	 */
+	private static String untilEndOfMessage(String rest) {
+		for (int i = 0; i < rest.length(); i++) {
+			char character = rest.charAt(i);
+			if (character == '\\') {
+				i++;
+			}
+			else if (character == '"') {
+				return rest.substring(0, i);
+			}
+		}
+		return rest;
+	}
+
+	private static String unescape(String text) {
+		return text.replace("\\\"", "\"").replace("\\n", " ").replace("\\\\", "\\").strip();
 	}
 
 	@Override

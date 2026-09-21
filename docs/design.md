@@ -240,6 +240,123 @@ loopback/`.apps.internal` with no userinfo/query/fragment, env keys `^[A-Za-z_][
 API key ≤16 KiB with no CR/LF, session names `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. It is already
 written and already right.
 
+### MCP servers fail silently, and the ACP path carries no word of it
+
+`mcp-servers` is the most portable thing in the configuration model — ACP passes it through
+`session/new` verbatim — and also the one most likely to be accepted and then do nothing. It belongs
+next to the `permissions.policy: deny` correction below: same species, a setting the system takes
+without complaint and quietly declines to honour.
+
+Measured against goose 1.51.0 with one unreachable HTTP server in `mcpServers[]`:
+
+| Signal a client could watch | What arrives |
+| --- | --- |
+| `session/new` result | normal success — `sessionId`, `modes`, `configOptions` |
+| JSON-RPC `error` | none |
+| `session/update` of any kind | none |
+| agent stderr (`AgentDiagnostics`) | **zero lines** |
+
+The same server under goose's own CLI prints `⚠ Failed to start extension '…' (failed to initialize
+MCP client: …), continuing without it`. The information exists inside the agent and is dropped on
+the ACP path. So the application starts clean, the session opens, the model answers — and has no
+tools. The only symptom is prose: the model saying it lacks tools its instructions say it has. ACP
+offers nothing to ask afterwards either; there is no `tools/list` equivalent, and tools surface only
+as `tool_call` events mid-turn.
+
+Three unrelated causes were observed to produce that one indistinguishable outcome: a gateway
+rejecting goose's `server/discover` probe (`MCP-Protocol-Version: 2026-07-28`) with a 400 whose `id`
+is `"server-error"` rather than the request's, so goose cannot correlate the error and never falls
+back to plain `initialize`; a proxy copying HTTP/2 pseudo-headers such as `:status` from
+`java.net.http`'s `HttpResponse.headers()` into an HTTP/1.1 response; and a `202` for a JSON-RPC
+notification answered with a chunked body instead of no body. A fourth variant is louder but no
+clearer: an MCP endpoint that needs auth and is given none can block `session/new` until the turn
+timeout, which surfaces as a Reactor timeout with no mention of MCP.
+
+Two things are done about it, and one thing is deliberately not.
+
+First, `DefaultAgentClient` names the requested servers at INFO when it opens or re-attaches a
+session — host and path only, never headers or env, which carry the tokens. That detects nothing; it
+puts *what was asked for* in the log beside a model saying it has no such tools.
+
+Second, and this is what actually closes the gap: **the agent's own log is watched**, because the
+measurement below shows the warning exists there and nowhere else. `AgentRuntime` gains two
+declarations — `logDirectory(settings)` and `noticeOf(line)` — and `AgentLogWatcher` in
+`core/process` does the reading. The division of labour is the one the SPI already had:
+`noticeOf` is the file-based twin of `toolNameOf`, a pure function over the agent's own output, and
+nothing in an adapter opens a socket or speaks a protocol on the agent's behalf. A recognised line
+becomes an `AgentNotice` — severity, the server's name as the application spelled it, and the
+agent's words, redacted on the way in because a log quotes the URLs it was given. Notices are logged
+at WARN and readable from `AgentClient.notices()`. An application that would rather not start than
+serve a half-equipped agent sets `spring.acp.mcp.on-server-failure: fail`, and `openSession` then
+refuses a session whose server the agent said it could not load, closing it on the way out. It waits
+`mcp.detect-timeout` (default 2s) first, because the warning and the `session/new` reply land within
+the same tenth of a second in no guaranteed order — reading once, synchronously, would be a coin
+toss. Silence always opens the session: nothing here infers a failure it was not told about.
+
+Two limits, both deliberate. The watcher runs only for an agent **this** client started, since an
+attached process's environment is unknown and its log would be a guess. And only the Goose adapter
+implements either method — everywhere else the feature is inert, which the property documentation
+says plainly, because a setting that silently did nothing for 41 of 44 runtimes would be this bug
+wearing a different hat.
+
+What is still **not** done is probing. A reachability check on startup would be this client talking
+to the server — a plain `initialize`, no discovery probe, no version header — so against the gateway
+above it would have reported both servers healthy while goose had zero tools: a green check on a
+broken system, which is worse than no check. A probe that replayed the *agent's* handshake would
+have caught it, but it is a second implementation of each agent's MCP client that goes stale when
+that agent changes, and reading the agent's own verdict is both cheaper and closer to the truth. The
+clean fix remains upstream: goose emitting over ACP, or at minimum on its own stderr, the
+extension-failure warning it already writes to a file.
+
+#### Where the silence holds, measured
+
+`tools/mcp-silence-check.py` runs a real goose against a deliberately unreachable MCP server and
+reports what each channel carried. It covers both transports and both ways of declaring a server,
+because those are exactly the axes on which this library and the buildpack wrapper it succeeds
+differ: the wrapper only ever runs `goose serve` and always sends an **empty** `mcpServers` array,
+leaving the servers to `config.yaml`. Against goose 1.51.0, all four cells behave identically:
+
+| transport | servers declared in | `session/new` | `session/update` | stdout/stderr | goose's log file |
+| --- | --- | --- | --- | --- | --- |
+| stdio (`goose acp`) | `session/new` | ok, <0.1 s | none about MCP | nothing | **the warning** |
+| stdio (`goose acp`) | `config.yaml` | ok, <0.1 s | none about MCP | nothing | **the warning** |
+| serve (WebSocket) | `session/new` | ok, <0.1 s | none about MCP | nothing | **the warning** |
+| serve (WebSocket) | `config.yaml` | ok, <0.1 s | none about MCP | nothing | **the warning** |
+
+So the wrapper is **not** better off, and for a reason worth knowing: goose does not write the
+warning to its console at all under either transport. It writes it, as structured JSON, to
+`$XDG_STATE_HOME/goose/logs/cli/<date>/<timestamp>.log`:
+
+```
+WARN goose::agents::agent | Failed to load extension silence-probe-mcp:
+     failed to initialize MCP client: …
+ERROR rmcp::transport::worker | worker quit with fatal: Transport channel closed,
+     when Client(… ConnectError("tcp connect error", 127.0.0.1:9, ConnectionRefused) …)
+```
+
+Draining the child's stdout and stderr — which both this library's `AgentProcessSupervisor` and the
+wrapper's `GooseServerSupervisor` do — therefore catches none of it. The same holds for a broken
+stdio server (`process quit before initialization`), so it is the reporting path that is silent,
+not one transport's error handling.
+
+That measurement is what the watcher above is built on, and it also settles one design question
+worth recording. Pointing `XDG_STATE_HOME` at `runtimeHome` would make the log's path certain, and
+it would also move goose's *session* storage, which lives under the same root — an ephemeral
+per-client directory would quietly break `session/load` and `session/resume` across restarts.
+Trading one silent failure for another is not a fix, so `GooseRuntime.logDirectory` **reads** the
+location goose is already using (`$XDG_STATE_HOME`, else `~/.local/state`) and a deployment that
+puts it elsewhere says so with the tier-3 `log-dir`.
+
+What this costs is a dependency on a log format that carries no compatibility promise: one regex
+against `Failed to load extension <name>: <reason>`. `GooseNoticeTests` pins it against lines
+captured verbatim from a real goose, and the live contract test
+(`anUnreachableMcpServerIsReportedOrNotClaimed`) points a real agent at a really unreachable server
+and asserts a notice arrives — an adapter that reports no log directory skips it instead, since
+declining to report is an honest answer and claiming to report without being tested is not. That
+test only runs live, so the day goose rewords its diagnostics is a release day rather than a commit.
+Between releases a reworded goose goes quiet again. That is the honest shape of this, and it is why
+the upstream fix is still the one that ends it.
+
 ### Tier 2 — negotiated
 
 `model`, `mode`, and `provider` are *requests*, not assignments. `ConfigResolver` reads what the
