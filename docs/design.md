@@ -357,6 +357,67 @@ test only runs live, so the day goose rewords its diagnostics is a release day r
 Between releases a reworded goose goes quiet again. That is the honest shape of this, and it is why
 the upstream fix is still the one that ends it.
 
+### MCP credentials: a loopback proxy, one route per session
+
+A header in `mcpServers` is frozen for the life of the session it was sent in, and it is sent to
+the agent. Both are wrong for the credential most MCP servers actually want. The MCP authorization
+spec's OAuth access tokens expire in hours, so a long conversation outlives the token it was opened
+with; and in a multi-user application the token is a *person's*, and the agent process is shared
+infrastructure that has no business holding it. `acp-meridian` found this the hard way and carried
+~1,100 lines of per-application code to get around it, most of which belongs here.
+
+So an application may supply an `McpCredentialsProvider` (`McpSettings.credentials`, or a bean).
+For each session and each HTTP server it returns either nothing — the server goes to the agent as
+configured, which is also what happens to every server when there is no provider — or an
+`McpCredentials`, in which case:
+
+- **The agent is told a loopback URL, not the server's.** `McpAccess` (one per connection) starts
+  a JDK `HttpServer` on `127.0.0.1` the first time any server needs it, and publishes the session's
+  servers at `http://127.0.0.1:<port>/<token>/<server>`. The agent sees no headers at all; the
+  server's configured headers are added upstream by the proxy, alongside the credentials.
+- **The token in the path is the access control.** It is 128 random bits per session. A loopback
+  port is reachable by every process on the machine, so routes keyed by server name alone would let
+  any local process spend any user's credentials. An unknown route is a 404 that says nothing else.
+- **Credentials are asked for on every request.** `McpCredentials.headers()` runs per forwarded
+  request, so a refresh lands between two tool calls instead of failing one. It is called
+  concurrently; an implementation that refreshes must let only one refresh run per user and server,
+  because an authorization server that rotates refresh tokens — the Tanzu MCP gateway's UAA does,
+  measured — honours each once, and a lost race costs the user their sign-in.
+- **A route lives exactly as long as its session.** `SessionRegistry` releases a session's grant
+  whenever it forgets the session — close, idle eviction, the end of an ephemeral turn, a failed
+  `on-server-failure: fail` check, client close — so a proxy URL the agent kept from a closed session
+  answers 404. Closing the client stops the proxy.
+- **Refusing is done before the agent hears of it.** Every server's credentials are asked for before
+  any route is published or `session/new` is sent, on the caller's thread. A provider that throws —
+  a user who has not signed in to one of the servers — refuses the session and leaves nothing behind.
+  That is the moment a web application can still redirect someone to sign in; mid-turn, nobody is
+  there to do it.
+
+The forwarding itself carries over the four details that each made goose drop a server without a
+word (see "Where the silence holds" above): no HTTP/2 pseudo-headers into the HTTP/1.1 response, no
+body at all for a `202`/`204`, bodies flushed per chunk so SSE is not buffered, and the agent's own
+headers — `User-Agent` included — passed through. The agent's `Authorization` is dropped: the proxy
+is the only authority on credentials. The goose-specific `server/discover` workaround is *not*
+here; vendor knowledge belongs to its adapter.
+
+**Principals.** A `SessionPrincipal` is who a session is for — just a name, never logged. It reaches
+the provider, and it owns the session: a named session open for one principal is refused to another
+with `SessionOwnershipException`. Session names are application-chosen, and one derived from
+something two users can both produce (a ticket id) would otherwise hand the second user the first
+user's conversation and, through its MCP routes, the first user's credentials. The principal is
+given explicitly (`PromptSpec.principal`, `openSession(name, principal)`, `load`/`resume` with a
+principal) or resolved by `McpSettings.principals` — a `SessionPrincipalResolver`, asked on the
+caller's thread when a turn is described (`call()`/`stream()`), never on the thread that later
+subscribes. That is what makes a resolver that reads a thread-bound security context correct in a
+servlet application, and why a reactive application passes the principal explicitly. The pool reads
+it eagerly for the same reason, since it only chooses a connection on subscription.
+
+What this does not do yet: acquire OAuth tokens. That is `acp-spring-mcp-oauth` — MCP-spec discovery
+and dynamic client registration via spring-ai-community's `mcp-client-security`, tokens stored and
+refreshed per principal by Spring Security's `OAuth2AuthorizedClientManager`. Both were verified
+against the Tanzu MCP gateway (discovery, DCR, PKCE sign-in with `resource=`, two forced refreshes,
+`aud` bound to each server's URL) before this design was settled.
+
 ### Tier 2 — negotiated
 
 `model`, `mode`, and `provider` are *requests*, not assignments. `ConfigResolver` reads what the

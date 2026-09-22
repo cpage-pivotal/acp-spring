@@ -36,12 +36,41 @@ public final class SessionRegistry {
 	 * @param factory called at most once per name, under the map's per-key lock
 	 */
 	public AgentSession resolve(String name, Function<String, String> factory) {
+		return resolve(name, null, n -> new Opened(factory.apply(n), null));
+	}
+
+	/**
+	 * Same, for a session that belongs to someone and may hold resources beyond the agent.
+	 *
+	 * <p>A name already open for a different principal is refused, not shared. Session names are
+	 * chosen by the application, and one that derives them from something two users can both
+	 * produce — a ticket number, a document id — would otherwise hand the second user the first
+	 * user's conversation, and with it MCP tools calling out under the first user's credentials.
+	 *
+	 * @param principal who the caller is acting for, or null for nobody
+	 * @param factory called at most once per name, under the map's per-key lock; must release
+	 * whatever it acquired if it throws
+	 * @throws SessionOwnershipException if the name is open for someone else
+	 */
+	public AgentSession resolve(String name, SessionPrincipal principal, Function<String, Opened> factory) {
 		Validation.requireName(name, "session name");
-		return sessions.computeIfAbsent(name, n -> {
-			String sessionId = factory.apply(n);
-			logger.debug("Created session '{}' as {}", n, sessionId);
-			return new AgentSession(n, sessionId);
+		AgentSession session = sessions.computeIfAbsent(name, n -> {
+			Opened opened = factory.apply(n);
+			logger.debug("Created session '{}' as {}", n, opened.sessionId());
+			return new AgentSession(n, opened.sessionId(), principal, opened.release());
 		});
+		if (!session.belongsTo(principal)) {
+			throw new SessionOwnershipException(name);
+		}
+		return session;
+	}
+
+	/**
+	 * What a factory reports back about a session it opened.
+	 *
+	 * @param release run once when the registry forgets the session; null for nothing
+	 */
+	public record Opened(String sessionId, Runnable release) {
 	}
 
 	/**
@@ -55,10 +84,21 @@ public final class SessionRegistry {
 	 * @throws IllegalStateException if the name is already registered
 	 */
 	public AgentSession adopt(String name, String sessionId) {
+		return adopt(name, sessionId, null, null);
+	}
+
+	/**
+	 * Same, for a session that belongs to someone and may hold resources beyond the agent.
+	 *
+	 * @param release run once when the registry forgets the session — including when the name
+	 * turns out to be taken, so the caller never has to clean up after a refusal
+	 */
+	public AgentSession adopt(String name, String sessionId, SessionPrincipal principal, Runnable release) {
 		Validation.requireName(name, "session name");
-		AgentSession adopted = new AgentSession(name, sessionId);
+		AgentSession adopted = new AgentSession(name, sessionId, principal, release);
 		AgentSession existing = sessions.putIfAbsent(name, adopted);
 		if (existing != null) {
+			adopted.release();
 			throw new IllegalStateException("Session '" + name + "' is already open as " + existing.sessionId()
 					+ "; close it before binding the name to " + sessionId);
 		}
@@ -74,9 +114,16 @@ public final class SessionRegistry {
 		return sessions.containsKey(name);
 	}
 
-	/** Forgets a session. Does not close it on the agent — the caller owns that. */
+	/**
+	 * Forgets a session and releases what it held here. Does not close it on the agent — the
+	 * caller owns that.
+	 */
 	public Optional<AgentSession> remove(String name) {
-		return Optional.ofNullable(sessions.remove(name));
+		AgentSession removed = sessions.remove(name);
+		if (removed != null) {
+			removed.release();
+		}
+		return Optional.ofNullable(removed);
 	}
 
 	/**
@@ -87,7 +134,11 @@ public final class SessionRegistry {
 	public List<AgentSession> evictIdle(Duration ttl) {
 		Instant cutoff = Instant.now().minus(ttl);
 		List<AgentSession> evicted = sessions.values().stream().filter(s -> s.idleSince(cutoff)).toList();
-		evicted.forEach(s -> sessions.remove(s.name(), s));
+		evicted.forEach(s -> {
+			if (sessions.remove(s.name(), s)) {
+				s.release();
+			}
+		});
 		if (!evicted.isEmpty()) {
 			logger.debug("Evicted {} idle session(s)", evicted.size());
 		}
@@ -99,7 +150,9 @@ public final class SessionRegistry {
 	}
 
 	public void clear() {
+		List<AgentSession> all = List.copyOf(sessions.values());
 		sessions.clear();
+		all.forEach(AgentSession::release);
 	}
 
 	public int size() {

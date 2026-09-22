@@ -228,6 +228,202 @@ class AgentClientWireTests {
 		}
 	}
 
+	// --- MCP credentials and principals ----------------------------------------------------------
+
+	/** A provider that gives every HTTP server a token naming whoever the session is for. */
+	private static org.thought.acp.mcp.McpCredentialsProvider tokensPerUser(
+			List<org.thought.acp.session.SessionPrincipal> askedFor) {
+		return (server, principal) -> {
+			askedFor.add(principal);
+			return java.util.Optional.of(org.thought.acp.mcp.McpCredentials
+				.bearer(() -> "token-" + (principal == null ? "nobody" : principal.name())));
+		};
+	}
+
+	private AgentSettings.Builder withProtectedServer(org.thought.acp.mcp.McpCredentialsProvider provider,
+			org.thought.acp.session.SessionPrincipalResolver principals) {
+		McpServerSpec server = new McpServerSpec.Http("finops-mcp",
+				java.net.URI.create("https://gateway.example.com/finops-mcp/mcp"), Map.of("X-Tenant", "acme"));
+		return settings().mcpServers(List.of(server))
+			.mcp(org.thought.acp.config.McpSettings.defaults().withCredentials(provider).withPrincipals(principals));
+	}
+
+	private static String declaredUrl(AcpSchema.NewSessionRequest request) {
+		return ((AcpSchema.McpServerHttp) request.mcpServers().get(0)).url();
+	}
+
+	/** Whether the proxy still answers for a route; any answer but 404 means it does. */
+	private static int statusOf(String url) throws Exception {
+		return java.net.http.HttpClient.newHttpClient()
+			.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).timeout(LIMIT)
+				.POST(java.net.http.HttpRequest.BodyPublishers.ofString("{}")).build(),
+					java.net.http.HttpResponse.BodyHandlers.discarding())
+			.statusCode();
+	}
+
+	@Test
+	void aCredentialedMcpServerReachesTheAgentAsALoopbackRouteWithNoSecretsInIt() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(new java.util.ArrayList<>()),
+						null).build())) {
+
+			client.prompt().session("s").principal(org.thought.acp.session.SessionPrincipal.of("alice"))
+				.user("hi").call();
+
+			AcpSchema.McpServerHttp declared = (AcpSchema.McpServerHttp) agent.newSessions().get(0).mcpServers().get(0);
+			assertThat(declared.name()).isEqualTo("finops-mcp");
+			assertThat(declared.url()).startsWith("http://127.0.0.1:").endsWith("/finops-mcp")
+				.doesNotContain("gateway.example.com");
+			assertThat(declared.headers()).isEmpty();
+		}
+	}
+
+	@Test
+	void aSessionsRouteStopsAnsweringWhenTheSessionCloses() throws Exception {
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("close").build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(new java.util.ArrayList<>()),
+						null).build())) {
+
+			client.prompt().session("s").user("hi").call();
+			String url = declaredUrl(agent.newSessions().get(0));
+			// The upstream does not exist, so a live route answers 502; what matters is that it is not 404.
+			assertThat(statusOf(url)).isNotEqualTo(404);
+
+			client.sessions().close("s");
+
+			assertThat(statusOf(url)).isEqualTo(404);
+		}
+	}
+
+	@Test
+	void anEphemeralTurnsRouteEndsWithTheTurn() throws Exception {
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(new java.util.ArrayList<>()),
+						null).build())) {
+
+			client.prompt("hi").call();
+
+			assertThat(statusOf(declaredUrl(agent.newSessions().get(0)))).isEqualTo(404);
+		}
+	}
+
+	@Test
+	void closingTheClientStopsTheProxy() {
+		String url;
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(new java.util.ArrayList<>()),
+						null).build())) {
+			client.prompt().session("s").user("hi").call();
+			url = declaredUrl(agent.newSessions().get(0));
+		}
+		assertThatThrownBy(() -> statusOf(url)).isInstanceOf(java.io.IOException.class);
+	}
+
+	@Test
+	void aSessionNameOpenForOneUserIsRefusedToAnother() {
+		List<org.thought.acp.session.SessionPrincipal> askedFor = new java.util.concurrent.CopyOnWriteArrayList<>();
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("ok").build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(askedFor), null).build())) {
+
+			client.prompt().session("ticket-42").principal(org.thought.acp.session.SessionPrincipal.of("alice"))
+				.user("hi").call();
+
+			assertThatThrownBy(() -> client.prompt().session("ticket-42")
+				.principal(org.thought.acp.session.SessionPrincipal.of("bob")).user("hi").call())
+				.isInstanceOf(org.thought.acp.session.SessionOwnershipException.class);
+			assertThatThrownBy(() -> client.openSession("ticket-42"))
+				.isInstanceOf(org.thought.acp.session.SessionOwnershipException.class);
+			assertThat(client.prompt().session("ticket-42")
+				.principal(org.thought.acp.session.SessionPrincipal.of("alice")).user("again").call().content())
+				.isEqualTo("ok");
+			assertThat(agent.newSessions()).hasSize(1);
+			assertThat(askedFor).containsExactly(org.thought.acp.session.SessionPrincipal.of("alice"));
+		}
+	}
+
+	@Test
+	void thePrincipalIsReadOnTheCallersThreadNotWhereTheStreamIsSubscribed() {
+		ThreadLocal<String> signedIn = new ThreadLocal<>();
+		List<org.thought.acp.session.SessionPrincipal> askedFor = new java.util.concurrent.CopyOnWriteArrayList<>();
+		org.thought.acp.session.SessionPrincipalResolver resolver = () -> java.util.Optional.ofNullable(signedIn.get())
+			.map(org.thought.acp.session.SessionPrincipal::of);
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("ok").build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(askedFor), resolver).build())) {
+
+			signedIn.set("alice");
+			AgentClient.AgentStream stream = client.prompt().session("s").user("hi").stream();
+			signedIn.remove();
+
+			StepVerifier.create(stream.events().subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+				.filter(AgentEvent.Completed.class::isInstance)).expectNextCount(1).verifyComplete();
+
+			assertThat(askedFor).containsExactly(org.thought.acp.session.SessionPrincipal.of("alice"));
+			assertThat(client.session("s").orElseThrow().principal())
+				.contains(org.thought.acp.session.SessionPrincipal.of("alice"));
+		}
+	}
+
+	@Test
+	void theSamePathsHoldThroughThePool() {
+		List<org.thought.acp.session.SessionPrincipal> askedFor = new java.util.concurrent.CopyOnWriteArrayList<>();
+		ThreadLocal<String> signedIn = new ThreadLocal<>();
+		org.thought.acp.session.SessionPrincipalResolver resolver = () -> java.util.Optional.ofNullable(signedIn.get())
+			.map(org.thought.acp.session.SessionPrincipal::of);
+		AgentSettings settings = withProtectedServer(tokensPerUser(askedFor), resolver).build();
+
+		try (ScriptedAgent agent = ScriptedAgent.builder().reply("ok").build();
+				AgentClient pool = new org.thought.acp.client.AgentClientPool("scripted", settings,
+						() -> connect(agent, settings))) {
+
+			signedIn.set("alice");
+			AgentClient.AgentStream stream = pool.prompt().session("s").user("hi").stream();
+			signedIn.remove();
+			StepVerifier.create(stream.events().subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+				.filter(AgentEvent.Completed.class::isInstance)).expectNextCount(1).verifyComplete();
+
+			assertThatThrownBy(() -> pool.openSession("s", org.thought.acp.session.SessionPrincipal.of("bob")))
+				.isInstanceOf(org.thought.acp.session.SessionOwnershipException.class);
+			assertThat(askedFor).containsExactly(org.thought.acp.session.SessionPrincipal.of("alice"));
+		}
+	}
+
+	@Test
+	void aLoadedSessionsServersAreRoutedForItsPrincipalToo() {
+		List<org.thought.acp.session.SessionPrincipal> askedFor = new java.util.concurrent.CopyOnWriteArrayList<>();
+		try (ScriptedAgent agent = ScriptedAgent.builder().sessionOperations("load", "resume").build();
+				AgentClient client = connect(agent, withProtectedServer(tokensPerUser(askedFor), null).build())) {
+
+			client.sessions().load("a", "stored-1", org.thought.acp.session.SessionPrincipal.of("alice"));
+			client.sessions().resume("b", "stored-2", org.thought.acp.session.SessionPrincipal.of("bob"));
+
+			assertThat(agent.attachedMcpServers()).hasSize(2).allSatisfy(servers -> {
+				assertThat(servers).hasSize(1);
+				assertThat(String.valueOf(servers.get(0).get("url"))).startsWith("http://127.0.0.1:")
+					.doesNotContain("gateway.example.com");
+			});
+			assertThat(askedFor).containsExactly(org.thought.acp.session.SessionPrincipal.of("alice"),
+					org.thought.acp.session.SessionPrincipal.of("bob"));
+			assertThat(client.session("a").orElseThrow().principal())
+				.contains(org.thought.acp.session.SessionPrincipal.of("alice"));
+		}
+	}
+
+	@Test
+	void aProviderThatRefusesTheUserRefusesTheSessionBeforeTheAgentHearsOfIt() {
+		org.thought.acp.mcp.McpCredentialsProvider notSignedIn = (server, principal) -> {
+			throw new IllegalStateException(server.name() + " needs a sign-in first");
+		};
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, withProtectedServer(notSignedIn, null).build())) {
+
+			assertThatThrownBy(() -> client.openSession("s", org.thought.acp.session.SessionPrincipal.of("alice")))
+				.hasMessageContaining("needs a sign-in first");
+			assertThat(agent.newSessions()).isEmpty();
+			assertThat(client.session("s")).isEmpty();
+		}
+	}
+
 	// --- the portable tier ------------------------------------------------------------------
 
 	@Test

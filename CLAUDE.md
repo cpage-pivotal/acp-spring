@@ -27,7 +27,7 @@ mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.a
 
 Module dependency shape: `AgentClient` API → `AgentClientPool` → `acp-spring-core` → `acp-core` SDK → agent subprocess (stdio) or supervised `goose serve` (our own `WebSocketAgentTransport`).
 
-- **acp-spring-core** (package-by-feature under `org.thought.acp`): `client` (fluent `AgentClient`, pool), `session` (optional session ops, gated by capability), `turn` + `event` (demultiplexing session updates into `AgentEvent`; exactly one terminal event per turn), `config` (`ConfigResolver`), `permission`, `workspace` (jail for fs/terminal), `process`, `protocol` (version negotiation), `observation`, `executor` (legacy `GooseExecutor`-shaped facade).
+- **acp-spring-core** (package-by-feature under `org.thought.acp`): `client` (fluent `AgentClient`, pool), `session` (optional session ops, gated by capability), `turn` + `event` (demultiplexing session updates into `AgentEvent`; exactly one terminal event per turn), `config` (`ConfigResolver`), `permission`, `mcp` (credential-holding loopback proxy), `workspace` (jail for fs/terminal), `process`, `protocol` (version negotiation), `observation`, `executor` (legacy `GooseExecutor`-shaped facade).
 - **Runtime adapters** (`runtime-goose|codex|opencode`) implement the `AgentRuntime` SPI (launch spec, provisioning, candidate option ids). `runtime-registry` implements `AgentRuntimeProvider`: launches any registry agent from catalogue data with SHA-256-verified downloads. A compiled adapter always wins over the registry for the same id. Core and application code must not name a specific agent; vendor knowledge lives only in its adapter.
 - **spring-boot-autoconfigure / starter**: `AcpProperties` binding, standalone `agents.yaml` via a `ConfigData` loader, optional HTTP controller, registry/observation/ChatModel configs.
 - **acp-spring-ai**: `AcpChatModel` adapter (a named session sends only unheard messages; unnamed sends full history).
@@ -46,6 +46,12 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `acp-spring
   reading), `AgentClient.notices()`, and `spring.acp.mcp.on-server-failure`. Goose-only, and only
   for an agent this client started. `tools/mcp-silence-check.py` re-measures it after a goose
   upgrade.
+- **MCP credentials never reach the agent.** An `McpCredentialsProvider` routes the HTTP servers it
+  answers for through a loopback proxy (`core/mcp`), one unguessable path per session, asking for
+  headers on every request so expiring tokens refresh mid-session. Routes are released by
+  `SessionRegistry` whenever it forgets a session. A named session belongs to its `SessionPrincipal`
+  (`SessionOwnershipException` otherwise); the resolver is read on the caller's thread, never on
+  subscription. See "MCP credentials" in `docs/design.md`.
 - **`permissions.policy: deny` does not stop an agent writing files.** Combine with an agent mode that asks first (`mode: plan`). Workspace jail confines fs/terminal requests by real path (symlinks followed), not just `normalize()`.
 - Optional session operations throw `UnsupportedAgentOperationException` naming the ACP method rather than failing on the wire.
 - ACP v2 is gated behind a flag and refused; target v1.

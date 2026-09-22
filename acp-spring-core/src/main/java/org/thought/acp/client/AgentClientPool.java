@@ -60,6 +60,9 @@ public final class AgentClientPool implements AgentClient {
 
 	private final Supplier<AgentClient> connect;
 
+	/** Asked eagerly, on the caller's thread, since connections are chosen later on subscription. */
+	private final org.thought.acp.session.SessionPrincipalResolver principals;
+
 	private final List<Slot> slots;
 
 	/** Which connection owns a given session name. The stickiness rule, made concrete. */
@@ -92,6 +95,7 @@ public final class AgentClientPool implements AgentClient {
 		this.runtimeId = runtimeId;
 		this.pool = settings.pool();
 		this.connect = connect;
+		this.principals = settings.mcp().principals();
 		this.slots = new ArrayList<>(pool.maxProcesses());
 		for (int i = 0; i < pool.maxProcesses(); i++) {
 			slots.add(new Slot(i));
@@ -146,7 +150,16 @@ public final class AgentClientPool implements AgentClient {
 
 	@Override
 	public AgentSession openSession(String name) {
-		return clientFor(name).openSession(name);
+		return openSession(name, currentPrincipal());
+	}
+
+	@Override
+	public AgentSession openSession(String name, org.thought.acp.session.SessionPrincipal principal) {
+		return clientFor(name).openSession(name, principal);
+	}
+
+	private org.thought.acp.session.SessionPrincipal currentPrincipal() {
+		return principals.current().orElse(null);
 	}
 
 	@Override
@@ -362,9 +375,17 @@ public final class AgentClientPool implements AgentClient {
 
 		private AgentOptions options = AgentOptions.none();
 
+		private org.thought.acp.session.SessionPrincipal principal;
+
 		@Override
 		public PromptSpec session(String name) {
 			this.sessionName = name;
+			return this;
+		}
+
+		@Override
+		public PromptSpec principal(org.thought.acp.session.SessionPrincipal principal) {
+			this.principal = principal;
 			return this;
 		}
 
@@ -389,19 +410,25 @@ public final class AgentClientPool implements AgentClient {
 
 		@Override
 		public AgentResponse call() {
-			return delegate().call();
+			return delegate(owner()).call();
 		}
 
 		@Override
 		public AgentStream stream() {
 			// Deferred so that choosing the connection, like everything else about the turn, happens
-			// on subscription rather than when the stream was described.
-			return () -> Flux.defer(() -> delegate().stream().events());
+			// on subscription rather than when the stream was described. The principal is the
+			// exception: it is read now, on the caller's thread, and carried in.
+			org.thought.acp.session.SessionPrincipal owner = owner();
+			return () -> Flux.defer(() -> delegate(owner).stream().events());
 		}
 
-		private PromptSpec delegate() {
+		private org.thought.acp.session.SessionPrincipal owner() {
+			return principal != null ? principal : currentPrincipal();
+		}
+
+		private PromptSpec delegate(org.thought.acp.session.SessionPrincipal owner) {
 			AgentClient client = sessionName == null ? clientForEphemeral() : clientFor(sessionName);
-			PromptSpec spec = client.prompt();
+			PromptSpec spec = client.prompt().principal(owner);
 			if (sessionName != null) {
 				spec = spec.session(sessionName);
 			}
@@ -425,12 +452,23 @@ public final class AgentClientPool implements AgentClient {
 
 		@Override
 		public AgentSession load(String name, String sessionId) {
-			return clientFor(name).sessions().load(name, sessionId);
+			return load(name, sessionId, currentPrincipal());
 		}
 
 		@Override
 		public AgentSession resume(String name, String sessionId) {
-			return clientFor(name).sessions().resume(name, sessionId);
+			return resume(name, sessionId, currentPrincipal());
+		}
+
+		@Override
+		public AgentSession load(String name, String sessionId, org.thought.acp.session.SessionPrincipal principal) {
+			return clientFor(name).sessions().load(name, sessionId, principal);
+		}
+
+		@Override
+		public AgentSession resume(String name, String sessionId,
+				org.thought.acp.session.SessionPrincipal principal) {
+			return clientFor(name).sessions().resume(name, sessionId, principal);
 		}
 
 		@Override

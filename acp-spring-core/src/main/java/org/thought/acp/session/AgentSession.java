@@ -3,6 +3,8 @@ package org.thought.acp.session;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -38,9 +40,20 @@ public final class AgentSession {
 	private final AtomicReference<SessionConfiguration> configuration = new AtomicReference<>(
 			SessionConfiguration.empty());
 
+	private final SessionPrincipal principal;
+
+	/** Whatever must end with the session: today, its MCP proxy routes. Run at most once. */
+	private final AtomicReference<Runnable> release;
+
 	AgentSession(String name, String sessionId) {
+		this(name, sessionId, null, null);
+	}
+
+	AgentSession(String name, String sessionId, SessionPrincipal principal, Runnable release) {
 		this.name = name;
 		this.sessionId = sessionId;
+		this.principal = principal;
+		this.release = new AtomicReference<>(release);
 	}
 
 	public String name() {
@@ -49,6 +62,28 @@ public final class AgentSession {
 
 	public String sessionId() {
 		return sessionId;
+	}
+
+	/** Who this session was opened for; empty for a session opened on nobody's behalf. */
+	public Optional<SessionPrincipal> principal() {
+		return Optional.ofNullable(principal);
+	}
+
+	/** Whether a caller acting for {@code candidate} (null for nobody) may use this session. */
+	boolean belongsTo(SessionPrincipal candidate) {
+		return Objects.equals(principal, candidate);
+	}
+
+	/**
+	 * Lets go of what this session held beyond the agent: its MCP proxy routes, so the URLs the
+	 * agent was given stop working. Called by the registry whenever it forgets the session, by
+	 * whichever path; idempotent because there are several.
+	 */
+	void release() {
+		Runnable pending = release.getAndSet(null);
+		if (pending != null) {
+			pending.run();
+		}
 	}
 
 	/**

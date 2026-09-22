@@ -2,18 +2,35 @@ package org.thought.acp.config;
 
 import java.time.Duration;
 
+import org.thought.acp.mcp.McpCredentialsProvider;
+import org.thought.acp.session.SessionPrincipalResolver;
+
 /**
- * What to do when the agent reports that it could not load one of the configured MCP servers.
+ * How MCP servers reach the agent: what a reported load failure does, and whose credentials an
+ * HTTP server is called with.
  *
+ * <p><b>Failures.</b> What to do when the agent reports that it could not load one of the
+ * configured MCP servers.
  * <p>Needed because the default — carry on — is the behaviour that costs an afternoon. The agent
  * connects, the model answers, and the only symptom of a server that never loaded is the model
  * saying in prose that it lacks tools the application believes it has. An application that would
  * rather not start at all than serve a half-equipped agent says so here.
  *
  * @param onServerFailure what a reported failure does to the session that requested the server
+ *
+ * <p><b>Credentials.</b> A {@code credentials} provider puts the HTTP servers it answers for behind
+ * a loopback proxy, one route per session, so the agent never holds a token and a token that
+ * expires mid-session is refreshed between two tool calls. {@code principals} says whose session
+ * it is when the caller did not. Both default to nothing, which hands every server to the agent as
+ * configured — the behaviour before either existed. See "MCP credentials" in {@code docs/design.md}.
+ *
+ * @param onServerFailure what a reported failure does to the session that requested the server
  * @param detectTimeout how long {@code session/new} waits for such a report before carrying on
+ * @param credentials asked, per session and server, for the credentials to call it with
+ * @param principals who a session is for when the caller did not say
  */
-public record McpSettings(OnServerFailure onServerFailure, Duration detectTimeout) {
+public record McpSettings(OnServerFailure onServerFailure, Duration detectTimeout,
+		McpCredentialsProvider credentials, SessionPrincipalResolver principals) {
 
 	/**
 	 * Long enough for the agent to have written the line, short enough to pay on every session open.
@@ -31,10 +48,25 @@ public record McpSettings(OnServerFailure onServerFailure, Duration detectTimeou
 		if (detectTimeout.isNegative()) {
 			throw new IllegalArgumentException("mcp detect-timeout must not be negative but was " + detectTimeout);
 		}
+		credentials = credentials == null ? McpCredentialsProvider.none() : credentials;
+		principals = principals == null ? SessionPrincipalResolver.none() : principals;
+	}
+
+	/** Failure handling only; every server handed to the agent as configured. */
+	public McpSettings(OnServerFailure onServerFailure, Duration detectTimeout) {
+		this(onServerFailure, detectTimeout, null, null);
 	}
 
 	public static McpSettings defaults() {
 		return new McpSettings(OnServerFailure.WARN, DEFAULT_DETECT_TIMEOUT);
+	}
+
+	public McpSettings withCredentials(McpCredentialsProvider credentials) {
+		return new McpSettings(onServerFailure, detectTimeout, credentials, principals);
+	}
+
+	public McpSettings withPrincipals(SessionPrincipalResolver principals) {
+		return new McpSettings(onServerFailure, detectTimeout, credentials, principals);
 	}
 
 	public enum OnServerFailure {

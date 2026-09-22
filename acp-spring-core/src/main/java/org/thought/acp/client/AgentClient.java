@@ -116,6 +116,24 @@ public interface AgentClient extends AutoCloseable {
 	 */
 	org.thought.acp.session.AgentSession openSession(String name);
 
+	/**
+	 * Opens the named session on behalf of {@code principal}, or returns the one already open for
+	 * them.
+	 *
+	 * <p>The principal is who the session's MCP credentials are asked for, and who it belongs to: a
+	 * name already open for someone else throws {@code SessionOwnershipException}. The one-argument
+	 * form asks {@code McpSettings.principals()} instead.
+	 *
+	 * @param principal who the session is for, or null for nobody
+	 */
+	default org.thought.acp.session.AgentSession openSession(String name,
+			org.thought.acp.session.SessionPrincipal principal) {
+		if (principal == null) {
+			return openSession(name);
+		}
+		throw new UnsupportedOperationException(getClass().getName() + " does not support session principals");
+	}
+
 	@Override
 	void close();
 
@@ -133,6 +151,23 @@ public interface AgentClient extends AutoCloseable {
 
 		/** Per-request overrides, built inline. */
 		PromptSpec options(Consumer<AgentOptions.Builder> customizer);
+
+		/**
+		 * Runs on behalf of {@code principal}: their MCP credentials, their session.
+		 *
+		 * <p>Without it the principal comes from {@code McpSettings.principals()}, asked when
+		 * {@link #call()} or {@link #stream()} is invoked — on the caller's thread, which is what lets
+		 * a resolver read a thread-bound security context. On a reactive stack, pass it here.
+		 *
+		 * <p>An implementation that cannot honour a principal must refuse one rather than ignore it:
+		 * silently running a user's turn with nobody's credentials is worse than failing.
+		 */
+		default PromptSpec principal(org.thought.acp.session.SessionPrincipal principal) {
+			if (principal == null) {
+				return this;
+			}
+			throw new UnsupportedOperationException(getClass().getName() + " does not support session principals");
+		}
 
 		/** Runs the turn and blocks for the assistant text. */
 		AgentResponse call();

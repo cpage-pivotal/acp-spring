@@ -41,6 +41,26 @@ public interface AgentSessions {
 	/** Binds {@code name} to an existing session without replaying its history. */
 	AgentSession resume(String name, String sessionId);
 
+	/**
+	 * {@link #load(String, String)} on behalf of {@code principal}, whose MCP credentials the
+	 * re-declared servers are called with. The two-argument form asks
+	 * {@code McpSettings.principals()}.
+	 */
+	default AgentSession load(String name, String sessionId, SessionPrincipal principal) {
+		if (principal == null) {
+			return load(name, sessionId);
+		}
+		throw new UnsupportedOperationException(getClass().getName() + " does not support session principals");
+	}
+
+	/** {@link #resume(String, String)} on behalf of {@code principal}. */
+	default AgentSession resume(String name, String sessionId, SessionPrincipal principal) {
+		if (principal == null) {
+			return resume(name, sessionId);
+		}
+		throw new UnsupportedOperationException(getClass().getName() + " does not support session principals");
+	}
+
 	/** Permanently removes a stored session from the agent. It will not appear in {@link #list}. */
 	void delete(String sessionId);
 

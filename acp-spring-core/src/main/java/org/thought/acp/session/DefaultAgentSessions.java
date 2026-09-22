@@ -13,6 +13,7 @@ import org.thought.acp.client.AgentClientException;
 import org.thought.acp.client.SessionConfigRecorder;
 import org.thought.acp.config.AdvertisedSessionConfig;
 import org.thought.acp.config.AgentSettings;
+import org.thought.acp.mcp.McpAccess;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -51,9 +52,24 @@ public final class DefaultAgentSessions implements AgentSessions {
 	/** Guards the claim of config options from a response that does not name its session. */
 	private final Object attachLock = new Object();
 
+	/** Routes the re-declared MCP servers through the proxy, exactly as a new session's are. */
+	private final McpAccess mcpAccess;
+
+	/**
+	 * With an {@link McpAccess} of its own, which nothing closes: fine without a credentials
+	 * provider, when it never starts a proxy, and meant for tests. A client passes the one it owns.
+	 */
 	public DefaultAgentSessions(com.agentclientprotocol.sdk.client.AcpAsyncClient acp, String runtimeId,
 			AgentSettings settings, AcpSchema.AgentCapabilities capabilities, SessionRegistry registry,
 			SessionConfigRecorder recorder, Consumer<AgentSession> configure) {
+		this(acp, runtimeId, settings, capabilities, registry, recorder, configure,
+				new McpAccess(settings.mcp().credentials(), settings.timeout()));
+	}
+
+	public DefaultAgentSessions(com.agentclientprotocol.sdk.client.AcpAsyncClient acp, String runtimeId,
+			AgentSettings settings, AcpSchema.AgentCapabilities capabilities, SessionRegistry registry,
+			SessionConfigRecorder recorder, Consumer<AgentSession> configure, McpAccess mcpAccess) {
+		this.mcpAccess = mcpAccess;
 		this.acp = acp;
 		this.runtimeId = runtimeId;
 		this.settings = settings;
@@ -96,14 +112,28 @@ public final class DefaultAgentSessions implements AgentSessions {
 
 	@Override
 	public AgentSession load(String name, String sessionId) {
-		require(Operation.LOAD);
-		return attach(name, sessionId, Operation.LOAD);
+		return load(name, sessionId, currentPrincipal());
 	}
 
 	@Override
 	public AgentSession resume(String name, String sessionId) {
+		return resume(name, sessionId, currentPrincipal());
+	}
+
+	@Override
+	public AgentSession load(String name, String sessionId, SessionPrincipal principal) {
+		require(Operation.LOAD);
+		return attach(name, sessionId, Operation.LOAD, principal);
+	}
+
+	@Override
+	public AgentSession resume(String name, String sessionId, SessionPrincipal principal) {
 		require(Operation.RESUME);
-		return attach(name, sessionId, Operation.RESUME);
+		return attach(name, sessionId, Operation.RESUME, principal);
+	}
+
+	private SessionPrincipal currentPrincipal() {
+		return settings.mcp().principals().current().orElse(null);
 	}
 
 	/**
@@ -112,13 +142,15 @@ public final class DefaultAgentSessions implements AgentSessions {
 	 * <p>The registration comes first and is undone if the call fails, so a failed load cannot leave
 	 * a name pointing at a session this client never attached to.
 	 */
-	private AgentSession attach(String name, String sessionId, Operation operation) {
+	private AgentSession attach(String name, String sessionId, Operation operation, SessionPrincipal principal) {
 		org.thought.acp.config.Validation.requireText(sessionId, "session id");
-		AgentSession session = registry.adopt(name, sessionId);
+		McpAccess.Grant grant = mcpAccess.grant(principal, settings.mcpServers());
+		AgentSession session = registry.adopt(name, sessionId, principal, grant::close);
 		try {
+			List<AcpSchema.McpServer> servers = mcpServers(grant);
 			AdvertisedSessionConfig advertised;
 			synchronized (attachLock) {
-				advertised = operation == Operation.LOAD ? sendLoad(sessionId) : sendResume(sessionId);
+				advertised = operation == Operation.LOAD ? sendLoad(sessionId, servers) : sendResume(sessionId, servers);
 			}
 			session.advertised(advertised);
 			configure.accept(session);
@@ -131,9 +163,9 @@ public final class DefaultAgentSessions implements AgentSessions {
 		}
 	}
 
-	private AdvertisedSessionConfig sendLoad(String sessionId) {
+	private AdvertisedSessionConfig sendLoad(String sessionId, List<AcpSchema.McpServer> servers) {
 		AcpSchema.LoadSessionResponse response = acp
-				.loadSession(new AcpSchema.LoadSessionRequest(sessionId, settings.workspace().toString(), mcpServers()))
+				.loadSession(new AcpSchema.LoadSessionRequest(sessionId, settings.workspace().toString(), servers))
 				.block(settings.timeout());
 		if (response == null) {
 			throw new AgentClientException("Agent '" + runtimeId + "' did not answer session/load for " + sessionId);
@@ -142,9 +174,9 @@ public final class DefaultAgentSessions implements AgentSessions {
 	}
 
 	@SuppressWarnings("deprecation")
-	private AdvertisedSessionConfig sendResume(String sessionId) {
+	private AdvertisedSessionConfig sendResume(String sessionId, List<AcpSchema.McpServer> servers) {
 		AcpSchema.ResumeSessionResponse response = acp.resumeSession(
-				new AcpSchema.ResumeSessionRequest(sessionId, settings.workspace().toString(), mcpServers()))
+				new AcpSchema.ResumeSessionRequest(sessionId, settings.workspace().toString(), servers))
 				.block(settings.timeout());
 		if (response == null) {
 			throw new AgentClientException("Agent '" + runtimeId + "' did not answer session/resume for " + sessionId);
@@ -156,15 +188,16 @@ public final class DefaultAgentSessions implements AgentSessions {
 	 * The MCP servers to re-declare on this attach, named in the log on the way past.
 	 *
 	 * <p>{@code session/load} and {@code session/resume} carry them exactly as {@code session/new}
-	 * does, and fail to connect just as silently; see the note on {@code DefaultAgentClient}.
+	 * does, and fail to connect just as silently; see the note on {@code DefaultAgentClient}. Logged
+	 * as configured, since a proxy URL would tell the reader nothing about what was asked for.
 	 */
-	private List<AcpSchema.McpServer> mcpServers() {
+	private List<AcpSchema.McpServer> mcpServers(McpAccess.Grant grant) {
 		if (!settings.mcpServers().isEmpty() && logger.isInfoEnabled()) {
 			logger.info("Handing {} MCP server(s) to the agent on re-attach: {}. The agent does not report "
 					+ "back whether it connected to them.", settings.mcpServers().size(),
 					settings.mcpServers().stream().map(org.thought.acp.config.McpServerSpec::describe).toList());
 		}
-		return settings.mcpServers().stream().map(m -> m.toAcp()).toList();
+		return grant.servers().stream().map(m -> m.toAcp()).toList();
 	}
 
 	@Override

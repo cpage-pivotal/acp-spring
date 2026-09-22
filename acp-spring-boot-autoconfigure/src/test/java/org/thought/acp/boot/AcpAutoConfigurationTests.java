@@ -88,6 +88,23 @@ class AcpAutoConfigurationTests {
 	}
 
 	@Test
+	void anMcpCredentialsProviderAndPrincipalResolverAreTakenFromTheContext() {
+		org.thought.acp.mcp.McpCredentialsProvider provider = (server, principal) -> Optional.empty();
+		org.thought.acp.session.SessionPrincipalResolver resolver = () -> Optional
+			.of(org.thought.acp.session.SessionPrincipal.of("alice"));
+		runner.withBean(org.thought.acp.mcp.McpCredentialsProvider.class, () -> provider)
+			.withBean(org.thought.acp.session.SessionPrincipalResolver.class, () -> resolver)
+			.withPropertyValues("spring.acp.mcp.on-server-failure=fail")
+			.run(context -> {
+				org.thought.acp.config.McpSettings mcp = context.getBean(AgentSettings.class).mcp();
+				assertThat(mcp.credentials()).isSameAs(provider);
+				assertThat(mcp.principals()).isSameAs(resolver);
+				assertThat(mcp.onServerFailure())
+					.isEqualTo(org.thought.acp.config.McpSettings.OnServerFailure.FAIL);
+			});
+	}
+
+	@Test
 	void anApplicationThatWouldRatherNotStartWithoutItsToolsSaysSo() {
 		runner.withPropertyValues("spring.acp.mcp.on-server-failure=fail",
 				"spring.acp.mcp.detect-timeout=750ms").run(context -> {

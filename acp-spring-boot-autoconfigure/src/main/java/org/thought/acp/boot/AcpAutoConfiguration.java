@@ -98,16 +98,28 @@ public class AcpAutoConfiguration {
 		return SelectedRuntime.from(runtimes, providers, properties);
 	}
 
+	/**
+	 * The settings every connection runs with.
+	 *
+	 * <p>A {@code McpCredentialsProvider} bean puts the HTTP MCP servers it answers for behind the
+	 * loopback proxy, with that session's credentials; a {@code SessionPrincipalResolver} bean says
+	 * whose session it is when a prompt does not. Neither is required, and without them every server
+	 * is handed to the agent as configured.
+	 */
 	@Bean
 	@ConditionalOnMissingBean
-	AgentSettings acpAgentSettings(AcpProperties properties) {
+	AgentSettings acpAgentSettings(AcpProperties properties,
+			org.springframework.beans.factory.ObjectProvider<org.thought.acp.mcp.McpCredentialsProvider> credentials,
+			org.springframework.beans.factory.ObjectProvider<org.thought.acp.session.SessionPrincipalResolver> principals) {
 		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
 				: properties.getWorkspace().toAbsolutePath();
 
 		return AgentSettings.builder(properties.getRuntime(), workspace).runtimeHome(properties.getRuntimeHome())
 				.timeout(properties.getTimeout()).model(properties.getModel())
 				.provider(properties.toProviderSpec()).mode(properties.getMode())
-				.mcpServers(properties.toMcpServerSpecs()).mcp(properties.toMcpSettings())
+				.mcpServers(properties.toMcpServerSpecs())
+				.mcp(properties.toMcpSettings().withCredentials(credentials.getIfAvailable())
+						.withPrincipals(principals.getIfAvailable()))
 				.permissions(properties.toPermissionPolicy())
 				.filesystem(properties.toFileSystemAccess()).terminal(properties.toTerminalAccess())
 				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())

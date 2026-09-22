@@ -71,6 +71,8 @@ public final class ScriptedAgent implements AutoCloseable {
 
 	private final List<String> loaded = new CopyOnWriteArrayList<>();
 
+	private final List<List<Map<String, Object>>> attachedMcpServers = new CopyOnWriteArrayList<>();
+
 	private final Builder script;
 
 	private ScriptedAgent(Builder script) {
@@ -123,6 +125,14 @@ public final class ScriptedAgent implements AutoCloseable {
 	/** Session ids a client asked to load or resume, in order. */
 	public List<String> loaded() {
 		return List.copyOf(loaded);
+	}
+
+	/**
+	 * The {@code mcpServers} each {@code session/load} or {@code session/resume} carried, raw, in
+	 * the order they arrived — the re-declaration that has to be routed like a new session's.
+	 */
+	public List<List<Map<String, Object>>> attachedMcpServers() {
+		return List.copyOf(attachedMcpServers);
 	}
 
 	@Override
@@ -244,6 +254,10 @@ public final class ScriptedAgent implements AutoCloseable {
 			throw new Rejected(-32602, "No such session: " + sessionId);
 		}
 		loaded.add(sessionId);
+		Object servers = asMap(request.params()).get("mcpServers");
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> declared = servers instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+		attachedMcpServers.add(List.copyOf(declared));
 		Map<String, Object> result = new LinkedHashMap<>();
 		if (!selects.isEmpty()) {
 			result.put("configOptions", selects.values().stream().map(Select::toWire).toList());

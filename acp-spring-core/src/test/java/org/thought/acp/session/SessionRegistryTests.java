@@ -116,4 +116,68 @@ class SessionRegistryTests {
 	void adoptingValidatesTheName() {
 		assertThatThrownBy(() -> registry.adopt("../escape", "sid-1")).isInstanceOf(IllegalArgumentException.class);
 	}
+
+	// --- principals and release -----------------------------------------------------------------
+
+	private static SessionRegistry.Opened opened(String sessionId, AtomicInteger released) {
+		return new SessionRegistry.Opened(sessionId, released::incrementAndGet);
+	}
+
+	@Test
+	void aNameOpenForOnePrincipalIsRefusedToAnother() {
+		SessionPrincipal alice = SessionPrincipal.of("alice");
+		AtomicInteger created = new AtomicInteger();
+		registry.resolve("ticket-42", alice, name -> opened("sid-" + created.incrementAndGet(), new AtomicInteger()));
+
+		assertThatThrownBy(() -> registry.resolve("ticket-42", SessionPrincipal.of("bob"),
+				name -> opened("sid-" + created.incrementAndGet(), new AtomicInteger())))
+			.isInstanceOf(SessionOwnershipException.class).hasMessageNotContaining("alice")
+			.hasMessageNotContaining("bob");
+		assertThatThrownBy(() -> registry.resolve("ticket-42", name -> "sid-" + created.incrementAndGet()))
+			.isInstanceOf(SessionOwnershipException.class);
+		assertThat(registry.resolve("ticket-42", SessionPrincipal.of("alice"), name -> opened("unused", null))
+			.sessionId()).isEqualTo("sid-1");
+		assertThat(created).hasValue(1);
+	}
+
+	@Test
+	void removingASessionReleasesWhatItHeldExactlyOnce() {
+		AtomicInteger released = new AtomicInteger();
+		registry.resolve("removed", null, name -> opened("sid-1", released));
+
+		registry.remove("removed");
+		registry.remove("removed");
+
+		assertThat(released).hasValue(1);
+	}
+
+	@Test
+	void evictionAndClearingReleaseToo() {
+		AtomicInteger evicted = new AtomicInteger();
+		AtomicInteger cleared = new AtomicInteger();
+		registry.resolve("evicted", null, name -> opened("sid-1", evicted));
+
+		registry.evictIdle(Duration.ofMillis(-1));
+		registry.resolve("cleared", null, name -> opened("sid-2", cleared));
+		registry.clear();
+		registry.clear();
+
+		assertThat(evicted).hasValue(1);
+		assertThat(cleared).hasValue(1);
+	}
+
+	@Test
+	void adoptingATakenNameReleasesWhatTheRefusedSessionWouldHaveHeld() {
+		AtomicInteger released = new AtomicInteger();
+		registry.adopt("taken", "sid-1");
+
+		assertThatThrownBy(() -> registry.adopt("taken", "sid-2", null, released::incrementAndGet))
+			.isInstanceOf(IllegalStateException.class);
+		assertThat(released).hasValue(1);
+	}
+
+	@Test
+	void aPrincipalNeverAppearsInItsOwnToString() {
+		assertThat(SessionPrincipal.of("alice@example.com").toString()).doesNotContain("alice");
+	}
 }

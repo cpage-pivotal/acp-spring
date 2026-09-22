@@ -15,12 +15,15 @@ import org.thought.acp.config.ConfigResolver;
 import org.thought.acp.config.McpServerSpec;
 import org.thought.acp.config.SessionConfiguration;
 import org.thought.acp.event.AgentEvent;
+import org.thought.acp.mcp.McpAccess;
 import org.thought.acp.observation.AgentObservations;
 import org.thought.acp.runtime.AgentRuntime;
 import org.thought.acp.runtime.AgentRuntime.PortableOption;
 import org.thought.acp.session.AgentSession;
 import org.thought.acp.session.AgentSessions;
 import org.thought.acp.session.DefaultAgentSessions;
+import org.thought.acp.session.SessionPrincipal;
+import org.thought.acp.session.SessionPrincipalResolver;
 import org.thought.acp.session.SessionRegistry;
 import org.thought.acp.turn.AgentTurn;
 import org.thought.acp.turn.SessionUpdateRouter;
@@ -69,6 +72,9 @@ public final class DefaultAgentClient implements AgentClient {
 	/** Set once by the factory before this client is handed out, or left null. */
 	private volatile org.thought.acp.process.AgentLogWatcher watcher;
 
+	/** Each session's MCP servers as the agent is to see them; owns the loopback proxy, if any. */
+	private final McpAccess mcpAccess;
+
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
 			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
 			AcpSchema.InitializeResponse initialized, java.util.function.BooleanSupplier alive, Runnable onClose) {
@@ -90,9 +96,10 @@ public final class DefaultAgentClient implements AgentClient {
 		this.recorder = recorder == null ? new SessionConfigRecorder() : recorder;
 		this.configResolver = new ConfigResolver(runtime, settings.onUnsupported());
 		this.agentInfo = initialized == null ? null : AgentInfo.from(initialized.agentInfo()).orElse(null);
+		this.mcpAccess = new McpAccess(settings.mcp().credentials(), settings.timeout());
 		this.sessionOperations = new DefaultAgentSessions(acp, runtime.id(), settings,
 				initialized == null ? null : initialized.agentCapabilities(), sessions, this.recorder,
-				session -> configure(session, settings));
+				session -> configure(session, settings), mcpAccess);
 		this.alive = alive;
 		this.onClose = onClose == null ? () -> {
 		} : onClose;
@@ -159,6 +166,7 @@ public final class DefaultAgentClient implements AgentClient {
 			logger.debug("Graceful close did not complete cleanly", ex);
 		}
 		finally {
+			mcpAccess.close();
 			onClose.run();
 		}
 	}
@@ -205,7 +213,17 @@ public final class DefaultAgentClient implements AgentClient {
 
 	@Override
 	public AgentSession openSession(String name) {
-		return openSession(name, settings);
+		return openSession(name, settings, currentPrincipal());
+	}
+
+	@Override
+	public AgentSession openSession(String name, SessionPrincipal principal) {
+		return openSession(name, settings, principal);
+	}
+
+	/** Asked on the caller's thread, never later: see {@link SessionPrincipalResolver}. */
+	private SessionPrincipal currentPrincipal() {
+		return settings.mcp().principals().current().orElse(null);
 	}
 
 	/**
@@ -214,23 +232,34 @@ public final class DefaultAgentClient implements AgentClient {
 	 * <p>The advertised configuration comes from two places because the SDK splits it: {@code modes}
 	 * and {@code models} off the typed response, {@code configOptions} out of the recorder, which is
 	 * the only way to see a field {@code NewSessionResponse} drops.
+	 *
+	 * <p>The MCP grant is taken inside the factory, so only a session that is really being created
+	 * asks for credentials, and it is released there if {@code session/new} fails; once the session
+	 * exists the registry owns it and releases it whenever the session is forgotten.
 	 */
-	private AgentSession openSession(String name, AgentSettings effective) {
+	private AgentSession openSession(String name, AgentSettings effective, SessionPrincipal principal) {
 		AtomicReference<AdvertisedSessionConfig> advertised = new AtomicReference<>();
 		java.util.concurrent.atomic.AtomicBoolean opened = new java.util.concurrent.atomic.AtomicBoolean();
-		AgentSession session = sessions.resolve(name, n -> {
+		AgentSession session = sessions.resolve(name, principal, n -> {
 			opened.set(true);
-			logMcpServers(effective, "session/new");
-			AcpSchema.NewSessionResponse response = acp
-					.newSession(new AcpSchema.NewSessionRequest(effective.workspace().toString(),
-							effective.mcpServers().stream().map(m -> m.toAcp()).toList()))
-					.block(effective.timeout());
-			if (response == null || response.sessionId() == null) {
-				throw new AgentClientException("Agent did not return a session id for '" + n + "'");
+			McpAccess.Grant grant = mcpAccess.grant(principal, effective.mcpServers());
+			try {
+				logMcpServers(effective, "session/new");
+				AcpSchema.NewSessionResponse response = acp
+						.newSession(new AcpSchema.NewSessionRequest(effective.workspace().toString(),
+								grant.servers().stream().map(m -> m.toAcp()).toList()))
+						.block(effective.timeout());
+				if (response == null || response.sessionId() == null) {
+					throw new AgentClientException("Agent did not return a session id for '" + n + "'");
+				}
+				advertised.set(new AdvertisedSessionConfig(recorder.configOptionsFor(response.sessionId()),
+						response.modes(), response.models()));
+				return new SessionRegistry.Opened(response.sessionId(), grant::close);
 			}
-			advertised.set(new AdvertisedSessionConfig(recorder.configOptionsFor(response.sessionId()),
-					response.modes(), response.models()));
-			return response.sessionId();
+			catch (RuntimeException ex) {
+				grant.close();
+				throw ex;
+			}
 		});
 		if (advertised.get() != null) {
 			session.advertised(advertised.get());
@@ -335,9 +364,17 @@ public final class DefaultAgentClient implements AgentClient {
 
 		private AgentOptions options = AgentOptions.none();
 
+		private SessionPrincipal principal;
+
 		@Override
 		public PromptSpec session(String name) {
 			this.sessionName = name;
+			return this;
+		}
+
+		@Override
+		public PromptSpec principal(SessionPrincipal principal) {
+			this.principal = principal;
 			return this;
 		}
 
@@ -397,12 +434,14 @@ public final class DefaultAgentClient implements AgentClient {
 				throw new IllegalStateException("prompt is empty; call user(...) before call() or stream()");
 			}
 			AgentSettings effective = settings.merge(options);
+			// Resolved now, on the caller's thread, not inside the deferred turn below.
+			SessionPrincipal owner = principal != null ? principal : currentPrincipal();
 			boolean ephemeral = sessionName == null;
 			String name = ephemeral ? "turn-" + UUID.randomUUID() : sessionName;
 			List<AcpSchema.ContentBlock> prompt = List.of(new AcpSchema.TextContent(text.toString()));
 
 			Flux<AgentEvent> events = Flux.defer(() -> {
-				AgentSession session = openSession(name, effective);
+				AgentSession session = openSession(name, effective, owner);
 				acquireTurn(session, effective.timeout());
 				try {
 					// A turn with per-request overrides re-negotiates; an unchanged one does not.
