@@ -108,7 +108,27 @@ class OpenCodeRuntimeTests {
 				// OpenCode's own indirection, so the key stays in the environment.
 				.contains("\"apiKey\": \"{env:OPENAI_API_KEY}\"")
 				// Its model ids are provider/model, so the endpoint and its model are one entry.
-				.contains("\"model\": \"acme/llm-1\"");
+				.contains("\"model\": \"acme/llm-1\"")
+				// The endpoint's key is exported as OPENAI_API_KEY, which would switch the vendor on too.
+				.contains("\"disabled_providers\": [\"openai\"]");
+		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
+	}
+
+	@Test
+	void anEndpointNamedAfterItsApiTypeIsNotMergedIntoTheBuiltInProvider() throws Exception {
+		// OpenCode merges an entry named "openai" into its own openai provider, whose loader calls
+		// sdk.responses() — which the compatible package lacks, so every turn failed.
+		ProviderSpec provider = new ProviderSpec("openai", "openai",
+				java.net.URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
+		AgentSettings settings = settings().provider(provider).model("vendor/llm-1").build();
+
+		runtime.provision(settings);
+
+		String config = Files.readString(home.resolve("opencode.json"));
+		assertThat(config).contains("\"acp\": {").doesNotContain("\"openai\": {")
+				.contains("\"name\": \"openai\"")
+				.contains("\"model\": \"acp/vendor/llm-1\"")
+				.contains("\"disabled_providers\": [\"openai\"]");
 		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
 	}
 

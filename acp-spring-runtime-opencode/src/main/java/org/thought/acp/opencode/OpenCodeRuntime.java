@@ -128,6 +128,12 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 *
 	 * <p>Only for a bring-your-own endpoint. Against a provider OpenCode ships with, the model is a
 	 * value it advertises and belongs on the wire, where the protocol reports what was applied.
+	 *
+	 * <p>The vendor the api type names is disabled alongside. The key this process holds for it is
+	 * the endpoint's, exported under that vendor's variable, and OpenCode switches its built-in entry
+	 * on for any key it finds there — measured against 1.18.31, 49 {@code openai/*} models beside the
+	 * endpoint's one. A model both offer would then match the vendor's entry by its
+	 * {@code <provider>/<model>} spelling, and the endpoint's key would go to the vendor.
 	 */
 	private static Map<String, Object> configFor(AgentSettings settings) {
 		Map<String, Object> config = new LinkedHashMap<>(endpointConfig(settings));
@@ -140,7 +146,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 		if (!provider.isByo() || provider.findApiType().isEmpty()) {
 			return Map.of();
 		}
-		String id = provider.findId().orElse(DEFAULT_PROVIDER_KEY);
+		String id = endpointKey(provider);
 		Map<String, Object> options = new LinkedHashMap<>();
 		options.put("baseURL", provider.findApiBase().orElseThrow().toString());
 		provider.findApiKey().ifPresent(
@@ -148,15 +154,33 @@ public class OpenCodeRuntime implements AgentRuntime {
 
 		Map<String, Object> endpoint = new LinkedHashMap<>();
 		endpoint.put("npm", COMPATIBLE_PACKAGE);
-		endpoint.put("name", id);
+		endpoint.put("name", provider.findId().orElse(id));
 		endpoint.put("options", options);
 		startingModel(settings)
 				.ifPresent(model -> endpoint.put("models", Map.of(model, Map.of("name", model))));
 
 		Map<String, Object> config = new LinkedHashMap<>();
 		config.put("provider", Map.of(id, endpoint));
+		config.put("disabled_providers", List.of(provider.apiType()));
 		startingModel(settings).ifPresent(model -> config.put("model", id + "/" + model));
 		return config;
+	}
+
+	/**
+	 * The name the endpoint is entered under: the application's provider id, unless that id is just
+	 * the api type.
+	 *
+	 * <p>{@code provider.id: openai} beside {@code api-type: openai} is the natural way to describe
+	 * an OpenAI-compatible gateway, and goose reads it that way. OpenCode does not: an entry under the
+	 * name of a provider it ships with is merged into that provider, and the built-in's own loader
+	 * then runs on it. For {@code openai} that loader calls {@code sdk.responses(...)}, which the
+	 * compatible package does not have, so every turn fails with
+	 * {@code Z.responses is not a function} (measured against 1.18.31). The endpoint therefore goes
+	 * under a name of its own, and the model is still found: the resolver's suffix match takes
+	 * {@code acp/<model>} for a request of {@code <model>}.
+	 */
+	private static String endpointKey(ProviderSpec provider) {
+		return provider.findId().filter(id -> !id.equalsIgnoreCase(provider.apiType())).orElse(DEFAULT_PROVIDER_KEY);
 	}
 
 	private static Optional<String> startingModel(AgentSettings settings) {

@@ -621,7 +621,7 @@ adapter derives its own spelling from that one shape; core never learns any of t
 | --- | --- |
 | goose | `OPENAI_HOST` (origin **and** any path prefix, version segment stripped — goose appends the route), and `GOOSE_PROVIDER`/`GOOSE_MODEL` at launch |
 | codex | a `[model_providers.<id>]` table in `config.toml` (no `wire_api`, see below), plus `model` and `model_provider`; the key stays in the environment via `env_key` |
-| opencode | an `@ai-sdk/openai-compatible` provider in `opencode.json` with `options.baseURL` and `{env:…}` for the key; the model id is `<provider>/<model>` |
+| opencode | an `@ai-sdk/openai-compatible` provider in `opencode.json` with `options.baseURL` and `{env:…}` for the key; the model id is `<provider>/<model>`. Keyed `acp` when the provider id is just the api type, and that vendor is put in `disabled_providers` (see below) |
 | registry | `OPENAI_BASE_URL` + `OPENAI_API_KEY`, the derived names, and nothing more — nothing here knows an unseen agent's config format |
 
 `OPENAI_HOST` is the endpoint *minus its version segment*: goose reads it as host plus optional
@@ -638,6 +638,17 @@ carries reasoning items across a turn, so pinning completions costs every reason
 reasoning continuity and its cache hits. Prefer Responses where it exists, in other words, by not
 taking the decision. An application that must pin one dialect — a gateway that implements only one,
 say — still can, through the tier-3 `env` block, which is applied last and wins.
+
+**OpenCode must not be told the endpoint *is* the vendor.** `provider.id: openai` beside
+`api-type: openai` is the natural description of an OpenAI-compatible gateway, and goose reads it
+that way. OpenCode merges a config entry named after a provider it ships with into that provider and
+runs the built-in's loader on it; for `openai` the loader calls `sdk.responses(…)`, which
+`@ai-sdk/openai-compatible` does not have, so every turn failed with `Z.responses is not a function`
+(opencode 1.18.31, found running `acp-meridian` unchanged on opencode). The adapter therefore keys the
+endpoint `acp` when the id is only the api type; the resolver's suffix match still finds
+`acp/<model>`. It also disables that vendor: the endpoint's key is exported as `OPENAI_API_KEY`,
+which switches OpenCode's built-in `openai` on with 49 models, and a model both offered would have
+matched `openai/<model>` first and sent the gateway's key to the vendor.
 
 The dialect is not always the agent's choice to make, though. Codex 1.12 has only one:
 
