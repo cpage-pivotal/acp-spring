@@ -464,8 +464,27 @@ one is useless at another. The provider's rules:
 on a request thread. Anonymous users are nobody: Spring Security keeps their tokens in the HTTP
 session, not in the service the proxy reads.
 
-State lives in memory by default (restart means every user signs in again and the application
-registers again) or, with `spring.acp.mcp.oauth.store: jdbc`, in the application's database:
+**Terminal applications: `mode: local`.** Same provider, different `McpSignIn`. A web application
+cannot sign anyone in from inside a call, so its sign-in throws for Spring Security's redirect
+filter; a terminal application has the user at the keyboard, so `LoopbackSignIn` runs RFC 8252's
+native-app flow on the spot — Spring Security's authorization request with PKCE, a listener on
+`127.0.0.1`, Spring Security's token client to redeem the code, `resource=` on both — through an
+`AuthorizationPrompt` that prints the URL and opens a browser. The listener's port is part of the
+registered redirect URI, so it is chosen at registration and reused; when something else has taken
+it, the registration is forgotten and made again once. The principal is the operating-system user
+(`LocalPrincipalResolver`), and state defaults to one file, `FileMcpOAuthStore` at
+`~/.config/<spring.application.name>/acp-mcp-oauth.json`, mode 600, written atomically. This is
+what acp-meridian now runs on: its 1,118-line `mcp` package became a dependency and twenty lines of
+YAML, verified live — first run signs in to both servers through the browser, later runs refresh
+from the file without one, and the agent lists and calls the tools of both.
+
+That live run found one more silent failure, in the proxy: `HttpServer` creates its dispatcher
+thread in `start()`, and a thread is a daemon only if the thread that made it was. Started from an
+application's main thread, the proxy kept a terminal application alive after `main` returned
+without closing its context. It is now started from a daemon thread.
+
+State lives in memory by default for web (restart means every user signs in again and the
+application registers again) or, with `spring.acp.mcp.oauth.store: jdbc`, in the application's database:
 `acp_mcp_client_registration` (this module's schema) and Spring Security's
 `oauth2_authorized_client`. Registrations are first-writer-wins across instances, because a user who
 signed in through one instance must be refreshable from another; the loser's client id is simply

@@ -107,6 +107,29 @@ class McpOAuthAutoConfigurationTests {
 			.run(context -> assertThat(context.getBean(AgentSettings.class).mcp().principals()).isSameAs(own));
 	}
 
+	@Test
+	void aTerminalApplicationSignsInThroughTheBrowserAndKeepsItInAFile() {
+		Path file = workspace.resolve("state").resolve("mcp-oauth.json");
+		runner().withPropertyValues(OAUTH_SERVER)
+			.withPropertyValues("spring.acp.mcp.oauth.mode=local", "spring.acp.mcp.oauth.file=" + file)
+			.run(context -> {
+				assertThat(context.getBean(FileMcpOAuthStore.class).location()).isEqualTo(file);
+				assertThat(context.getBean(McpSignIn.class)).isInstanceOf(LoopbackSignIn.class);
+				assertThat(context.getBean(McpClientRegistrationRepository.class))
+					.isSameAs(context.getBean(FileMcpOAuthStore.class).registrations());
+				assertThat(context.getBean(AgentSettings.class).mcp().principals())
+					.isInstanceOf(LocalPrincipalResolver.class);
+			});
+	}
+
+	@Test
+	void aTerminalApplicationWithAStoreThatCannotHoldItsSignInsSaysSo() {
+		runner().withPropertyValues(OAUTH_SERVER)
+			.withPropertyValues("spring.acp.mcp.oauth.mode=local", "spring.acp.mcp.oauth.store=memory")
+			.run(context -> assertThat(context).hasFailed()
+				.getFailure().rootCause().hasMessageContaining("store unset or set it to file"));
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	static class NoAgent {
 

@@ -163,6 +163,17 @@ class McpAccessTests {
 			.containsExactly("Bearer token-bob", "Bearer token-alice");
 	}
 
+	@Test
+	void theProxyNeverKeepsTheJvmAlive() {
+		java.util.Set<Thread> before = Thread.getAllStackTraces().keySet();
+
+		access(perUser()).grant(null, List.of(tools()));
+
+		List<Thread> started = Thread.getAllStackTraces().keySet().stream().filter(t -> !before.contains(t)).toList();
+		assertThat(started).isNotEmpty().allSatisfy(thread -> assertThat(thread.isDaemon())
+			.as("thread %s must be a daemon", thread.getName()).isTrue());
+	}
+
 	// --- who gets in ------------------------------------------------------------------------------
 
 	@Test

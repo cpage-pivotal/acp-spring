@@ -34,8 +34,10 @@ import org.thought.acp.session.SessionPrincipalResolver;
  * <p>Registers the beans Spring Security's {@code oauth2Client()} flow and mcp-security's
  * {@code McpClientOAuth2Configurer} look for — the registration repository, the dynamic
  * registration manager, the authorized-client service — plus the {@link OAuth2McpCredentialsProvider}
- * that puts those servers behind the loopback proxy and the resolver that takes a session's
- * principal from the security context. The application still owns its {@code SecurityFilterChain}:
+ * that puts those servers behind the loopback proxy, the {@link McpSignIn} for a user without a
+ * token, and the resolver that says whose session it is — the security context's user on the web,
+ * the operating-system user with {@code mode: local}, where the sign-in is a browser opened on the
+ * spot and there is no filter chain at all. The application still owns its {@code SecurityFilterChain}:
  * it signs users in however it likes and adds
  * {@code .with(McpClientOAuth2Configurer.mcpClientOAuth2(), mcp -> mcp.cimd(false))} so that
  * signing in to an MCP server works.
@@ -73,11 +75,25 @@ public class McpOAuthAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	McpClientRegistrationRepository acpMcpClientRegistrationRepository(McpOAuthProperties properties) {
-		if (properties.getStore() == McpOAuthProperties.Store.JDBC) {
-			throw new IllegalStateException("spring.acp.mcp.oauth.store=jdbc needs spring-jdbc on the classpath");
-		}
-		return new InMemoryMcpClientRegistrationRepository();
+	McpClientRegistrationRepository acpMcpClientRegistrationRepository(McpOAuthProperties properties,
+			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file) {
+		return switch (properties.effectiveStore()) {
+			case FILE -> file.getObject().registrations();
+			case JDBC -> throw new IllegalStateException("spring.acp.mcp.oauth.store=jdbc needs spring-jdbc on the classpath");
+			case MEMORY -> new InMemoryMcpClientRegistrationRepository();
+		};
+	}
+
+	/** Registrations and tokens in one private file: the default for a terminal application. */
+	@Bean
+	@ConditionalOnMissingBean
+	@Conditional(OnFileStore.class)
+	FileMcpOAuthStore acpMcpOAuthFileStore(McpOAuthProperties properties, Environment environment) {
+		FileMcpOAuthStore store = new FileMcpOAuthStore(properties.getFile() != null ? properties.getFile()
+				: FileMcpOAuthStore.defaultLocation(environment.getProperty("spring.application.name", "acp-spring")));
+		org.slf4j.LoggerFactory.getLogger(McpOAuthAutoConfiguration.class)
+			.debug("MCP sign-in state is kept at {}", store.location());
+		return store;
 	}
 
 	@Bean
@@ -94,15 +110,38 @@ public class McpOAuthAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	OAuth2AuthorizedClientService acpMcpAuthorizedClientService(McpClientRegistrationRepository registrations) {
-		return new InMemoryOAuth2AuthorizedClientService(registrations);
+	OAuth2AuthorizedClientService acpMcpAuthorizedClientService(McpClientRegistrationRepository registrations,
+			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file) {
+		FileMcpOAuthStore store = file.getIfAvailable();
+		return store != null ? store.tokens() : new InMemoryOAuth2AuthorizedClientService(registrations);
+	}
+
+	/**
+	 * What happens for a user without a token: Spring Security's redirect on the web, a browser opened
+	 * on the spot for a terminal application.
+	 */
+	@Bean
+	@ConditionalOnMissingBean
+	McpSignIn acpMcpSignIn(McpOAuthProperties properties, OAuth2AuthorizedClientService authorizedClients,
+			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file,
+			org.springframework.beans.factory.ObjectProvider<AuthorizationPrompt> prompt) {
+		if (properties.getMode() == McpOAuthProperties.Mode.WEB) {
+			return McpSignIn.redirect(properties.getRedirectUri(), new CurrentRequestBaseUrl(properties.getBaseUrl()));
+		}
+		FileMcpOAuthStore store = file.getIfAvailable();
+		if (store == null) {
+			throw new IllegalStateException("spring.acp.mcp.oauth.mode=local keeps its sign-ins in a file; "
+					+ "leave spring.acp.mcp.oauth.store unset or set it to file");
+		}
+		return new LoopbackSignIn(store.registrations(), authorizedClients,
+				prompt.getIfAvailable(() -> AuthorizationPrompt.browser(System.out)), properties.getSignInTimeout());
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
 	OAuth2McpCredentialsProvider acpMcpOAuth2CredentialsProvider(AcpProperties acp, McpOAuthProperties properties,
 			McpClientRegistrationRepository registrations, McpOAuth2DcrClientManager clientManager,
-			OAuth2AuthorizedClientService authorizedClients, Environment environment) {
+			OAuth2AuthorizedClientService authorizedClients, McpSignIn signIn, Environment environment) {
 		List<McpServerSpec.Http> servers = acp.getMcpServers().stream()
 			.filter(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH)
 			.map(AcpProperties.McpServer::spec)
@@ -117,15 +156,15 @@ public class McpOAuthAutoConfiguration {
 		String clientName = properties.getClientName() != null ? properties.getClientName()
 				: environment.getProperty("spring.application.name", "acp-spring");
 		return new OAuth2McpCredentialsProvider(servers, registrations, clientManager, authorizedClients,
-				McpAuthorizedClientManagers.create(registrations, authorizedClients),
-				new OAuth2McpCredentialsProvider.Registration(clientName, properties.getRedirectUri(),
-						new CurrentRequestBaseUrl(properties.getBaseUrl())));
+				McpAuthorizedClientManagers.create(registrations, authorizedClients), clientName, signIn);
 	}
 
+	/** The signed-in user of the request on the web; the operating-system user in a terminal. */
 	@Bean
 	@ConditionalOnMissingBean
-	SessionPrincipalResolver acpSecurityContextPrincipalResolver() {
-		return new SecurityContextPrincipalResolver();
+	SessionPrincipalResolver acpMcpOAuthPrincipalResolver(McpOAuthProperties properties) {
+		return properties.getMode() == McpOAuthProperties.Mode.LOCAL ? new LocalPrincipalResolver()
+				: new SecurityContextPrincipalResolver();
 	}
 
 	/**
@@ -161,6 +200,20 @@ public class McpOAuthAutoConfiguration {
 						+ "add spring-boot-starter-jdbc and a DataSource");
 			}
 			return operations;
+		}
+	}
+
+	/** {@code store: file}, or {@code mode: local} with no store named. */
+	static final class OnFileStore extends SpringBootCondition {
+
+		@Override
+		public ConditionOutcome getMatchOutcome(ConditionContext context, AnnotatedTypeMetadata metadata) {
+			McpOAuthProperties properties = Binder.get(context.getEnvironment())
+				.bind("spring.acp.mcp.oauth", McpOAuthProperties.class)
+				.orElseGet(McpOAuthProperties::new);
+			return properties.effectiveStore() == McpOAuthProperties.Store.FILE
+					? ConditionOutcome.match("MCP sign-ins are kept in a file")
+					: ConditionOutcome.noMatch("MCP sign-ins are not kept in a file");
 		}
 	}
 

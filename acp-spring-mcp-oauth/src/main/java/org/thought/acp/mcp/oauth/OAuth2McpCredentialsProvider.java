@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +37,12 @@ import org.thought.acp.session.SessionPrincipal;
  * session's principal to a bearer header.
  *
  * <p>Asked when a session opens, it refuses rather than guesses. A session on nobody's behalf is
- * refused outright: these tokens are a person's. A user with no token for a server gets
- * {@link ClientAuthorizationRequiredException}, which Spring Security's
- * {@code OAuth2AuthorizationRequestRedirectFilter} turns into the redirect to sign in, provided it
- * is thrown on a request thread — hence {@link #requireAuthorized}, for a controller to call before
- * it starts streaming.
+ * refused outright: these tokens are a person's. A user with no token for a server is handed to the
+ * {@link McpSignIn}: in a web application that throws {@link ClientAuthorizationRequiredException},
+ * which Spring Security's {@code OAuth2AuthorizationRequestRedirectFilter} turns into the redirect to
+ * sign in, provided it is thrown on a request thread — hence {@link #requireAuthorized}, for a
+ * controller to call before it starts streaming. In a terminal application it opens a browser and
+ * waits, and the session opens once the user is back.
  *
  * <p>Asked on every request after that, it hands back the stored token, refreshed when it has
  * expired. Refreshes are serialized per (server, user): an authorization server that rotates
@@ -64,27 +64,22 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 
 	private final OAuth2AuthorizedClientManager authorizedClientManager;
 
-	private final Registration registration;
+	private final String clientName;
+
+	private final McpSignIn signIn;
 
 	private final Map<String, Object> locks = new ConcurrentHashMap<>();
 
 	/**
-	 * How this application introduces itself when it registers with a server's authorization server.
-	 *
-	 * @param clientName shown to the user on the consent screen
-	 * @param redirectUri the callback, with {@code {baseUrl}} and {@code {registrationId}} placeholders
-	 * @param baseUrl where this application is reached from the user's browser, asked at registration
-	 * time; empty when it cannot be known, which fails the registration with a message saying so
-	 */
-	public record Registration(String clientName, String redirectUri, Supplier<Optional<String>> baseUrl) {
-	}
-
-	/**
 	 * @param servers the servers to authorize; any other server is left as configured
+	 * @param clientName how this application introduces itself when it registers: shown to the user
+	 * on the consent screen
+	 * @param signIn what happens for a user with no token: a redirect in a web application, a
+	 * browser sign-in run on the spot in a terminal one
 	 */
 	public OAuth2McpCredentialsProvider(List<McpServerSpec.Http> servers, McpClientRegistrationRepository registrations,
 			McpOAuth2DcrClientManager clientManager, OAuth2AuthorizedClientService authorizedClients,
-			OAuth2AuthorizedClientManager authorizedClientManager, Registration registration) {
+			OAuth2AuthorizedClientManager authorizedClientManager, String clientName, McpSignIn signIn) {
 		Map<String, McpServerSpec.Http> byName = new LinkedHashMap<>();
 		servers.forEach(server -> byName.put(server.name(), server));
 		this.servers = Map.copyOf(byName);
@@ -92,7 +87,8 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 		this.clientManager = clientManager;
 		this.authorizedClients = authorizedClients;
 		this.authorizedClientManager = authorizedClientManager;
-		this.registration = registration;
+		this.clientName = clientName;
+		this.signIn = signIn;
 	}
 
 	@Override
@@ -139,6 +135,23 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 					+ "configure a SessionPrincipalResolver");
 		}
 		register(server);
+		if (authorizedClients.loadAuthorizedClient(server.name(), principal.name()) != null) {
+			return;
+		}
+		// One sign-in at a time per (server, user): two sessions opening together must not open two browsers.
+		synchronized (lock(server.name(), principal.name())) {
+			if (authorizedClients.loadAuthorizedClient(server.name(), principal.name()) != null) {
+				return;
+			}
+			try {
+				signIn.signIn(server, principal);
+			}
+			catch (McpSignIn.StaleRegistration ex) {
+				logger.info("Registering again for MCP server '{}': {}", server.name(), ex.getMessage());
+				register(server);
+				signIn.signIn(server, principal);
+			}
+		}
 		OAuth2AuthorizedClient authorized = authorizedClients.loadAuthorizedClient(server.name(), principal.name());
 		if (authorized == null) {
 			throw new ClientAuthorizationRequiredException(server.name());
@@ -159,11 +172,10 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 			if (registrations.findByRegistrationId(server.name()) != null) {
 				return;
 			}
-			String redirectUri = registration.redirectUri().replace("{baseUrl}", baseUrl(server))
-				.replace("{registrationId}", server.name());
+			String redirectUri = signIn.redirectUri(server);
 			clientManager.registerMcpClient(server.name(), server.url().toString(),
 					DynamicClientRegistrationRequest.builder()
-						.clientName(registration.clientName())
+						.clientName(clientName)
 						// authorization_code first: the manager takes the first as the registration's grant.
 						.grantTypes(List.of(AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN))
 						.responseTypes(List.of(OAuth2AuthorizationResponseType.CODE))
@@ -173,13 +185,6 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 						.build());
 			logger.info("Registered with the authorization server for MCP server '{}'", server.name());
 		}
-	}
-
-	private String baseUrl(McpServerSpec.Http server) {
-		return registration.baseUrl().get()
-			.orElseThrow(() -> new IllegalStateException("Cannot register with the authorization server for MCP "
-					+ "server '" + server.name() + "': the redirect URI needs this application's base URL, and "
-					+ "there is no current request to read it from. Set spring.acp.mcp.oauth.base-url"));
 	}
 
 	/**

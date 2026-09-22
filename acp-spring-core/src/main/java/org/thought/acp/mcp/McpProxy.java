@@ -110,12 +110,35 @@ final class McpProxy implements AutoCloseable {
 			McpProxy proxy = new McpProxy(server, requestTimeout, filters);
 			server.createContext("/", proxy::handle);
 			server.setExecutor(proxy.workers);
-			server.start();
+			startAsDaemon(server);
 			logger.debug("MCP loopback proxy listening on {}", server.getAddress());
 			return proxy;
 		}
 		catch (IOException ex) {
 			throw new IllegalStateException("Could not start the loopback MCP proxy", ex);
+		}
+	}
+
+	/**
+	 * Starts the server so that it cannot keep the JVM alive.
+	 *
+	 * <p>{@code HttpServer} runs its dispatcher on a thread it creates in {@code start()}, and a new
+	 * thread is a daemon only if the thread that made it was. Started from an application's main
+	 * thread, the dispatcher is not one — and a terminal application that returned from {@code main}
+	 * without closing its context was kept alive by the proxy indefinitely, measured with acp-meridian.
+	 * The proxy serves an agent this JVM started; it has no business outliving it.
+	 */
+	private static void startAsDaemon(HttpServer server) {
+		Thread starter = new Thread(server::start, "mcp-proxy-start");
+		starter.setDaemon(true);
+		starter.start();
+		try {
+			starter.join();
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			server.stop(0);
+			throw new IllegalStateException("Interrupted starting the loopback MCP proxy", ex);
 		}
 	}
 

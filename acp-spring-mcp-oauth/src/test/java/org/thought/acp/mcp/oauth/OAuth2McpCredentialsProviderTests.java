@@ -60,9 +60,8 @@ class OAuth2McpCredentialsProviderTests {
 		return new OAuth2McpCredentialsProvider(List.of(finops), registrations,
 				new DefaultMcpOAuth2DcrClientManager(registrations, new DynamicClientRegistrationService(urlValidator),
 						new McpMetadataDiscoveryService(urlValidator), urlValidator),
-				authorizedClients, McpAuthorizedClientManagers.create(registrations, authorizedClients),
-				new OAuth2McpCredentialsProvider.Registration("Capacity Agent",
-						"{baseUrl}/login/oauth2/code/{registrationId}", baseUrl));
+				authorizedClients, McpAuthorizedClientManagers.create(registrations, authorizedClients), "Capacity Agent",
+				McpSignIn.redirect("{baseUrl}/login/oauth2/code/{registrationId}", baseUrl));
 	}
 
 	private OAuth2McpCredentialsProvider provider() {

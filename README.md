@@ -229,7 +229,9 @@ http.with(McpClientOAuth2Configurer.mcpClientOAuth2(), mcp -> mcp.cimd(false));
 ```
 
 The first time a signed-in user needs the server, they are redirected to its authorization server;
-after that their token is refreshed as needed. The agent never sees it: HTTP MCP servers with
+after that their token is refreshed as needed. A terminal application sets
+`spring.acp.mcp.oauth.mode: local` instead and needs no filter chain: the first run opens a browser
+for each server, and the sign-ins are kept in `~/.config/<spring.application.name>/`. The agent never sees it: HTTP MCP servers with
 credentials are reached through a loopback proxy, one unguessable route per session. See "MCP
 credentials" in `docs/design.md`.
 

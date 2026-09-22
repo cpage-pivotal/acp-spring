@@ -43,6 +43,14 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 	/** Authorization codes handed out by {@link #code}, redeemable once. */
 	private final Set<String> validCodes = ConcurrentHashMap.newKeySet();
 
+	/** The PKCE challenge each code from {@code /authorize} was issued against. */
+	private final Map<String, String> challenges = new ConcurrentHashMap<>();
+
+	final List<Map<String, String>> authorizations = new CopyOnWriteArrayList<>();
+
+	/** What {@code /authorize} answers with, as though the user had just done it. */
+	private volatile String authorizeError;
+
 	private final AtomicInteger counter = new AtomicInteger();
 
 	private final HttpServer server;
@@ -69,6 +77,7 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 						List.of("none"))));
 		server.createContext("/as/register", this::register);
 		server.createContext("/as/token", this::token);
+		server.createContext("/as/authorize", this::authorize);
 		server.createContext("/", exchange -> json(exchange, 404, Map.of("error", "not_found")));
 		server.start();
 	}
@@ -102,6 +111,11 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 		return new String[] { access, refresh };
 	}
 
+	/** Makes {@code /authorize} redirect back with this error instead of a code. */
+	void refuseAuthorization(String error) {
+		this.authorizeError = error;
+	}
+
 	/** Revokes every refresh token, as a server does when a user's grant is withdrawn. */
 	void revokeRefreshTokens() {
 		validRefreshTokens.clear();
@@ -128,6 +142,40 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 		exchange.close();
 	}
 
+	/** The user signs in instantly and is redirected back, with a code bound to the PKCE challenge. */
+	private void authorize(HttpExchange exchange) throws IOException {
+		Map<String, String> query = form(exchange.getRequestURI().getRawQuery());
+		authorizations.add(query);
+		String location;
+		if (authorizeError != null) {
+			location = query.get("redirect_uri") + "?error=" + authorizeError + "&state=" + query.get("state");
+		}
+		else {
+			String code = code();
+			challenges.put(code, query.getOrDefault("code_challenge", ""));
+			location = query.get("redirect_uri") + "?code=" + code + "&state="
+					+ java.net.URLEncoder.encode(query.get("state"), StandardCharsets.UTF_8);
+		}
+		exchange.getResponseHeaders().add("Location", location);
+		exchange.sendResponseHeaders(302, -1);
+		exchange.close();
+	}
+
+	private boolean verifierMatches(String code, String verifier) {
+		String challenge = challenges.remove(code);
+		if (challenge == null) {
+			return verifier != null;
+		}
+		try {
+			byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+				.digest(verifier.getBytes(StandardCharsets.US_ASCII));
+			return challenge.equals(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(digest));
+		}
+		catch (java.security.NoSuchAlgorithmException ex) {
+			throw new IllegalStateException(ex);
+		}
+	}
+
 	@SuppressWarnings("unchecked")
 	private void register(HttpExchange exchange) throws IOException {
 		Map<String, Object> request = JSON.readValue(exchange.getRequestBody(), Map.class);
@@ -142,7 +190,8 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 		tokenRequests.add(form);
 		sleep(tokenDelay);
 		boolean granted = switch (form.getOrDefault("grant_type", "")) {
-			case "authorization_code" -> validCodes.remove(form.get("code")) && form.containsKey("code_verifier");
+			case "authorization_code" -> validCodes.remove(form.get("code")) && form.containsKey("code_verifier")
+					&& verifierMatches(form.get("code"), form.get("code_verifier"));
 			case "refresh_token" -> validRefreshTokens.remove(form.get("refresh_token"));
 			default -> false;
 		};
@@ -157,6 +206,9 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 
 	private static Map<String, String> form(String body) {
 		Map<String, String> fields = new LinkedHashMap<>();
+		if (body == null) {
+			return fields;
+		}
 		for (String pair : body.split("&")) {
 			int eq = pair.indexOf('=');
 			if (eq > 0) {
