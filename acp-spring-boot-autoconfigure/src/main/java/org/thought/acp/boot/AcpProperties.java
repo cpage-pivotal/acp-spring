@@ -670,6 +670,17 @@ public class AcpProperties {
 		}
 	}
 
+	/** How an MCP server is authorized. */
+	public enum McpAuth {
+
+		/** Whatever the configuration says, headers included, handed to the agent as it stands. */
+		NONE,
+
+		/** The MCP authorization spec's OAuth, per user; provided by {@code acp-spring-mcp-oauth}. */
+		OAUTH
+
+	}
+
 	/** One MCP server. {@code url} selects HTTP transport; {@code command} selects stdio. */
 	public static class McpServer {
 
@@ -684,6 +695,12 @@ public class AcpProperties {
 		private List<String> args = List.of();
 
 		private Map<String, String> env = Map.of();
+
+		/**
+		 * How this server is authorized. {@code oauth} means the MCP authorization spec's OAuth flow,
+		 * with each user's own token, and needs {@code acp-spring-mcp-oauth} on the classpath.
+		 */
+		private McpAuth auth = McpAuth.NONE;
 
 		McpServerSpec toSpec() {
 			if (url != null && command != null) {
@@ -705,6 +722,19 @@ public class AcpProperties {
 
 		public void setName(String name) {
 			this.name = name;
+		}
+
+		public McpAuth getAuth() {
+			return auth;
+		}
+
+		public void setAuth(McpAuth auth) {
+			this.auth = auth == null ? McpAuth.NONE : auth;
+		}
+
+		/** The spec this server binds to, for an extension that needs to know which servers it owns. */
+		public McpServerSpec spec() {
+			return toSpec();
 		}
 
 		public URI getUrl() {

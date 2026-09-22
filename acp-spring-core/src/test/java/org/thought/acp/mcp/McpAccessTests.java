@@ -306,6 +306,28 @@ class McpAccessTests {
 		assertThat(response.body()).isEqualTo("data: one\n\ndata: two\n\n");
 	}
 
+	@Test
+	void anUpstreamChallengeIsNotPassedOnWhereTheProxyHoldsTheCredentials() throws Exception {
+		upstream.respond(exchange -> {
+			exchange.getResponseHeaders().add("WWW-Authenticate", "Bearer resource_metadata=\"https://as.example.com\"");
+			exchange.sendResponseHeaders(401, -1);
+		});
+		McpAccess credentialed = access(perUser());
+		McpAccess.Grant withToken = credentialed.grant(SessionPrincipal.of("alice"), List.of(tools()));
+		try (McpAccess filtersOnly = new McpAccess(McpCredentialsProvider.none(), LIMIT,
+				List.of(McpRequestFilter.McpRequest::forward))) {
+			McpAccess.Grant withoutToken = filtersOnly.grant(null, List.of(tools()));
+
+			HttpResponse<String> hidden = post(urlOf(withToken, "tools"), Map.of(), "{}");
+			HttpResponse<String> passed = post(urlOf(withoutToken, "tools"), Map.of(), "{}");
+
+			assertThat(hidden.statusCode()).isEqualTo(401);
+			assertThat(hidden.headers().firstValue("www-authenticate")).isEmpty();
+			// With no credentials of its own, the proxy has no business hiding how to get some.
+			assertThat(passed.headers().firstValue("www-authenticate")).isPresent();
+		}
+	}
+
 	// --- the agent's own workarounds -----------------------------------------------------------
 
 	@Test

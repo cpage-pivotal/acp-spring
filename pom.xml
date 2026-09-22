@@ -29,6 +29,8 @@
         <spring-boot.version>4.1.0</spring-boot.version>
         <acp.version>0.17.0</acp.version>
         <spring-ai.version>2.0.1</spring-ai.version>
+        <!-- Pre-1.0 and community-maintained: pinned exactly, like acp-core. -->
+        <mcp-security.version>0.1.14</mcp-security.version>
         <mockito.version>5.23.0</mockito.version>
     </properties>
 
@@ -41,6 +43,7 @@
         <module>acp-spring-boot-autoconfigure</module>
         <module>acp-spring-boot-starter</module>
         <module>acp-spring-ai</module>
+        <module>acp-spring-mcp-oauth</module>
         <module>acp-spring-test</module>
         <module>samples/smoke-app</module>
     </modules>
@@ -113,6 +116,11 @@
             <dependency>
                 <groupId>org.thought.acp</groupId>
                 <artifactId>acp-spring-ai</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.thought.acp</groupId>
+                <artifactId>acp-spring-mcp-oauth</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -113,6 +113,7 @@ public class AcpAutoConfiguration {
 			org.springframework.beans.factory.ObjectProvider<org.thought.acp.session.SessionPrincipalResolver> principals) {
 		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
 				: properties.getWorkspace().toAbsolutePath();
+		warnAboutUnprotectedOAuthServers(properties, credentials);
 
 		return AgentSettings.builder(properties.getRuntime(), workspace).runtimeHome(properties.getRuntimeHome())
 				.timeout(properties.getTimeout()).model(properties.getModel())
@@ -125,6 +126,21 @@ public class AcpAutoConfiguration {
 				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())
 				.pool(properties.toPoolSettings()).protocol(properties.toProtocolSettings())
 				.runtimeOptions(properties.optionsFor(properties.getRuntime())).build();
+	}
+
+	/**
+	 * Says so when a server asks for OAuth and nothing will provide it. Left alone, it would be handed
+	 * to the agent without a token and fail in the silent way MCP servers fail: no tools, no error.
+	 */
+	private static void warnAboutUnprotectedOAuthServers(AcpProperties properties,
+			org.springframework.beans.factory.ObjectProvider<org.thought.acp.mcp.McpCredentialsProvider> credentials) {
+		List<String> oauth = properties.getMcpServers().stream()
+			.filter(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH).map(AcpProperties.McpServer::getName)
+			.toList();
+		if (!oauth.isEmpty() && credentials.getIfAvailable() == null) {
+			logger.warn("MCP server(s) {} are configured with auth: oauth, but nothing provides OAuth credentials; "
+					+ "add acp-spring-mcp-oauth, or they will be called without a token", oauth);
+		}
 	}
 
 	/**

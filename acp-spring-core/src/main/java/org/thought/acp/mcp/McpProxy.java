@@ -219,8 +219,11 @@ final class McpProxy implements AutoCloseable {
 			throw new IOException("Interrupted forwarding to " + upstream.url(), ex);
 		}
 
+		boolean credentialed = upstream.credentials() != McpCredentials.NONE;
 		response.headers().map().forEach((header, values) -> {
-			if (passes(header)) {
+			// On a route whose credentials the proxy holds, a challenge is the proxy's business: an
+			// agent that saw one could set off on its own sign-in, on a machine with nobody at it.
+			if (passes(header) && !(credentialed && "www-authenticate".equalsIgnoreCase(header))) {
 				values.forEach(value -> exchange.getResponseHeaders().add(header, value));
 			}
 		});

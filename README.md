@@ -211,6 +211,28 @@ holds it — along with a file tree, a plan and tool results no message list can
 session sends only what the agent has not heard yet, and an unnamed one sends everything. Use one
 memory or the other, not both.
 
+## MCP servers that need each user's own sign-in
+
+Add `acp-spring-mcp-oauth`, mark the server, and add one line to your `SecurityFilterChain`:
+
+```yaml
+spring:
+  acp:
+    mcp-servers:
+      - name: finops-mcp
+        url: https://gateway.example.com/finops-mcp/mcp
+        auth: oauth
+```
+
+```java
+http.with(McpClientOAuth2Configurer.mcpClientOAuth2(), mcp -> mcp.cimd(false));
+```
+
+The first time a signed-in user needs the server, they are redirected to its authorization server;
+after that their token is refreshed as needed. The agent never sees it: HTTP MCP servers with
+credentials are reached through a loopback proxy, one unguessable route per session. See "MCP
+credentials" in `docs/design.md`.
+
 ## Metrics and traces
 
 With Micrometer on the classpath, every turn and every tool call becomes an observation — a timer,

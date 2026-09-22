@@ -121,7 +121,7 @@ Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org
 
 | Module | Contents |
 | --- | --- |
-| `acp-spring-core` | No Spring types on the classpath-required path. `org.thought.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
+| `acp-spring-core` | No Spring types on the classpath-required path. `org.thought.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.mcp`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
 | `acp-spring-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
 | `acp-spring-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
 | `acp-spring-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
@@ -129,6 +129,7 @@ Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org
 | `acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
 | `acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
 | `acp-spring-ai` | `AcpChatModel implements ChatModel`, `AcpChatOptions` — Spring AI 2.0.x |
+| `acp-spring-mcp-oauth` | `OAuth2McpCredentialsProvider`, `McpOAuthAutoConfiguration`, `JdbcMcpClientRegistrationRepository` — per-user MCP-spec OAuth via Spring Security and mcp-security; carries its own auto-configuration so Spring Security never reaches an application that did not add it |
 | `acp-spring-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
 
 Follow the wrapper's proven packaging trick: declare `spring-boot-*` dependencies `<optional>true</optional>`
@@ -426,11 +427,55 @@ subscribes. That is what makes a resolver that reads a thread-bound security con
 servlet application, and why a reactive application passes the principal explicitly. The pool reads
 it eagerly for the same reason, since it only chooses a connection on subscription.
 
-What this does not do yet: acquire OAuth tokens. That is `acp-spring-mcp-oauth` — MCP-spec discovery
-and dynamic client registration via spring-ai-community's `mcp-client-security`, tokens stored and
-refreshed per principal by Spring Security's `OAuth2AuthorizedClientManager`. Both were verified
-against the Tanzu MCP gateway (discovery, DCR, PKCE sign-in with `resource=`, two forced refreshes,
-`aud` bound to each server's URL) before this design was settled.
+**Per-user OAuth: `acp-spring-mcp-oauth`.** A server configured with `auth: oauth` gets its tokens
+from `OAuth2McpCredentialsProvider`, and all of the OAuth is somebody else's code, which is the point:
+
+- **mcp-security** (spring-ai-community `mcp-client-security`, pinned at 0.1.14 with Spring AI and
+  the MCP SDK excluded — only the parts that do not assume a Java MCP client are used) discovers the
+  authorization server from the server's 401, registers the application dynamically, and — through
+  `McpClientOAuth2Configurer`, which the application adds to its own `SecurityFilterChain` — puts
+  `resource=` on the authorization request and the code exchange.
+- **Spring Security** does everything else: the redirect, PKCE (the registration is a public
+  client, so there is no secret to keep), the callback, and storing tokens per (registration,
+  principal name) in an `OAuth2AuthorizedClientService`. The proxy reads from that same service
+  through an `AuthorizedClientServiceOAuth2AuthorizedClientManager` — the service-backed manager,
+  because the proxy asks from its own threads with no servlet request — which refreshes with
+  `resource=` too.
+
+Each protected server is its own OAuth client, with the server's name as its registration id: the
+Tanzu gateway gives every server its own issuer, and binds `aud` to the server's URL, so a token for
+one is useless at another. The provider's rules:
+
+- A session on nobody's behalf is refused. A user with no token gets Spring Security's own
+  `ClientAuthorizationRequiredException`, which its redirect filter turns into the trip to sign in —
+  on a request thread. `requireAuthorized(principal)` exists so a controller can take that trip
+  before it opens a session or starts streaming, since an exception from inside a started stream can
+  only be an error.
+- The first user to meet a server registers the application with it, serialized per server; the
+  redirect URI's base comes from `spring.acp.mcp.oauth.base-url` or else the request that triggered
+  the registration.
+- Refreshes are serialized per (server, user) — the gateway rotates refresh tokens and honours each
+  once. A refused refresh fails that one request, and Spring Security's failure handler removes the
+  stored token, so the user's next session sends them to sign in again.
+- The proxy hides the upstream's `WWW-Authenticate` on credentialed routes: an agent that saw a
+  challenge could set off on a sign-in of its own, on a server with nobody at it.
+
+`SecurityContextPrincipalResolver` makes the signed-in user the principal of every prompt described
+on a request thread. Anonymous users are nobody: Spring Security keeps their tokens in the HTTP
+session, not in the service the proxy reads.
+
+State lives in memory by default (restart means every user signs in again and the application
+registers again) or, with `spring.acp.mcp.oauth.store: jdbc`, in the application's database:
+`acp_mcp_client_registration` (this module's schema) and Spring Security's
+`oauth2_authorized_client`. Registrations are first-writer-wins across instances, because a user who
+signed in through one instance must be refreshable from another; the loser's client id is simply
+never used. Known limits: tokens are stored as Spring Security stores them — unencrypted — and two
+instances can still race a refresh for the same user, which the per-JVM lock cannot prevent.
+
+All of it was verified against the Tanzu MCP gateway before being built (discovery, DCR, PKCE
+sign-in with `resource=`, two forced refreshes through the same manager). The web flow is tested
+end to end against a fake of that gateway: redirect, callback, token exchange, and the proxy calling
+the server with the stored token.
 
 ### Tier 2 — negotiated
 
