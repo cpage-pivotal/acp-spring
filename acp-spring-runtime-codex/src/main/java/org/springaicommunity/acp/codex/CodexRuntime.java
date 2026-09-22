@@ -33,6 +33,9 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  *
  * <p>It is the only one of the three that advertises the {@code providers} capability, so a
  * configured provider reaches it through {@code providers/set} rather than an environment variable.
+ * It is also the only one that insists on ACP {@code authenticate}: an OpenAI key on its environment
+ * is ignored until the client names the {@code api-key} method, so this adapter names it whenever the
+ * application configured one.
  * It also splits what other agents call "mode" in two: {@code mode} is the approval policy
  * (read-only, agent, agent-full-access) and {@code collaboration_mode} is plan-versus-build. Both
  * are offered to {@code spring.acp.mode}, approval policy first, and the resolver takes whichever
@@ -41,7 +44,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * <p>Tier-3 options, under {@code spring.acp.runtimes.codex}:
  *
  * <pre>{@code
- * package: "@agentclientprotocol/codex-acp@1.12.0"   # what npx runs
+ * package: "@agentclientprotocol/codex-acp@1.13.0"   # what npx runs
  * command: /usr/local/bin/codex-acp                  # instead of npx
  * args: [ --verbose ]
  * home: /var/lib/codex                               # CODEX_HOME
@@ -54,7 +57,7 @@ public class CodexRuntime implements AgentRuntime {
 	public static final String ID = "codex";
 
 	/** Pinned rather than floating: an agent that changes under a running application is not a feature. */
-	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.12.0";
+	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.13.0";
 
 	/** Codex reads its configuration, and keeps its credentials, under this directory. */
 	public static final String HOME_ENV = "CODEX_HOME";
@@ -66,6 +69,9 @@ public class CodexRuntime implements AgentRuntime {
 
 	/** Codex's credential store, which lives in the same directory as its config. */
 	private static final String AUTH_FILE = "auth.json";
+
+	/** The auth method codex-acp offers for an OpenAI key it reads from its own environment. */
+	static final String API_KEY_METHOD = "api-key";
 
 	private static final Logger logger = LoggerFactory.getLogger(CodexRuntime.class);
 
@@ -105,6 +111,10 @@ public class CodexRuntime implements AgentRuntime {
 	 * trap, and it was found by walking into it. A symbolic link rather than a copy, so the secret
 	 * stays in one place and stays current if the user logs in again. On a platform there is no ambient
 	 * home to link from and the key arrives through the environment instead, so nothing happens.
+	 *
+	 * <p>Nor is anything linked when the application configured an OpenAI key of its own: that key is
+	 * the credential, and a developer's {@code codex login} must not quietly stand in for it. A link
+	 * left by an earlier run without a key is removed for the same reason.
 	 */
 	@Override
 	public void provision(AgentSettings settings) {
@@ -118,7 +128,12 @@ public class CodexRuntime implements AgentRuntime {
 			Path file = home.resolve(CONFIG_FILE);
 			Files.writeString(file, Toml.write(config), StandardCharsets.UTF_8);
 			logger.debug("Wrote {} key(s) to {}", config.size(), file);
-			linkCredentials(home);
+			if (signsInWithKey(settings)) {
+				unlinkCredentials(home);
+			}
+			else {
+				linkCredentials(home);
+			}
 		}
 		catch (IOException ex) {
 			throw new UncheckedIOException("Could not write " + CONFIG_FILE + " under " + home, ex);
@@ -135,9 +150,13 @@ public class CodexRuntime implements AgentRuntime {
 	 * both, and only then — against OpenAI proper the model belongs on the wire, where the protocol
 	 * can say what was applied.
 	 *
-	 * <p>No {@code wire_api}: codex-acp 1.12 removed the completions dialect and <em>refuses to
-	 * start</em> on a config that names it, so the only value left is the default, and writing a key
-	 * whose only legal value is the default is a promise to break again when it moves. This is worth
+	 * <p>No {@code wire_api}: codex-acp 1.12 removed the completions dialect, and a config that names
+	 * it fails to load. The process still starts; it is {@code session/new} that fails, with
+	 * "failed to load configuration: {@code wire_api = "chat"} is no longer supported" once Codex is
+	 * signed in, and with a misleading "Authentication required" before, since the provider the
+	 * config described never took effect (measured on 1.12.0 and 1.13.0). So the only value left is
+	 * the default, and writing a key whose only legal value is the default is a promise to break
+	 * again when it moves. This is worth
 	 * knowing when choosing a runtime for a gateway: Codex now speaks the Responses API only, so an
 	 * OpenAI-compatible endpoint that serves {@code /chat/completions} and nothing else answers its
 	 * first turn with a 404, and there is nothing this adapter can configure to change that. goose
@@ -150,9 +169,35 @@ public class CodexRuntime implements AgentRuntime {
 	 * application would rather describe its providers itself.
 	 */
 	private static Map<String, Object> configFor(AgentSettings settings) {
-		Map<String, Object> config = new LinkedHashMap<>(endpointConfig(settings));
+		Map<String, Object> config = new LinkedHashMap<>(credentialConfig(settings));
+		config.putAll(endpointConfig(settings));
 		config.putAll(settings.runtimeOptions().section("config-toml"));
 		return config;
+	}
+
+	/**
+	 * Keeps a configured key off the disk.
+	 *
+	 * <p>{@code authenticate} with {@code api-key} does not merely use the key: by default Codex
+	 * <em>stores</em> it, writing {@code auth.json} into its home. That is why a key moves the home
+	 * (writing into the user's {@code ~/.codex} would replace their own login), and why the store is
+	 * {@code ephemeral} — measured against codex-acp 1.12 and 1.13, the key is then held in memory for the life
+	 * of the process and no {@code auth.json} appears at all.
+	 */
+	private static Map<String, Object> credentialConfig(AgentSettings settings) {
+		return signsInWithKey(settings) ? Map.of("cli_auth_credentials_store", "ephemeral") : Map.of();
+	}
+
+	/**
+	 * Whether Codex is to be signed in with the application's own OpenAI key.
+	 *
+	 * <p>Against OpenAI proper only. An endpoint of the application's own is a {@code model_providers}
+	 * table whose {@code env_key} Codex reads for itself, and it needs no sign-in at all — codex-acp
+	 * reports it as a "Custom model gateway" and opens sessions straight away.
+	 */
+	private static boolean signsInWithKey(AgentSettings settings) {
+		ProviderSpec provider = settings.provider();
+		return !provider.isByo() && isOpenAiCompatible(provider) && provider.findApiKey().isPresent();
 	}
 
 	private static Map<String, Object> endpointConfig(AgentSettings settings) {
@@ -206,6 +251,15 @@ public class CodexRuntime implements AgentRuntime {
 		}
 	}
 
+	/** Removes a link {@link #linkCredentials} made; a real file is somebody's login and is left alone. */
+	private void unlinkCredentials(Path managedHome) throws IOException {
+		Path link = managedHome.resolve(AUTH_FILE);
+		if (Files.isSymbolicLink(link)) {
+			Files.delete(link);
+			logger.debug("Removed {}: the configured key is the credential", link);
+		}
+	}
+
 	/** Where Codex would look if this adapter did nothing. */
 	private static Path inheritedHome() {
 		String configured = System.getenv(HOME_ENV);
@@ -214,9 +268,19 @@ public class CodexRuntime implements AgentRuntime {
 				: Path.of(configured).toAbsolutePath();
 	}
 
+	/**
+	 * {@code api-key} whenever the application configured an OpenAI key, since without it Codex
+	 * refuses every session however the key was delivered. The key itself travels as
+	 * {@code OPENAI_API_KEY} on the environment; the method only tells Codex to read it.
+	 */
+	@Override
+	public Optional<String> authMethod(AgentSettings settings) {
+		return signsInWithKey(settings) ? Optional.of(API_KEY_METHOD) : Optional.empty();
+	}
+
 	@Override
 	public List<String> configIdsFor(PortableOption option) {
-		// Verified against codex-acp 1.12.0.
+		// Verified against codex-acp 1.12.0 and 1.13.0.
 		return switch (option) {
 			case MODEL -> List.of("model");
 			case MODE -> List.of("mode", "collaboration_mode");

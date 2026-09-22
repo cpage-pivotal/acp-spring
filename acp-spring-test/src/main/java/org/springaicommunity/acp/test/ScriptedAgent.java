@@ -55,6 +55,11 @@ public final class ScriptedAgent implements AutoCloseable {
 
 	private final List<Map<String, Object>> providerSets = new CopyOnWriteArrayList<>();
 
+	/** The method ids {@code authenticate} was called with, in order. */
+	private final List<String> authentications = new CopyOnWriteArrayList<>();
+
+	private volatile boolean authenticated;
+
 	private final List<AcpSchema.NewSessionRequest> newSessions = new CopyOnWriteArrayList<>();
 
 	private final AtomicInteger cancellations = new AtomicInteger();
@@ -107,6 +112,11 @@ public final class ScriptedAgent implements AutoCloseable {
 
 	public List<Map<String, Object>> providerSets() {
 		return List.copyOf(providerSets);
+	}
+
+	/** Every {@code authenticate} method id, whether or not it was accepted. */
+	public List<String> authentications() {
+		return List.copyOf(authentications);
 	}
 
 	public int cancellations() {
@@ -167,6 +177,7 @@ public final class ScriptedAgent implements AutoCloseable {
 	private Mono<Map<String, Object>> handle(AcpSchema.JSONRPCRequest request) {
 		return switch (request.method()) {
 			case "initialize" -> Mono.just(initialize(request));
+			case "authenticate" -> Mono.just(authenticate(request));
 			case "session/new" -> Mono.just(newSession(request));
 			case "session/set_config_option" -> Mono.just(setConfigOption(request));
 			case "session/set_mode" -> Mono.just(setMode(request));
@@ -197,7 +208,21 @@ public final class ScriptedAgent implements AutoCloseable {
 			capabilities.put("sessionCapabilities", sessionCapabilities);
 		}
 		return Map.of("protocolVersion", negotiatedVersion(request), "agentCapabilities", capabilities, "agentInfo",
-				Map.of("name", script.name, "version", script.version));
+				Map.of("name", script.name, "version", script.version), "authMethods",
+				script.authMethods.stream().map(id -> Map.of("id", id, "name", id)).toList());
+	}
+
+	private Map<String, Object> authenticate(AcpSchema.JSONRPCRequest request) {
+		String methodId = String.valueOf(asMap(request.params()).get("methodId"));
+		authentications.add(methodId);
+		if (!script.authMethods.contains(methodId)) {
+			throw new Rejected(-32602, "Unknown auth method: " + methodId);
+		}
+		if (script.refusesAuthentication) {
+			throw new Rejected(-32000, "Invalid credentials");
+		}
+		authenticated = true;
+		return Map.of();
 	}
 
 	/**
@@ -278,6 +303,9 @@ public final class ScriptedAgent implements AutoCloseable {
 	}
 
 	private Map<String, Object> newSession(AcpSchema.JSONRPCRequest request) {
+		if (!script.authMethods.isEmpty() && !authenticated) {
+			throw new Rejected(-32000, "Authentication required");
+		}
 		newSessions.add(agent.unmarshalFrom(request.params(), new com.agentclientprotocol.sdk.json.TypeRef<>() {
 		}));
 		String sessionId = "session-" + sessionIds.incrementAndGet();
@@ -464,6 +492,8 @@ public final class ScriptedAgent implements AutoCloseable {
 
 		private final List<String> storedSessions = new ArrayList<>();
 
+		private final List<String> authMethods = new ArrayList<>();
+
 		private List<String> reply = List.of("ok");
 
 		private String name = "scripted";
@@ -479,6 +509,8 @@ public final class ScriptedAgent implements AutoCloseable {
 		private boolean emitsUnknownUpdate;
 
 		private boolean echoesProtocolVersion;
+
+		private boolean refusesAuthentication;
 
 		private Duration promptDelay;
 
@@ -572,6 +604,23 @@ public final class ScriptedAgent implements AutoCloseable {
 		/** Answer {@code initialize} with whatever version was offered, the way goose 1.51 does. */
 		public Builder echoesProtocolVersion(boolean echoes) {
 			echoesProtocolVersion = echoes;
+			return this;
+		}
+
+		/**
+		 * Offer these auth methods on {@code initialize}, and refuse {@code session/new} with
+		 * "Authentication required" until one of them has been accepted — codex-acp 1.12's behavior
+		 * with no stored login, whatever its environment holds.
+		 */
+		public Builder authMethods(String... ids) {
+			authMethods.clear();
+			authMethods.addAll(List.of(ids));
+			return this;
+		}
+
+		/** Reject every {@code authenticate}, the way an agent handed a bad key does. */
+		public Builder refusesAuthentication(boolean refuses) {
+			refusesAuthentication = refuses;
 			return this;
 		}
 

@@ -655,9 +655,13 @@ The dialect is not always the agent's choice to make, though. Codex 1.12 has onl
 **Measured against the same Tanzu GenAI endpoint, all three runtimes, and it is not a clean sweep.**
 
 goose and OpenCode both reach it and answer; Codex is wired correctly and still cannot. codex-acp
-1.12 dropped the chat-completions dialect — `wire_api = "chat"` makes it refuse to *start* ("no
-longer supported"), and its only remaining wire API is `responses`, which an OpenAI-compatible
-gateway serving `/chat/completions` answers with a 404 inside the first turn. So this adapter writes
+1.12 dropped the chat-completions dialect, and its only remaining wire API is `responses`, which an
+OpenAI-compatible gateway serving `/chat/completions` answers with a 404 inside the first turn.
+Naming the old dialect does not help: with `wire_api = "chat"` the process starts, but its config
+fails to load and every `session/new` fails. Before sign-in the error is a misleading
+"Authentication required", because the gateway provider the config described never took effect.
+After `authenticate` it is the real one: "failed to load configuration: `wire_api = "chat"` is no
+longer supported" (measured on 1.12.0 and 1.13.0). So this adapter writes
 no `wire_api` at all (the one legal value is the default), and the pairing is a runtime-selection
 fact rather than something configuration can fix. It is worth stating plainly because it is exactly
 the kind of difference `spring.acp.runtime` is supposed to hide and here genuinely cannot: the
@@ -726,6 +730,24 @@ for codex-specific config, never writes to it, and symlinks the existing `auth.j
 home does move. A link rather than a copy: the secret stays in one place and stays current if the user
 logs in again. On a platform there is no ambient home and the key arrives through the environment, so
 nothing happens.
+
+That link hid a second trap, found running `acp-meridian` on Codex against OpenAI with an empty
+`CODEX_HOME`: **codex-acp ignores an API key on its environment until the client sends ACP
+`authenticate`.** With `OPENAI_API_KEY` set and no stored login, `session/new` answers "Authentication
+required"; after `authenticate {methodId: "api-key"}` the same process opens sessions and runs turns
+on that key. Every earlier Codex run had been passing on a developer's `codex login` all along. So
+`AgentRuntime.authMethod` names a method, the core sends `authenticate` once per connection
+right after `initialize` (skipped with a warning if the agent does not offer it, a startup failure if
+it refuses), and `CodexRuntime` names `api-key` whenever an OpenAI key is configured against OpenAI
+proper. A bring-your-own endpoint needs none: codex-acp reports it as a "Custom model gateway" and
+reads the table's `env_key` itself.
+
+`authenticate` *stores* the key by default, writing `auth.json` into `CODEX_HOME` — the user's
+`~/.codex` if the home were left ambient, replacing their own login. A configured key therefore moves
+the home and writes `cli_auth_credentials_store = "ephemeral"`, which (measured, codex-acp 1.12 and 1.13) keeps
+the key in memory and puts no `auth.json` on disk; nor is the ambient `auth.json` linked in, and a
+link left by an earlier run is removed. The configured key is the credential, not whatever login
+happens to be lying around.
 
 ---
 
@@ -851,6 +873,9 @@ public interface AgentRuntime {
 
     /** Write agent-native config files before launch (config.toml, opencode.json, AGENTS.md…). */
     default void provision(AgentSettings settings) {}
+
+    /** The ACP auth method to send `authenticate` with before the first session, if any. */
+    default Optional<String> authMethod(AgentSettings settings) { return Optional.empty(); }
 
     /** What this agent calls the options a client may set, most specific first. */
     default List<String> configIdsFor(PortableOption option) { … }

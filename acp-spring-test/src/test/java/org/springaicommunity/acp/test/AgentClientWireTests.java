@@ -128,6 +128,63 @@ class AgentClientWireTests {
 		}
 	}
 
+	// --- authentication ---------------------------------------------------------------------
+
+	/** A runtime whose adapter names an auth method, the way the Codex adapter does for a key. */
+	private AgentClient connectSigningInWith(ScriptedAgent agent, String method) {
+		ScriptedRuntime runtime = new ScriptedRuntime() {
+			@Override
+			public java.util.Optional<String> authMethod(AgentSettings settings) {
+				return java.util.Optional.of(method);
+			}
+		};
+		return AgentClientFactory.connect(runtime, settings().build(), agent.transport());
+	}
+
+	@Test
+	void signsInWithTheMethodTheAdapterNamedBeforeAnySessionIsOpened() {
+		// codex-acp 1.12 refuses session/new with the key already on its environment until
+		// authenticate names api-key; nothing on the wire says so until a session is asked for.
+		try (ScriptedAgent agent = ScriptedAgent.builder().authMethods("api-key", "chat-gpt").build();
+				AgentClient client = connectSigningInWith(agent, "api-key")) {
+			client.openSession("s");
+
+			assertThat(agent.authentications()).containsExactly("api-key");
+			assertThat(agent.methods()).containsSubsequence("initialize", "authenticate", "session/new");
+		}
+	}
+
+	@Test
+	void sendsNoAuthenticateWhenTheAdapterNamesNoMethod() {
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connect(agent, settings().build())) {
+			client.openSession("s");
+
+			assertThat(agent.methods()).doesNotContain("authenticate");
+		}
+	}
+
+	@Test
+	void aMethodTheAgentDoesNotOfferIsNotSent() {
+		// The agent may be signed in another way; if it is not, its own refusal says so.
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = connectSigningInWith(agent, "api-key")) {
+			client.openSession("s");
+
+			assertThat(agent.authentications()).isEmpty();
+		}
+	}
+
+	@Test
+	void refusedCredentialsFailTheConnectionRatherThanEverySession() {
+		ScriptedAgent agent = ScriptedAgent.builder().authMethods("api-key").refusesAuthentication(true).build();
+
+		assertThatThrownBy(() -> connectSigningInWith(agent, "api-key"))
+				.isInstanceOf(org.springaicommunity.acp.client.AgentClientException.class)
+				.hasMessageContaining("refused authentication with 'api-key'");
+		agent.close();
+	}
+
 	// --- the two SDK gaps -------------------------------------------------------------------
 
 	@Test

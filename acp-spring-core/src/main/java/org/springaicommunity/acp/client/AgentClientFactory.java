@@ -256,6 +256,17 @@ public final class AgentClientFactory {
 				initialized.agentInfo() == null ? runtime.id() : initialized.agentInfo().name(),
 				initialized.agentInfo() == null ? "" : initialized.agentInfo().version(), protocolVersion);
 
+		try {
+			authenticate(acp, runtime, settings, initialized, diagnostics);
+		}
+		catch (RuntimeException ex) {
+			terminals.close();
+			closeQuietly(acp);
+			closeQuietly(watcher);
+			onTransportClose.run();
+			throw ex;
+		}
+
 		DefaultAgentClient client = new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router,
 				recorder, initialized, protocolVersion, observations, liveness.knowable() ? liveness.alive() : null,
 				() -> {
@@ -265,6 +276,38 @@ public final class AgentClientFactory {
 				});
 		client.watch(watcher);
 		return client;
+	}
+
+	/**
+	 * Signs the agent in with the method its adapter named, before anything asks it for a session.
+	 *
+	 * <p>Once per connection rather than per session, because that is what ACP scopes it to. A method
+	 * the agent did not offer is skipped with a warning rather than sent: the agent may well be signed
+	 * in some other way, and if it is not, its own "Authentication required" on {@code session/new}
+	 * says so. A method it offered and then refused is a startup failure — the credentials are wrong,
+	 * and every session would fail the same way.
+	 */
+	private static void authenticate(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
+			AcpSchema.InitializeResponse initialized, AgentDiagnostics diagnostics) {
+		Optional<String> method = runtime.authMethod(settings);
+		if (method.isEmpty()) {
+			return;
+		}
+		java.util.List<String> offered = initialized.authMethods() == null ? java.util.List.of()
+				: initialized.authMethods().stream().map(AcpSchema.AuthMethod::id).toList();
+		if (!offered.contains(method.get())) {
+			logger.warn("Runtime '{}' wants to authenticate with '{}', but the agent offers only {}; not sending it",
+					runtime.id(), method.get(), offered);
+			return;
+		}
+		try {
+			acp.authenticate(new AcpSchema.AuthenticateRequest(method.get())).block(settings.timeout());
+			logger.debug("Authenticated {} with '{}'", runtime.id(), method.get());
+		}
+		catch (RuntimeException ex) {
+			throw new AgentClientException("Runtime '" + runtime.id() + "' refused authentication with '"
+					+ method.get() + "'" + diagnostics.settledSummary(), ex);
+		}
 	}
 
 	private static AcpClientTransport stdioTransport(AgentLaunchSpec.Stdio stdio, AgentDiagnostics diagnostics) {

@@ -145,21 +145,72 @@ class CodexRuntimeTests {
 				.contains("base_url = \"https://gateway.example.com/team-x/openai/v1\"")
 				// The key stays in the environment; the file only names the variable.
 				.contains("env_key = \"OPENAI_API_KEY\"")
-				// codex-acp 1.12 refuses to start on `wire_api = "chat"`, and `responses` is its
-				// default, so naming the dialect at all is a promise to break when it moves again.
+				// codex-acp 1.12+ fails every session/new on `wire_api = "chat"`, and `responses` is
+				// its default, so naming the dialect at all is a promise to break when it moves again.
 				.doesNotContain("wire_api");
 		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isTrue();
 	}
 
 	@Test
-	void aVendorCodexAlreadyKnowsGetsNoModelProviderTable() {
+	void aVendorCodexAlreadyKnowsGetsNoModelProviderTable() throws Exception {
 		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
 				.model("gpt-5.6").build();
 
 		runtime.provision(settings);
 
-		assertThat(home.resolve("config.toml")).doesNotExist();
+		assertThat(Files.readString(home.resolve("config.toml"))).doesNotContain("model_provider")
+				.doesNotContain("model =");
 		assertThat(runtime.appliedOutOfBand(PortableOption.MODEL, settings)).isFalse();
+	}
+
+	@Test
+	void anOpenAiKeySignsCodexInThroughTheApiKeyMethod() {
+		// codex-acp 1.12 ignores OPENAI_API_KEY on its environment until authenticate names api-key.
+		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+				.build();
+
+		assertThat(runtime.authMethod(settings)).contains(CodexRuntime.API_KEY_METHOD);
+		assertThat(((AgentLaunchSpec.Stdio) runtime.launch(settings)).env()).containsEntry("OPENAI_API_KEY", "sk-x");
+	}
+
+	@Test
+	void signingInWithAKeyKeepsItOffTheDiskAndOutOfTheUsersOwnHome() throws Exception {
+		// authenticate would otherwise write auth.json into CODEX_HOME — which, left ambient, is the
+		// user's ~/.codex and their own login.
+		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+				.build();
+
+		runtime.provision(settings);
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+
+		assertThat(spec.env()).containsEntry(CodexRuntime.HOME_ENV, home.toString());
+		assertThat(Files.readString(home.resolve("config.toml")))
+				.isEqualTo("cli_auth_credentials_store = \"ephemeral\"\n");
+		// The configured key is the credential; a developer's codex login must not stand in for it.
+		assertThat(home.resolve("auth.json")).doesNotExist();
+	}
+
+	@Test
+	void aLinkToTheUsersLoginLeftByAnEarlierRunIsRemovedOnceAKeyIsConfigured() throws Exception {
+		Path login = Files.writeString(workspace.resolve("somebody-elses-auth.json"), "{}");
+		Files.createSymbolicLink(home.resolve("auth.json"), login);
+
+		runtime.provision(settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of())).build());
+
+		assertThat(home.resolve("auth.json")).doesNotExist();
+		assertThat(login).exists();
+	}
+
+	@Test
+	void noKeyOrAnEndpointOfTheApplicationsOwnNeedsNoSignIn() {
+		// A model_providers table carries its own env_key, and codex-acp opens sessions against it
+		// without authenticate.
+		ProviderSpec byo = new ProviderSpec("acme", "openai", URI.create("https://ai.example.com/v1"), "sk-x",
+				Map.of());
+
+		assertThat(runtime.authMethod(settings().build())).isEmpty();
+		assertThat(runtime.authMethod(settings().provider("openai").build())).isEmpty();
+		assertThat(runtime.authMethod(settings().provider(byo).build())).isEmpty();
 	}
 
 	@Test

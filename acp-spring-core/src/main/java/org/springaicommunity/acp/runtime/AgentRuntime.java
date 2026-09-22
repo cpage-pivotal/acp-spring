@@ -43,6 +43,22 @@ public interface AgentRuntime {
 	}
 
 	/**
+	 * The {@code authMethods} id to send {@code authenticate} with before the first session, or
+	 * empty to send nothing.
+	 *
+	 * <p>ACP lets an agent refuse {@code session/new} until the client has picked one of the auth
+	 * methods it offered on {@code initialize}, and a credential on the process environment does not
+	 * count as picking one: codex-acp 1.12 and 1.13 answer "Authentication required" with
+	 * {@code OPENAI_API_KEY} set, and accept the same key once {@code authenticate} names
+	 * {@code api-key}. Which method a configuration means is vendor knowledge, so the adapter names
+	 * it and the core sends it — the same division as {@link #configIdsFor}. Return one only when the
+	 * settings carry what that method needs; an agent already signed in some other way needs nothing.
+	 */
+	default Optional<String> authMethod(AgentSettings settings) {
+		return Optional.empty();
+	}
+
+	/**
 	 * Names the tool behind a permission request, when the agent makes that knowable.
 	 *
 	 * <p>ACP has no required field for this: {@code toolCall.title} is prose meant for humans, and
