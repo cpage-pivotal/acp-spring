@@ -7,7 +7,7 @@
 
     <groupId>org.springaicommunity.acp</groupId>
     <artifactId>acp-spring</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
     <name>ACP Spring</name>
@@ -171,6 +171,14 @@
     </dependencies>
 
     <build>
+        <!-- Lets `mvn deploy -Partifact-registry` authenticate with gcloud's credentials. -->
+        <extensions>
+            <extension>
+                <groupId>com.google.cloud.artifactregistry</groupId>
+                <artifactId>artifactregistry-maven-wagon</artifactId>
+                <version>2.2.5</version>
+            </extension>
+        </extensions>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -183,7 +191,65 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.6</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>3.1.4</version>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <!-- Publishes to the public Artifact Registry repository: mvn deploy -Partifact-registry -->
+        <profile>
+            <id>artifact-registry</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.4.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.12.0</version>
+                        <configuration>
+                            <doclint>none</doclint>
+                            <quiet>true</quiet>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+            <distributionManagement>
+                <repository>
+                    <id>artifact-registry</id>
+                    <name>GCP Artifact Registry</name>
+                    <url>artifactregistry://us-central1-maven.pkg.dev/cf-mcp/maven-public</url>
+                </repository>
+                <snapshotRepository>
+                    <id>artifact-registry</id>
+                    <name>GCP Artifact Registry Snapshots</name>
+                    <url>artifactregistry://us-central1-maven.pkg.dev/cf-mcp/maven-public</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+    </profiles>
 </project>

@@ -30,6 +30,23 @@ Flux<AgentEvent> events = agentClient.prompt()
 
 ## Choosing an agent
 
+Releases are published to a public Artifact Registry repository; no credentials are needed to read it:
+
+```xml
+<repositories>
+    <repository>
+        <id>acp-spring</id>
+        <url>https://us-central1-maven.pkg.dev/cf-mcp/maven-public</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>org.springaicommunity.acp</groupId>
+    <artifactId>acp-spring-boot-starter-goose</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
 Add one runtime starter. Each brings `acp-spring-boot-starter` (core and auto-configuration, no
 agent) plus one adapter:
 
