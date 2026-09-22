@@ -45,9 +45,9 @@ import org.thought.acp.session.SessionPrincipal;
  * waits, and the session opens once the user is back.
  *
  * <p>Asked on every request after that, it hands back the stored token, refreshed when it has
- * expired. Refreshes are serialized per (server, user): an authorization server that rotates
- * refresh tokens — UAA does — honours each once, and two tool calls racing to refresh would cost
- * the user their sign-in. A refresh the server refuses removes the stored token (Spring
+ * expired. Refreshes are serialized per (server, user) by a {@link RefreshLock} — across instances
+ * when they share a database: an authorization server that rotates refresh tokens — UAA does —
+ * honours each once, and two tool calls racing to refresh would cost the user their sign-in. A refresh the server refuses removes the stored token (Spring
  * Security's own failure handling), so the next session sends the user to sign in again.
  */
 public final class OAuth2McpCredentialsProvider implements McpCredentialsProvider {
@@ -68,7 +68,16 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 
 	private final McpSignIn signIn;
 
+	private final RefreshLock refreshLock;
+
+	/** Guards registration and sign-in, which only ever happen in the JVM the user is talking to. */
 	private final Map<String, Object> locks = new ConcurrentHashMap<>();
+
+	/**
+	 * How long before it expires a token counts as expired: the same minute Spring Security's refresh
+	 * provider allows, so a token this class hands out as fresh is one the manager would not refresh.
+	 */
+	private static final java.time.Duration CLOCK_SKEW = java.time.Duration.ofSeconds(60);
 
 	/**
 	 * @param servers the servers to authorize; any other server is left as configured
@@ -80,6 +89,19 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 	public OAuth2McpCredentialsProvider(List<McpServerSpec.Http> servers, McpClientRegistrationRepository registrations,
 			McpOAuth2DcrClientManager clientManager, OAuth2AuthorizedClientService authorizedClients,
 			OAuth2AuthorizedClientManager authorizedClientManager, String clientName, McpSignIn signIn) {
+		this(servers, registrations, clientManager, authorizedClients, authorizedClientManager, clientName, signIn,
+				RefreshLock.inProcess());
+	}
+
+	/**
+	 * @param refreshLock serializes refreshes per (server, user); {@link RefreshLock#inProcess()} for
+	 * one instance, {@code JdbcRefreshLock} for several sharing a database
+	 */
+	public OAuth2McpCredentialsProvider(List<McpServerSpec.Http> servers, McpClientRegistrationRepository registrations,
+			McpOAuth2DcrClientManager clientManager, OAuth2AuthorizedClientService authorizedClients,
+			OAuth2AuthorizedClientManager authorizedClientManager, String clientName, McpSignIn signIn,
+			RefreshLock refreshLock) {
+		this.refreshLock = refreshLock;
 		Map<String, McpServerSpec.Http> byName = new LinkedHashMap<>();
 		servers.forEach(server -> byName.put(server.name(), server));
 		this.servers = Map.copyOf(byName);
@@ -188,27 +210,60 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 	}
 
 	/**
-	 * The current token, refreshed if it has expired. One refresh at a time per (server, user).
+	 * The current token, refreshed if it has expired.
+	 *
+	 * <p>A fresh token is handed out without taking the lock — the common case, and the one every
+	 * request pays for. An expired one is refreshed under the {@link RefreshLock}, where the manager
+	 * re-reads the stored token first: if another thread or instance refreshed it while this one
+	 * waited, it is fresh now and nothing is sent.
 	 */
 	private String accessToken(String registrationId, String principalName) {
-		synchronized (lock(registrationId, principalName)) {
-			OAuth2AuthorizedClient client;
-			try {
-				client = authorizedClientManager.authorize(
-						OAuth2AuthorizeRequest.withClientRegistrationId(registrationId).principal(principalName).build());
-			}
-			catch (ClientAuthorizationException ex) {
-				// Never the exception's own message: some servers echo the grant back in it.
-				logger.warn("MCP server '{}' refused to refresh a user's token ({}); they will be asked to sign in again",
-						registrationId, ex.getError().getErrorCode());
-				throw new IllegalStateException("The token for MCP server '" + registrationId
-						+ "' could not be refreshed: " + ex.getError().getErrorCode());
-			}
-			if (client == null) {
-				throw new IllegalStateException("No token for MCP server '" + registrationId + "'");
-			}
-			return client.getAccessToken().getTokenValue();
+		OAuth2AuthorizedClient stored = authorizedClients.loadAuthorizedClient(registrationId, principalName);
+		if (stored != null && isFresh(stored.getAccessToken())) {
+			return stored.getAccessToken().getTokenValue();
 		}
+		Refresh refresh = refreshLock.whileLocked(registrationId, principalName,
+				() -> refresh(registrationId, principalName));
+		if (refresh.refusal() != null) {
+			// Never the exception's own message: some servers echo the grant back in it.
+			logger.warn("MCP server '{}' refused to refresh a user's token ({}); they will be asked to sign in again",
+					registrationId, refresh.refusal());
+			throw new IllegalStateException("The token for MCP server '" + registrationId
+					+ "' could not be refreshed: " + refresh.refusal());
+		}
+		if (refresh.token() == null) {
+			throw new IllegalStateException("The user is no longer signed in to MCP server '" + registrationId + "'");
+		}
+		return refresh.token();
+	}
+
+	/**
+	 * Refreshes under the lock, and reports a refusal as a value rather than throwing it.
+	 *
+	 * <p>The difference matters with a database lock. A refused refresh makes Spring Security remove
+	 * the stored token, so the user signs in again next time; an exception leaving the transaction
+	 * would roll that removal back and leave a dead token to be refused on every request after.
+	 */
+	private Refresh refresh(String registrationId, String principalName) {
+		try {
+			OAuth2AuthorizedClient client = authorizedClientManager
+				.authorize(OAuth2AuthorizeRequest.withClientRegistrationId(registrationId).principal(principalName).build());
+			return new Refresh(client == null ? null : client.getAccessToken().getTokenValue(), null);
+		}
+		catch (ClientAuthorizationRequiredException ex) {
+			// No stored token at all: signed out since this session opened, by a refusal elsewhere.
+			return new Refresh(null, null);
+		}
+		catch (ClientAuthorizationException ex) {
+			return new Refresh(null, ex.getError().getErrorCode());
+		}
+	}
+
+	private record Refresh(String token, String refusal) {
+	}
+
+	private static boolean isFresh(org.springframework.security.oauth2.core.OAuth2AccessToken token) {
+		return token.getExpiresAt() == null || token.getExpiresAt().isAfter(java.time.Instant.now().plus(CLOCK_SKEW));
 	}
 
 	private Object lock(String first, String second) {

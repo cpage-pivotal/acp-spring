@@ -488,8 +488,16 @@ application registers again) or, with `spring.acp.mcp.oauth.store: jdbc`, in the
 `acp_mcp_client_registration` (this module's schema) and Spring Security's
 `oauth2_authorized_client`. Registrations are first-writer-wins across instances, because a user who
 signed in through one instance must be refreshable from another; the loser's client id is simply
-never used. Known limits: tokens are stored as Spring Security stores them — unencrypted — and two
-instances can still race a refresh for the same user, which the per-JVM lock cannot prevent.
+never used. Refreshes are serialized across instances too: with the JDBC store, a `JdbcRefreshLock` takes
+`SELECT … FOR UPDATE` on the user's `oauth2_authorized_client` row, in a transaction, before
+refreshing, and whoever waited re-reads a token that is fresh by then and sends nothing. A fresh token
+is handed out without the lock, so only a request that finds its token expired pays for it. A refused
+refresh is carried out of the transaction as a value, not an exception, because Spring Security
+removes the stored token on refusal and an exception would roll that back — leaving a dead token to be
+refused on every request after. Tested with two instances sharing one database: with only in-JVM
+locks both refresh and one is refused (sometimes signing the user out entirely); with the row lock
+they refresh once between them. Known limit: tokens are stored as Spring Security stores them —
+unencrypted.
 
 All of it was verified against the Tanzu MCP gateway before being built (discovery, DCR, PKCE
 sign-in with `resource=`, two forced refreshes through the same manager). The web flow is tested

@@ -69,6 +69,7 @@ class McpOAuthAutoConfigurationTests {
 				.isInstanceOf(InMemoryMcpClientRegistrationRepository.class);
 			assertThat(context.getBean(OAuth2AuthorizedClientService.class))
 				.isInstanceOf(InMemoryOAuth2AuthorizedClientService.class);
+			assertThat(context.getBean(RefreshLock.class)).isNotInstanceOf(JdbcRefreshLock.class);
 		});
 	}
 
@@ -82,6 +83,8 @@ class McpOAuthAutoConfigurationTests {
 					.isInstanceOf(JdbcMcpClientRegistrationRepository.class);
 				assertThat(context.getBean(OAuth2AuthorizedClientService.class))
 					.isInstanceOf(JdbcOAuth2AuthorizedClientService.class);
+				// Instances sharing the database take the database's lock before refreshing.
+				assertThat(context.getBean(RefreshLock.class)).isInstanceOf(JdbcRefreshLock.class);
 			});
 	}
 

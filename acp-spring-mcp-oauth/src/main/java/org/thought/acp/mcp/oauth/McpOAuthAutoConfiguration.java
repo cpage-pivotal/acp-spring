@@ -116,6 +116,13 @@ public class McpOAuthAutoConfiguration {
 		return store != null ? store.tokens() : new InMemoryOAuth2AuthorizedClientService(registrations);
 	}
 
+	/** One refresh at a time per (server, user) in this JVM, unless {@link Jdbc} made it the database's. */
+	@Bean
+	@ConditionalOnMissingBean
+	RefreshLock acpMcpRefreshLock() {
+		return RefreshLock.inProcess();
+	}
+
 	/**
 	 * What happens for a user without a token: Spring Security's redirect on the web, a browser opened
 	 * on the spot for a terminal application.
@@ -141,7 +148,8 @@ public class McpOAuthAutoConfiguration {
 	@ConditionalOnMissingBean
 	OAuth2McpCredentialsProvider acpMcpOAuth2CredentialsProvider(AcpProperties acp, McpOAuthProperties properties,
 			McpClientRegistrationRepository registrations, McpOAuth2DcrClientManager clientManager,
-			OAuth2AuthorizedClientService authorizedClients, McpSignIn signIn, Environment environment) {
+			OAuth2AuthorizedClientService authorizedClients, McpSignIn signIn, RefreshLock refreshLock,
+			Environment environment) {
 		List<McpServerSpec.Http> servers = acp.getMcpServers().stream()
 			.filter(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH)
 			.map(AcpProperties.McpServer::spec)
@@ -156,7 +164,7 @@ public class McpOAuthAutoConfiguration {
 		String clientName = properties.getClientName() != null ? properties.getClientName()
 				: environment.getProperty("spring.application.name", "acp-spring");
 		return new OAuth2McpCredentialsProvider(servers, registrations, clientManager, authorizedClients,
-				McpAuthorizedClientManagers.create(registrations, authorizedClients), clientName, signIn);
+				McpAuthorizedClientManagers.create(registrations, authorizedClients), clientName, signIn, refreshLock);
 	}
 
 	/** The signed-in user of the request on the web; the operating-system user in a terminal. */
@@ -190,6 +198,28 @@ public class McpOAuthAutoConfiguration {
 				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc) {
 			return new org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientService(requireJdbc(jdbc),
 					registrations);
+		}
+
+		/**
+		 * Every instance sharing the database takes the same row lock before refreshing, so a refresh
+		 * token the authorization server honours once is spent once. Uses the application's transaction
+		 * manager when there is one, else one over the {@code JdbcTemplate}'s own data source.
+		 */
+		@Bean
+		@ConditionalOnMissingBean
+		RefreshLock acpMcpRefreshLock(
+				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc,
+				org.springframework.beans.factory.ObjectProvider<org.springframework.transaction.PlatformTransactionManager> transactions) {
+			org.springframework.jdbc.core.JdbcOperations operations = requireJdbc(jdbc);
+			org.springframework.transaction.PlatformTransactionManager manager = transactions.getIfAvailable(() -> {
+				if (operations instanceof org.springframework.jdbc.core.JdbcTemplate template
+						&& template.getDataSource() != null) {
+					return new org.springframework.jdbc.datasource.DataSourceTransactionManager(template.getDataSource());
+				}
+				throw new IllegalStateException("spring.acp.mcp.oauth.store=jdbc needs a PlatformTransactionManager "
+						+ "to lock refreshes across instances");
+			});
+			return new JdbcRefreshLock(new org.springframework.transaction.support.TransactionTemplate(manager), operations);
 		}
 
 		private static org.springframework.jdbc.core.JdbcOperations requireJdbc(
