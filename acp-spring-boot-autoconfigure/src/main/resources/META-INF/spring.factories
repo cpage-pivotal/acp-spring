@@ -1,5 +1,5 @@
 org.springframework.boot.context.config.ConfigDataLocationResolver=\
-org.thought.acp.boot.AgentsConfigDataLocationResolver
+org.springaicommunity.acp.boot.AgentsConfigDataLocationResolver
 
 org.springframework.boot.context.config.ConfigDataLoader=\
-org.thought.acp.boot.AgentsConfigDataLoader
+org.springaicommunity.acp.boot.AgentsConfigDataLoader

@@ -116,12 +116,12 @@ Spring AI `ChatModel` adapter; config bindable from both `application.yaml` and 
 
 ## Module layout
 
-Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org.thought.acp` — do
+Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org.springaicommunity.acp` — do
 **not** squat `org.springframework`. Packages organized by feature, not layer.
 
 | Module | Contents |
 | --- | --- |
-| `acp-spring-core` | No Spring types on the classpath-required path. `org.thought.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.mcp`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
+| `acp-spring-core` | No Spring types on the classpath-required path. `org.springaicommunity.acp.client`, `.session`, `.turn`, `.process`, `.transport`, `.permission`, `.mcp`, `.workspace`, `.config`, `.runtime`, `.event`, `.executor`, `.protocol`, `.observation` |
 | `acp-spring-runtime-goose` | `GooseRuntime` — stdio `goose acp` **and** `goose serve` over WebSocket; `--with-builtin` extensions |
 | `acp-spring-runtime-codex` | `CodexRuntime` — `npx @agentclientprotocol/codex-acp`; `CODEX_HOME` + `config.toml` provisioning |
 | `acp-spring-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |

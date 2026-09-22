@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.thought.acp</groupId>
+        <groupId>org.springaicommunity.acp</groupId>
         <artifactId>acp-spring</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>

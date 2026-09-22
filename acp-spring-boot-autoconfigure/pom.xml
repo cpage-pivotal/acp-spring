@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.thought.acp</groupId>
+        <groupId>org.springaicommunity.acp</groupId>
         <artifactId>acp-spring</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
@@ -17,7 +17,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-core</artifactId>
         </dependency>
         <dependency>
@@ -32,30 +32,30 @@
 
         <!-- Runtime adapters are optional: an application puts the one it wants on the classpath. -->
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-runtime-goose</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-runtime-codex</artifactId>
             <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-runtime-opencode</artifactId>
             <optional>true</optional>
         </dependency>
         <!-- The generic, registry-driven runtime: any published agent, no adapter. -->
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-runtime-registry</artifactId>
             <optional>true</optional>
         </dependency>
 
         <!-- Both optional, and both wired only when their types are genuinely on the classpath. -->
         <dependency>
-            <groupId>org.thought.acp</groupId>
+            <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-ai</artifactId>
             <optional>true</optional>
         </dependency>

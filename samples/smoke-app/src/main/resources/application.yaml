@@ -74,4 +74,4 @@ spring:
 
 logging:
   level:
-    org.thought.acp: INFO
+    org.springaicommunity.acp: INFO
