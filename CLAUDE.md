@@ -51,7 +51,9 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `acp-spring
   headers on every request so expiring tokens refresh mid-session. Routes are released by
   `SessionRegistry` whenever it forgets a session. A named session belongs to its `SessionPrincipal`
   (`SessionOwnershipException` otherwise); the resolver is read on the caller's thread, never on
-  subscription. See "MCP credentials" in `docs/design.md`.
+  subscription. An agent's MCP interop workarounds are `McpRequestFilter`s its adapter returns from
+  `mcpRequestFilters` (goose: opt-in `mcp.answer-discover`), never code in core. See "MCP
+  credentials" in `docs/design.md`.
 - **`permissions.policy: deny` does not stop an agent writing files.** Combine with an agent mode that asks first (`mode: plan`). Workspace jail confines fs/terminal requests by real path (symlinks followed), not just `normalize()`.
 - Optional session operations throw `UnsupportedAgentOperationException` naming the ACP method rather than failing on the wire.
 - ACP v2 is gated behind a flag and refused; target v1.

@@ -28,6 +28,9 @@ public interface McpCredentials {
 	 */
 	Map<String, String> headers();
 
+	/** Nothing to add: a server routed through the proxy for some reason other than a credential. */
+	McpCredentials NONE = Map::of;
+
 	/** A bearer token read at request time, so whatever supplies it can rotate it. */
 	static McpCredentials bearer(Supplier<String> token) {
 		return () -> {

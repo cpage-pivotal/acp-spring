@@ -306,6 +306,57 @@ class McpAccessTests {
 		assertThat(response.body()).isEqualTo("data: one\n\ndata: two\n\n");
 	}
 
+	// --- the agent's own workarounds -----------------------------------------------------------
+
+	@Test
+	void aFilterThatAnswersEndsTheChainAndNothingReachesTheUpstream() throws Exception {
+		List<String> ran = new CopyOnWriteArrayList<>();
+		McpRequestFilter answers = request -> {
+			ran.add("answers:" + request.server());
+			return McpRequestFilter.Outcome.Answer.json(200, "{\"answered\":\"locally\"}");
+		};
+		McpRequestFilter never = request -> {
+			ran.add("never");
+			return request.forward();
+		};
+		access = new McpAccess(perUser(), LIMIT, List.of(answers, never));
+		McpAccess.Grant grant = access.grant(null, List.of(tools()));
+
+		HttpResponse<String> response = post(urlOf(grant, "tools"), Map.of(), "{}");
+
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(response.body()).isEqualTo("{\"answered\":\"locally\"}");
+		assertThat(response.headers().firstValue("content-type")).hasValue("application/json");
+		assertThat(ran).containsExactly("answers:tools");
+		assertThat(upstream.requests).isEmpty();
+	}
+
+	@Test
+	void aFilterCanChangeWhatIsForwardedButNotTheCredentials() throws Exception {
+		McpRequestFilter dropsVersion = request -> request.withoutHeader("mcp-protocol-version").forward();
+		McpRequestFilter triesToForge = request -> new McpRequestFilter.McpRequest(request.server(), request.method(),
+				Map.of("Authorization", List.of("Bearer forged")), request.body()).forward();
+		access = new McpAccess(perUser(), LIMIT, List.of(dropsVersion, triesToForge));
+		McpAccess.Grant grant = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+
+		post(urlOf(grant, "tools"), Map.of("MCP-Protocol-Version", "2026-07-28"), "{}");
+
+		Seen seen = upstream.requests.get(0);
+		assertThat(seen.headers()).doesNotContainKey("Mcp-protocol-version");
+		assertThat(seen.headers().get("Authorization")).containsExactly("Bearer token-alice");
+	}
+
+	@Test
+	void whileThereAreFiltersEveryHttpServerGoesThroughTheProxyCredentialedOrNot() throws Exception {
+		access = new McpAccess(McpCredentialsProvider.none(), LIMIT, List.of(McpRequestFilter.McpRequest::forward));
+		McpAccess.Grant grant = access.grant(null, List.of(tools()));
+
+		assertThat(urlOf(grant, "tools").getHost()).isEqualTo("127.0.0.1");
+		post(urlOf(grant, "tools"), Map.of(), "{}");
+		assertThat(upstream.requests.get(0).headers()).doesNotContainKey("Authorization");
+		assertThat(upstream.requests.get(0).headers().get("X-configured")).containsExactly("from-spec");
+	}
+
 	@Test
 	void pseudoHeadersAndCredentialsNeverCrossTheProxy() {
 		assertThat(McpProxy.passes(":status")).isFalse();

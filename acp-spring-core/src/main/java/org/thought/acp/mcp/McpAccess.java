@@ -33,6 +33,8 @@ public final class McpAccess implements AutoCloseable {
 
 	private final Duration requestTimeout;
 
+	private final List<McpRequestFilter> filters;
+
 	private final Object lock = new Object();
 
 	private McpProxy proxy;
@@ -43,8 +45,18 @@ public final class McpAccess implements AutoCloseable {
 	 * @param requestTimeout how long the proxy waits for an upstream to start answering
 	 */
 	public McpAccess(McpCredentialsProvider provider, Duration requestTimeout) {
+		this(provider, requestTimeout, List.of());
+	}
+
+	/**
+	 * @param filters the agent's own MCP workarounds; while there are any, every HTTP server goes
+	 * through the proxy, credentialed or not, since a workaround in the proxy does nothing for a
+	 * server the agent reaches directly
+	 */
+	public McpAccess(McpCredentialsProvider provider, Duration requestTimeout, List<McpRequestFilter> filters) {
 		this.provider = provider == null ? McpCredentialsProvider.none() : provider;
 		this.requestTimeout = requestTimeout;
+		this.filters = filters == null ? List.of() : List.copyOf(filters);
 	}
 
 	/**
@@ -61,7 +73,10 @@ public final class McpAccess implements AutoCloseable {
 		for (McpServerSpec server : servers) {
 			if (server instanceof McpServerSpec.Http http) {
 				Optional<McpCredentials> credentials = provider.credentialsFor(http, principal);
-				credentials.ifPresent(c -> upstreams.put(http.name(), new McpProxy.Upstream(http.url(), http.headers(), c)));
+				if (credentials.isPresent() || !filters.isEmpty()) {
+					upstreams.put(http.name(), new McpProxy.Upstream(http.name(), http.url(), http.headers(),
+							credentials.orElse(McpCredentials.NONE)));
+				}
 			}
 		}
 		if (upstreams.isEmpty()) {
@@ -85,7 +100,7 @@ public final class McpAccess implements AutoCloseable {
 				throw new IllegalStateException("MCP access is closed");
 			}
 			if (proxy == null) {
-				proxy = McpProxy.start(requestTimeout);
+				proxy = McpProxy.start(requestTimeout, filters);
 			}
 			return proxy;
 		}

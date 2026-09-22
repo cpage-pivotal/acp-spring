@@ -410,6 +410,28 @@ class AgentClientWireTests {
 	}
 
 	@Test
+	void anAdaptersMcpWorkaroundPutsEveryHttpServerBehindTheProxyEvenWithoutCredentials() throws Exception {
+		AgentRuntime withWorkaround = new ScriptedRuntime() {
+			@Override
+			public List<org.thought.acp.mcp.McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
+				return List.of(request -> org.thought.acp.mcp.McpRequestFilter.Outcome.Answer.json(200, "{}"));
+			}
+		};
+		McpServerSpec server = new McpServerSpec.Http("tools", java.net.URI.create("https://tools.example.com/mcp"),
+				Map.of());
+		try (ScriptedAgent agent = ScriptedAgent.builder().build();
+				AgentClient client = AgentClientFactory.connect(withWorkaround,
+						settings().mcpServers(List.of(server)).build(), agent.transport())) {
+
+			client.prompt().session("s").user("hi").call();
+
+			String url = declaredUrl(agent.newSessions().get(0));
+			assertThat(url).startsWith("http://127.0.0.1:");
+			assertThat(statusOf(url)).isEqualTo(200);
+		}
+	}
+
+	@Test
 	void aProviderThatRefusesTheUserRefusesTheSessionBeforeTheAgentHearsOfIt() {
 		org.thought.acp.mcp.McpCredentialsProvider notSignedIn = (server, principal) -> {
 			throw new IllegalStateException(server.name() + " needs a sign-in first");
@@ -689,7 +711,7 @@ class AgentClientWireTests {
 	}
 
 	/** A runtime that names no agent: only the core is under test here. */
-	private static final class ScriptedRuntime implements AgentRuntime {
+	private static class ScriptedRuntime implements AgentRuntime {
 
 		@Override
 		public String id() {

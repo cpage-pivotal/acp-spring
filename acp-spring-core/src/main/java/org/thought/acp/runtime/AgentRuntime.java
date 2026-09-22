@@ -89,6 +89,20 @@ public interface AgentRuntime {
 	}
 
 	/**
+	 * Workarounds this agent needs on its MCP traffic, applied by the loopback proxy.
+	 *
+	 * <p>For the interoperability bugs between one agent and some MCP servers that make the agent
+	 * drop a server without a word. The same division of labour as {@link #noticeOf}: the adapter
+	 * knows its agent's quirks, the core does the plumbing. While this returns anything, every HTTP
+	 * MCP server is routed through the proxy — credentialed or not, since a filter cannot touch
+	 * traffic the agent sends straight to the server — so an adapter should return filters only when
+	 * the application has asked for them.
+	 */
+	default List<org.thought.acp.mcp.McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
+		return List.of();
+	}
+
+	/**
 	 * The {@code session/set_config_option} ids this runtime uses for a portable option, most
 	 * specific first, or empty if it has none.
 	 *

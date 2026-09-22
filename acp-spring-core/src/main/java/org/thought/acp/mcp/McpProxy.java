@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -22,6 +24,7 @@ import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.thought.acp.mcp.McpRequestFilter.McpRequest;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -77,17 +80,21 @@ final class McpProxy implements AutoCloseable {
 
 	private final Duration requestTimeout;
 
+	private final List<McpRequestFilter> filters;
+
 	/**
 	 * One upstream MCP server as one session reaches it.
 	 *
+	 * @param name the server's configured name, as filters see it
 	 * @param headers configured on the server spec; kept here rather than handed to the agent
 	 */
-	record Upstream(URI url, Map<String, String> headers, McpCredentials credentials) {
+	record Upstream(String name, URI url, Map<String, String> headers, McpCredentials credentials) {
 	}
 
-	private McpProxy(HttpServer server, Duration requestTimeout) {
+	private McpProxy(HttpServer server, Duration requestTimeout, List<McpRequestFilter> filters) {
 		this.server = server;
 		this.requestTimeout = requestTimeout;
+		this.filters = List.copyOf(filters);
 	}
 
 	/**
@@ -95,11 +102,12 @@ final class McpProxy implements AutoCloseable {
 	 *
 	 * @param requestTimeout how long to wait for an upstream to start answering; a stream it then
 	 * sends is not cut off by it
+	 * @param filters run in order on every request; see {@link McpRequestFilter}
 	 */
-	static McpProxy start(Duration requestTimeout) {
+	static McpProxy start(Duration requestTimeout, List<McpRequestFilter> filters) {
 		try {
 			HttpServer server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-			McpProxy proxy = new McpProxy(server, requestTimeout);
+			McpProxy proxy = new McpProxy(server, requestTimeout, filters);
 			server.createContext("/", proxy::handle);
 			server.setExecutor(proxy.workers);
 			server.start();
@@ -169,14 +177,32 @@ final class McpProxy implements AutoCloseable {
 	}
 
 	private void forward(HttpExchange exchange, Upstream upstream) throws IOException {
-		byte[] body = exchange.getRequestBody().readAllBytes();
+		Map<String, List<String>> received = new LinkedHashMap<>();
+		exchange.getRequestHeaders().forEach((header, values) -> {
+			if (passes(header)) {
+				received.put(header, values);
+			}
+		});
+		McpRequest incoming = new McpRequest(upstream.name(), exchange.getRequestMethod(), received,
+				exchange.getRequestBody().readAllBytes());
+		for (McpRequestFilter filter : filters) {
+			switch (filter.filter(incoming)) {
+				case McpRequestFilter.Outcome.Forward forward -> incoming = forward.request();
+				case McpRequestFilter.Outcome.Answer answer -> {
+					answer(exchange, answer);
+					return;
+				}
+			}
+		}
+
+		byte[] body = incoming.body();
 		String query = exchange.getRequestURI().getRawQuery();
 		URI target = query == null ? upstream.url() : URI.create(upstream.url() + "?" + query);
 
 		HttpRequest.Builder request = HttpRequest.newBuilder(target).timeout(requestTimeout)
-			.method(exchange.getRequestMethod(), body.length == 0 ? HttpRequest.BodyPublishers.noBody()
+			.method(incoming.method(), body.length == 0 ? HttpRequest.BodyPublishers.noBody()
 					: HttpRequest.BodyPublishers.ofByteArray(body));
-		exchange.getRequestHeaders().forEach((header, values) -> {
+		incoming.headers().forEach((header, values) -> {
 			if (passes(header)) {
 				values.forEach(value -> request.header(header, value));
 			}
@@ -230,6 +256,17 @@ final class McpProxy implements AutoCloseable {
 	/** Whether a header may cross the proxy, in either direction. */
 	static boolean passes(String header) {
 		return !header.startsWith(":") && !NOT_FORWARDED.contains(header.toLowerCase(Locale.ROOT));
+	}
+
+	private static void answer(HttpExchange exchange, McpRequestFilter.Outcome.Answer answer) throws IOException {
+		logger.debug("Answered a request locally with HTTP {}", answer.status());
+		if (answer.contentType() != null) {
+			exchange.getResponseHeaders().set("Content-Type", answer.contentType());
+		}
+		exchange.sendResponseHeaders(answer.status(), answer.body().length == 0 ? -1 : answer.body().length);
+		try (OutputStream out = exchange.getResponseBody()) {
+			out.write(answer.body());
+		}
 	}
 
 	private static void respond(HttpExchange exchange, int status, String json) throws IOException {

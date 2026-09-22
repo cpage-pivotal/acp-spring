@@ -397,8 +397,22 @@ The forwarding itself carries over the four details that each made goose drop a 
 word (see "Where the silence holds" above): no HTTP/2 pseudo-headers into the HTTP/1.1 response, no
 body at all for a `202`/`204`, bodies flushed per chunk so SSE is not buffered, and the agent's own
 headers — `User-Agent` included — passed through. The agent's `Authorization` is dropped: the proxy
-is the only authority on credentials. The goose-specific `server/discover` workaround is *not*
-here; vendor knowledge belongs to its adapter.
+is the only authority on credentials.
+
+**Agent workarounds are the adapter's, applied by the proxy.** `AgentRuntime.mcpRequestFilters`
+returns `McpRequestFilter`s that run, in order, on every request after its route is known and before
+credentials are added; each forwards the request, possibly changed, or answers it locally so nothing
+reaches the upstream. A filter cannot forge credentials — the proxy drops `Authorization` from
+whatever a filter forwards and sets its own. While an adapter returns any, every HTTP server goes
+through the proxy, credentialed or not, because a filter cannot touch traffic the agent sends
+straight to the server. The one that exists: goose 1.51 opens an MCP connection with
+`server/discover` at `MCP-Protocol-Version: 2026-07-28`, and the Tanzu MCP gateway answers with a
+400 whose `id` is `"server-error"` — goose cannot correlate it, never falls back to `initialize`, and
+the server silently never loads. `DiscoverProbeFilter` answers the probe with a well-formed
+`-32601` carrying the request's id, which is what an older server should have said, and drops the
+probe version header from everything else; goose then falls back and connects. It is opt-in
+(`spring.acp.runtimes.goose.mcp.answer-discover: true`) because a server that does implement
+discovery would lose its newer protocol, and it should be deleted the day either side is fixed.
 
 **Principals.** A `SessionPrincipal` is who a session is for — just a name, never logged. It reaches
 the provider, and it owns the session: a named session open for one principal is refused to another
@@ -597,6 +611,7 @@ spring:
         builtins: developer,todo
         env: { GOOSE_DISABLE_KEYRING: "1" }
         serve: { transport: websocket, host: 127.0.0.1, port: 0 }
+        mcp: { answer-discover: true }   # see "MCP credentials": the server/discover workaround
       codex:
         config-toml: { model_reasoning_effort: high }
       opencode:

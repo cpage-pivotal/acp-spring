@@ -293,6 +293,17 @@ public class GooseRuntime implements AgentRuntime {
 		return text.replace("\\\"", "\"").replace("\\n", " ").replace("\\\\", "\\").strip();
 	}
 
+	/**
+	 * The {@code server/discover} workaround, when the application asks for it with the tier-3
+	 * {@code mcp.answer-discover: true}. See {@link DiscoverProbeFilter} for the failure it hides
+	 * and why it is not on by default.
+	 */
+	@Override
+	public List<org.thought.acp.mcp.McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
+		boolean answer = settings.runtimeOptions().text("mcp.answer-discover").map(Boolean::parseBoolean).orElse(false);
+		return answer ? List.of(new DiscoverProbeFilter()) : List.of();
+	}
+
 	@Override
 	public List<String> configIdsFor(PortableOption option) {
 		// Verified against goose 1.51.0: session/new advertises exactly these ids.

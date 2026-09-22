@@ -96,7 +96,8 @@ public final class DefaultAgentClient implements AgentClient {
 		this.recorder = recorder == null ? new SessionConfigRecorder() : recorder;
 		this.configResolver = new ConfigResolver(runtime, settings.onUnsupported());
 		this.agentInfo = initialized == null ? null : AgentInfo.from(initialized.agentInfo()).orElse(null);
-		this.mcpAccess = new McpAccess(settings.mcp().credentials(), settings.timeout());
+		this.mcpAccess = new McpAccess(settings.mcp().credentials(), settings.timeout(),
+				runtime.mcpRequestFilters(settings));
 		this.sessionOperations = new DefaultAgentSessions(acp, runtime.id(), settings,
 				initialized == null ? null : initialized.agentCapabilities(), sessions, this.recorder,
 				session -> configure(session, settings), mcpAccess);
