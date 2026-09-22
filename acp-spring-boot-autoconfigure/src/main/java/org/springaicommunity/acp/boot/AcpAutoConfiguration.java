@@ -108,14 +108,15 @@ public class AcpAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	AgentSettings acpAgentSettings(AcpProperties properties,
+	AgentSettings acpAgentSettings(AcpProperties properties, SelectedRuntime selected,
 			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.mcp.McpCredentialsProvider> credentials,
 			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.session.SessionPrincipalResolver> principals) {
 		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
 				: properties.getWorkspace().toAbsolutePath();
 		warnAboutUnprotectedOAuthServers(properties, credentials);
+		String runtime = selected.runtime().id();
 
-		return AgentSettings.builder(properties.getRuntime(), workspace).runtimeHome(properties.getRuntimeHome())
+		return AgentSettings.builder(runtime, workspace).runtimeHome(properties.getRuntimeHome())
 				.timeout(properties.getTimeout()).model(properties.getModel())
 				.provider(properties.toProviderSpec()).mode(properties.getMode())
 				.mcpServers(properties.toMcpServerSpecs()).skills(properties.toSkillSpecs())
@@ -125,7 +126,7 @@ public class AcpAutoConfiguration {
 				.filesystem(properties.toFileSystemAccess()).terminal(properties.toTerminalAccess())
 				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())
 				.pool(properties.toPoolSettings()).protocol(properties.toProtocolSettings())
-				.runtimeOptions(properties.optionsFor(properties.getRuntime())).build();
+				.runtimeOptions(properties.optionsFor(runtime)).build();
 	}
 
 	/**

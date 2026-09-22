@@ -39,8 +39,14 @@ class AcpAutoConfigurationTests {
 	private final ApplicationContextRunner plain = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(AcpAutoConfiguration.class));
 
-	/** The same, with the client stubbed so no agent subprocess is started. */
-	private final ApplicationContextRunner runner = plain.withUserConfiguration(StubClient.class);
+	/** The same, with the client stubbed so no agent subprocess is started, and no agent named. */
+	private final ApplicationContextRunner unnamed = plain.withUserConfiguration(StubClient.class);
+
+	/**
+	 * What most tests want. Every adapter is on this module's test classpath, so an application in
+	 * this position has to name one.
+	 */
+	private final ApplicationContextRunner runner = unnamed.withPropertyValues("spring.acp.runtime=goose");
 
 	@Test
 	void bindsPortableOptions() {
@@ -158,6 +164,44 @@ class AcpAutoConfigurationTests {
 					.hasNotFailed().getBean(SelectedRuntime.class)
 					.satisfies(selected -> assertThat(selected.runtime().id()).isEqualTo(id)));
 		}
+	}
+
+	@Test
+	void theOnlyAdapterOnTheClasspathNeedsNoNaming() {
+		// What a runtime starter gives an application: one adapter, and nothing to configure.
+		unnamed.withClassLoader(new FilteredClassLoader(GooseRuntime.class, OpenCodeRuntime.class))
+				.withPropertyValues("spring.acp.runtimes.codex.config-toml.model_reasoning_effort=high")
+				.run(context -> {
+					assertThat(context).hasNotFailed();
+					assertThat(context.getBean(SelectedRuntime.class).runtime()).isInstanceOf(CodexRuntime.class);
+					AgentSettings settings = context.getBean(AgentSettings.class);
+					assertThat(settings.runtime()).isEqualTo("codex");
+					assertThat(settings.runtimeHome().getFileName()).hasToString("codex");
+					assertThat(settings.runtimeOptions().section("config-toml")).containsKey("model_reasoning_effort");
+				});
+	}
+
+	@Test
+	void thereIsNoDefaultAgentAmongSeveral() {
+		unnamed.run(context -> {
+			assertThat(context).hasFailed();
+			assertThat(context.getStartupFailure()).rootCause()
+					.hasMessageContaining("more than one runtime adapter")
+					.hasMessageContaining("[codex, goose, opencode]");
+		});
+	}
+
+	@Test
+	void theRegistryAloneDoesNotChooseAnAgent() {
+		// It can supply dozens, so being on the classpath says nothing about which one to run.
+		unnamed.withClassLoader(new FilteredClassLoader(GooseRuntime.class, CodexRuntime.class, OpenCodeRuntime.class))
+				.withPropertyValues("spring.acp.registry.offline=true").run(context -> {
+					assertThat(context).hasFailed();
+					assertThat(context.getStartupFailure()).rootCause()
+							.hasMessageContaining("no runtime adapter is on the classpath")
+							.hasMessageContaining("acp-spring-boot-starter-goose")
+							.hasMessageContaining("available from the ACP registry");
+				});
 	}
 
 	@Test

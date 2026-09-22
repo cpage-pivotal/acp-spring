@@ -42,6 +42,10 @@
         <module>acp-spring-runtime-registry</module>
         <module>acp-spring-boot-autoconfigure</module>
         <module>acp-spring-boot-starter</module>
+        <module>acp-spring-boot-starter-goose</module>
+        <module>acp-spring-boot-starter-codex</module>
+        <module>acp-spring-boot-starter-opencode</module>
+        <module>acp-spring-boot-starter-registry</module>
         <module>acp-spring-ai</module>
         <module>acp-spring-mcp-oauth</module>
         <module>acp-spring-test</module>
@@ -96,6 +100,26 @@
             <dependency>
                 <groupId>org.springaicommunity.acp</groupId>
                 <artifactId>acp-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springaicommunity.acp</groupId>
+                <artifactId>acp-spring-boot-starter-goose</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springaicommunity.acp</groupId>
+                <artifactId>acp-spring-boot-starter-codex</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springaicommunity.acp</groupId>
+                <artifactId>acp-spring-boot-starter-opencode</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springaicommunity.acp</groupId>
+                <artifactId>acp-spring-boot-starter-registry</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

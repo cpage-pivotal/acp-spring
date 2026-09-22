@@ -133,7 +133,8 @@ Multi-module Maven, Java 21, Spring Boot 4 (matching `java-wrapper`). Group `org
 | `acp-spring-runtime-opencode` | `OpenCodeRuntime` — binary + `acp`; `opencode.json` via `OPENCODE_CONFIG` |
 | `acp-spring-runtime-registry` | `AgentRegistry`, `AgentInstaller`, `Archives`, `RegistryAgentRuntime` — any agent the ACP registry publishes, with no adapter |
 | `acp-spring-boot-autoconfigure` | `AcpProperties`, `AcpAutoConfiguration`, `AcpWebFluxAutoConfiguration` + `AcpController`, `AgentsConfigDataLoader` |
-| `acp-spring-boot-starter` | Pom-only aggregator (`+ autoconfigure + core + runtime-goose`) |
+| `acp-spring-boot-starter` | Pom-only aggregator (`autoconfigure + core`), deliberately with no agent |
+| `acp-spring-boot-starter-{goose,codex,opencode,registry}` | Pom-only: the starter plus one runtime module. `spring.acp.runtime` has no default; left unset, it means the only adapter on the classpath, and fails naming the choices otherwise (the registry never counts, since it supplies dozens) |
 | `acp-spring-ai` | `AcpChatModel implements ChatModel`, `AcpChatOptions` — Spring AI 2.0.x |
 | `acp-spring-mcp-oauth` | `OAuth2McpCredentialsProvider`, `McpOAuthAutoConfiguration`, `JdbcMcpClientRegistrationRepository` — per-user MCP-spec OAuth via Spring Security and mcp-security; carries its own auto-configuration so Spring Security never reaches an application that did not add it |
 | `acp-spring-test` | `AgentRuntimeContract` (the conformance TCK), `ScriptedAgent`, `AgentProbe`. JUnit and AssertJ are compile-scope here: it publishes an abstract test class other modules extend |
@@ -1696,6 +1697,7 @@ acp-spring/
 ├── acp-spring-runtime-registry/
 ├── acp-spring-boot-autoconfigure/
 ├── acp-spring-boot-starter/
+├── acp-spring-boot-starter-{goose,codex,opencode,registry}/
 ├── acp-spring-ai/
 ├── acp-spring-test/
 └── samples/smoke-app/

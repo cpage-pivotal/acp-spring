@@ -28,6 +28,22 @@ Flux<AgentEvent> events = agentClient.prompt()
         .stream().events();     // Text, Thought, ToolCallStarted, PlanUpdated, Completed…
 ```
 
+## Choosing an agent
+
+Add one runtime starter. Each brings `acp-spring-boot-starter` (core and auto-configuration, no
+agent) plus one adapter:
+
+| Starter | Agent |
+| --- | --- |
+| `acp-spring-boot-starter-goose` | Goose |
+| `acp-spring-boot-starter-codex` | Codex (`codex-acp`) |
+| `acp-spring-boot-starter-opencode` | OpenCode |
+| `acp-spring-boot-starter-registry` | Any agent the ACP registry publishes, named by `spring.acp.runtime` |
+
+With exactly one adapter on the classpath, `spring.acp.runtime` can be left out. There is no default
+agent: with several adapters, or only the registry, it must be set, and startup fails naming the
+choices until it is.
+
 ## Status
 
 **All four milestones are done.** One unchanged application runs against goose 1.51.0, codex-acp
@@ -179,7 +195,7 @@ method, rather than failing on the wire with a code the caller has to interpret.
 ## An agent nobody wrote an adapter for
 
 Set `spring.acp.runtime` to any of the 41 agents the ACP registry publishes, add
-`acp-spring-runtime-registry`, and the agent is resolved from a cached catalogue snapshot,
+`acp-spring-boot-starter-registry`, and the agent is resolved from a cached catalogue snapshot,
 downloaded, checked against its published SHA-256 and launched:
 
 ```

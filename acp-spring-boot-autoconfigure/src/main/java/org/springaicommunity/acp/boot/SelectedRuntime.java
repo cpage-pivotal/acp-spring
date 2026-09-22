@@ -25,6 +25,10 @@ import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
  * application with both a compiled adapter and the registry on its classpath gets the adapter for
  * the agent it wrote one for — with its option ids, its {@code _meta} tool names and, for Goose, its
  * served transport — rather than a generic download of the same binary.
+ *
+ * <p>Left unset, {@code spring.acp.runtime} means the one adapter on the classpath. There is no
+ * default agent: an application that added {@code acp-spring-boot-starter-codex} has said which
+ * agent it wants, and one with several adapters, or only the registry, has to say which.
  */
 public record SelectedRuntime(AgentRuntime runtime) {
 
@@ -38,29 +42,56 @@ public record SelectedRuntime(AgentRuntime runtime) {
 			AcpProperties properties) {
 		requireDistinctIds(available);
 		List<String> adapterIds = available.stream().map(AgentRuntime::id).sorted().toList();
+		String id = properties.getRuntime();
+		if (id == null || id.isBlank()) {
+			AgentRuntime only = onlyAdapter(available, providers, adapterIds);
+			requireKnownTierThreeRuntimes(properties, adapterIds, providers, only);
+			return new SelectedRuntime(only);
+		}
 
-		Optional<AgentRuntime> adapter = available.stream().filter(r -> r.id().equals(properties.getRuntime()))
-				.findFirst();
-		AgentRuntime selected = adapter.orElseGet(() -> fromProviders(providers, properties, adapterIds));
+		Optional<AgentRuntime> adapter = available.stream().filter(r -> r.id().equals(id)).findFirst();
+		AgentRuntime selected = adapter.orElseGet(() -> fromProviders(providers, id, adapterIds));
 		if (adapter.isEmpty()) {
-			logger.info("No adapter claims runtime '{}'; it was resolved from a runtime provider",
-					properties.getRuntime());
+			logger.info("No adapter claims runtime '{}'; it was resolved from a runtime provider", id);
 		}
 
 		requireKnownTierThreeRuntimes(properties, adapterIds, providers, selected);
 		return new SelectedRuntime(selected);
 	}
 
-	private static AgentRuntime fromProviders(List<AgentRuntimeProvider> providers, AcpProperties properties,
+	/**
+	 * The adapter an application meant by putting exactly one on its classpath.
+	 *
+	 * <p>Providers never count: the registry can supply dozens of agents, so its presence alone says
+	 * nothing about which one to run.
+	 */
+	private static AgentRuntime onlyAdapter(List<AgentRuntime> available, List<AgentRuntimeProvider> providers,
+			List<String> adapterIds) {
+		if (available.size() == 1) {
+			AgentRuntime only = available.getFirst();
+			logger.info("spring.acp.runtime is not set; using '{}', the only runtime adapter on the classpath",
+					only.id());
+			return only;
+		}
+		if (available.isEmpty()) {
+			throw new IllegalStateException("spring.acp.runtime is not set and no runtime adapter is on the classpath;"
+					+ " add a runtime starter such as acp-spring-boot-starter-goose, or set spring.acp.runtime"
+					+ " to an agent a runtime provider supplies" + suggestion(providers));
+		}
+		throw new IllegalStateException("spring.acp.runtime is not set and more than one runtime adapter is on the"
+				+ " classpath; set it to one of " + adapterIds);
+	}
+
+	private static AgentRuntime fromProviders(List<AgentRuntimeProvider> providers, String id,
 			List<String> adapterIds) {
 		for (AgentRuntimeProvider provider : providers) {
-			Optional<AgentRuntime> resolved = provider.forId(properties.getRuntime());
+			Optional<AgentRuntime> resolved = provider.forId(id);
 			if (resolved.isPresent()) {
 				return resolved.get();
 			}
 		}
-		throw new IllegalStateException("No AgentRuntime registered for spring.acp.runtime='"
-				+ properties.getRuntime() + "'; registered runtimes are " + adapterIds + suggestion(providers));
+		throw new IllegalStateException("No AgentRuntime registered for spring.acp.runtime='" + id
+				+ "'; registered runtimes are " + adapterIds + suggestion(providers));
 	}
 
 	/**

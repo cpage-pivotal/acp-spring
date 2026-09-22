@@ -17,9 +17,26 @@
     <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
     <dependencies>
+        <!--
+          Three agents on one classpath, and nothing but spring.acp.runtime chooses between them —
+          which is also why application.yaml has to name one. The registry starter makes
+          spring.acp.runtime accept an agent none of the three adapters claims.
+        -->
         <dependency>
             <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-boot-starter</artifactId>
+            <artifactId>acp-spring-boot-starter-goose</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springaicommunity.acp</groupId>
+            <artifactId>acp-spring-boot-starter-codex</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springaicommunity.acp</groupId>
+            <artifactId>acp-spring-boot-starter-opencode</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springaicommunity.acp</groupId>
+            <artifactId>acp-spring-boot-starter-registry</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -27,27 +44,9 @@
         </dependency>
 
         <!--
-          The starter brings Goose. These two make the point of the milestone testable: three agents
-          on one classpath, and nothing but spring.acp.runtime chooses between them.
+          The Spring AI adapter publishes the same agent as a ChatModel; actuator brings the
+          ObservationRegistry that turns every turn into a timer and a span.
         -->
-        <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-runtime-codex</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-runtime-opencode</artifactId>
-        </dependency>
-
-        <!--
-          M4. The registry runtime makes spring.acp.runtime accept an agent none of the three
-          adapters claims; the Spring AI adapter publishes the same agent as a ChatModel; actuator
-          brings the ObservationRegistry that turns every turn into a timer and a span.
-        -->
-        <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-runtime-registry</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.springaicommunity.acp</groupId>
             <artifactId>acp-spring-ai</artifactId>

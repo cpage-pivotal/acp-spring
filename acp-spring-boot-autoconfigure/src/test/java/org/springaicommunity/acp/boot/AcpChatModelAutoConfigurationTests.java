@@ -22,7 +22,7 @@ class AcpChatModelAutoConfigurationTests {
 
 	private final ApplicationContextRunner runner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(AcpAutoConfiguration.class, AcpChatModelAutoConfiguration.class))
-			.withUserConfiguration(StubClient.class);
+			.withUserConfiguration(StubClient.class).withPropertyValues("spring.acp.runtime=goose");
 
 	@Test
 	void registersTheAgentAsAChatModel() {

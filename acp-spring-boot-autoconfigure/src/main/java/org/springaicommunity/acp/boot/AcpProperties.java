@@ -36,8 +36,11 @@ import org.springaicommunity.acp.workspace.TerminalAccess;
 @ConfigurationProperties(prefix = "spring.acp")
 public class AcpProperties {
 
-	/** Which agent to run. Must match a registered AgentRuntime, e.g. goose. */
-	private String runtime = "goose";
+	/**
+	 * Which agent to run, e.g. goose. Must match a registered AgentRuntime or an agent a runtime
+	 * provider supplies. May be left unset when exactly one runtime adapter is on the classpath.
+	 */
+	private String runtime;
 
 	/** Absolute path the agent treats as its working directory. Defaults to the JVM's. */
 	private Path workspace;
