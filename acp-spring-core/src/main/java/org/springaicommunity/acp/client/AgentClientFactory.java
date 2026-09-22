@@ -15,6 +15,7 @@ import org.springaicommunity.acp.protocol.AcpProtocol;
 import org.springaicommunity.acp.runtime.AgentLaunchSpec;
 import org.springaicommunity.acp.runtime.AgentRuntime;
 import org.springaicommunity.acp.session.SessionRegistry;
+import org.springaicommunity.acp.skill.SkillInstaller;
 import org.springaicommunity.acp.transport.WebSocketAgentTransport;
 import org.springaicommunity.acp.workspace.WorkspaceFileSystem;
 import org.springaicommunity.acp.workspace.WorkspaceTerminals;
@@ -40,6 +41,7 @@ import reactor.core.publisher.Mono;
  *
  * <p>Nothing here names a runtime. Everything vendor-specific is behind {@link AgentRuntime}: what
  * to launch, what to write before launching, and what the agent calls the options a client may set.
+ * Skills need no adapter: every runtime reads them from the workspace, so they are installed here.
  */
 public final class AgentClientFactory {
 
@@ -59,6 +61,9 @@ public final class AgentClientFactory {
 
 	/** Same, with every turn this client runs reported to {@code observations}. */
 	public static AgentClient create(AgentRuntime runtime, AgentSettings settings, AgentObservations observations) {
+		// Before the agent starts, because agents read their skills at startup, and here rather than in
+		// an adapter, because every runtime reads them from the same place.
+		SkillInstaller.installOnce(settings);
 		runtime.provision(settings);
 
 		AgentDiagnostics diagnostics = new AgentDiagnostics();

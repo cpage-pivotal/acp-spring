@@ -63,7 +63,13 @@ ACP standardizes the *conversation*, not the *provisioning*. Portable across eve
 wire level: `cwd`, `mcpServers[]`, `additionalDirectories`, permission handling, filesystem and
 terminal handling, cancellation, and the streamed event vocabulary. **Not portable**: which env var
 carries the API key, where the system prompt lives (`AGENTS.md` vs `~/.config/goose/config.yaml` vs
-`opencode.json`), Goose `extensions:`, skills.
+`opencode.json`), Goose `extensions:`. Skills turned out to be portable after all, though not through
+ACP: goose, opencode and codex all read `<cwd>/.agents/skills/`, so `spring.acp.skills[]` is
+installed there by the core (`SkillInstaller`) with no adapter involvement — the one thing this
+library writes into the workspace rather than `runtimeHome`. A skill with no `url` is bundled: copied
+out of the application's classpath, so in production out of its own jar. With a `url` it is fetched
+by `git`, and a `token` for a private repository reaches that one git process only as an
+environment-borne `http.<url>.extraHeader` — never a URL, an argument, a file or a log line.
 
 In between sits a *negotiated* tier. `session/set_config_option` and `providers/set` are standard
 methods, but their content is agent-declared — a client can only set option IDs the agent

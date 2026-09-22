@@ -82,6 +82,27 @@ class AcpAutoConfigurationTests {
 	}
 
 	@Test
+	void aSkillWithAUrlIsFetchedAndOneWithoutIsBundled() {
+		runner.withPropertyValues("spring.acp.skills[0].path=skills/local",
+				"spring.acp.skills[1].url=https://github.com/owner/private",
+				"spring.acp.skills[1].path=skills/remote", "spring.acp.skills[1].token=ghp_secret")
+			.run(context -> {
+				List<org.springaicommunity.acp.config.SkillSpec> skills = context.getBean(AgentSettings.class)
+					.skills();
+				assertThat(skills.get(0))
+					.isEqualTo(org.springaicommunity.acp.config.SkillSpec.Bundled.of("skills/local"));
+				assertThat(skills.get(1)).isInstanceOfSatisfying(org.springaicommunity.acp.config.SkillSpec.Git.class,
+						git -> assertThat(git.token()).isEqualTo("ghp_secret"));
+			});
+	}
+
+	@Test
+	void aTokenWithoutARepositoryIsAMistake() {
+		runner.withPropertyValues("spring.acp.skills[0].path=skills/local", "spring.acp.skills[0].token=ghp_secret")
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
 	void defaultsToCarryingOnWhenTheAgentCannotLoadAnMcpServer() {
 		runner.run(context -> assertThat(context.getBean(AgentSettings.class).mcp())
 				.isEqualTo(org.springaicommunity.acp.config.McpSettings.defaults()));

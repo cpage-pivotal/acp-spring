@@ -115,7 +115,7 @@ ACP standardizes the *conversation*, not the *provisioning*. So configuration co
 
 | Tier | Where | Example |
 | --- | --- | --- |
-| **Portable** | `spring.acp.*` | `workspace`, `mcp-servers`, `permissions`, `timeout` |
+| **Portable** | `spring.acp.*` | `workspace`, `mcp-servers`, `skills`, `permissions`, `timeout` |
 | **Negotiated** | resolved against what the agent advertises | `model`, `mode`, `provider` |
 | **Runtime-specific** | `spring.acp.runtimes.<id>.*` | Goose `builtins`, Codex `config-toml`, OpenCode `config` |
 

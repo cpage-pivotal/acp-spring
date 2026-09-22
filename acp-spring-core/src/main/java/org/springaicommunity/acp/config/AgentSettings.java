@@ -20,8 +20,10 @@ import org.springaicommunity.acp.workspace.TerminalAccess;
  *
  * <p>All three configuration tiers appear here, and the type of each field says which tier it is in.
  * {@code workspace}, {@code mcpServers}, {@code permissions} and {@code timeout} are portable: every
- * runtime honors them, because ACP does. {@code model}, {@code mode} and {@code provider} are
- * negotiated requests that {@code ConfigResolver} tries to place and {@code onUnsupported} prices.
+ * runtime honors them, because ACP does. {@code skills} is portable for a different reason: ACP says
+ * nothing about skills, but every runtime reads them from the same place in the workspace.
+ * {@code model}, {@code mode} and {@code provider} are negotiated requests that
+ * {@code ConfigResolver} tries to place and {@code onUnsupported} prices.
  * {@link RuntimeOptions} is tier three, opaque to everything but the one adapter it names.
  *
  * <p>{@link FileSystemAccess} and {@link TerminalAccess} are portable in the same sense but point
@@ -32,7 +34,7 @@ import org.springaicommunity.acp.workspace.TerminalAccess;
  * the other tiers are configuring is held in.
  */
 public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Duration timeout, String model,
-		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, McpSettings mcp,
+		ProviderSpec provider, String mode, List<McpServerSpec> mcpServers, McpSettings mcp, List<SkillSpec> skills,
 		PermissionPolicy permissions,
 		FileSystemAccess filesystem, TerminalAccess terminal, OnUnsupported onUnsupported, Duration sessionTtl,
 		PoolSettings pool, RuntimeOptions runtimeOptions, ProtocolSettings protocol) {
@@ -61,6 +63,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		pool = pool == null ? PoolSettings.defaults() : pool;
 		mcpServers = mcpServers == null ? List.of() : List.copyOf(mcpServers);
 		mcp = mcp == null ? McpSettings.defaults() : mcp;
+		skills = skills == null ? List.of() : List.copyOf(skills);
 		permissions = permissions == null ? PermissionPolicy.deny() : permissions;
 		filesystem = filesystem == null ? FileSystemAccess.none() : filesystem;
 		terminal = terminal == null ? TerminalAccess.disabled() : terminal;
@@ -72,6 +75,9 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		long distinct = mcpServers.stream().map(McpServerSpec::name).distinct().count();
 		if (distinct != mcpServers.size()) {
 			throw new IllegalArgumentException("mcp server names must be unique");
+		}
+		if (skills.stream().map(SkillSpec::name).distinct().count() != skills.size()) {
+			throw new IllegalArgumentException("skill names must be unique");
 		}
 	}
 
@@ -97,7 +103,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		}
 		return new AgentSettings(runtime, workspace, runtimeHome, options.findTimeout().orElse(timeout),
 				options.findModel().orElse(model), options.findProvider().map(provider::withId).orElse(provider),
-				options.findMode().orElse(mode), mcpServers, mcp, permissions, filesystem, terminal, onUnsupported,
+				options.findMode().orElse(mode), mcpServers, mcp, skills, permissions, filesystem, terminal, onUnsupported,
 				sessionTtl, pool, runtimeOptions, protocol);
 	}
 
@@ -120,6 +126,8 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 		private List<McpServerSpec> mcpServers = List.of();
 
 		private McpSettings mcp = McpSettings.defaults();
+
+		private List<SkillSpec> skills = List.of();
 
 		private PermissionPolicy permissions = PermissionPolicy.deny();
 
@@ -181,6 +189,11 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 			return this;
 		}
 
+		public Builder skills(List<SkillSpec> skills) {
+			this.skills = skills;
+			return this;
+		}
+
 		public Builder permissions(PermissionPolicy permissions) {
 			this.permissions = permissions;
 			return this;
@@ -227,7 +240,7 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 
 		public AgentSettings build() {
 			return new AgentSettings(runtime, workspace, runtimeHome, timeout, model, provider, mode, mcpServers, mcp,
-					permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions, protocol);
+					skills, permissions, filesystem, terminal, onUnsupported, sessionTtl, pool, runtimeOptions, protocol);
 		}
 	}
 }

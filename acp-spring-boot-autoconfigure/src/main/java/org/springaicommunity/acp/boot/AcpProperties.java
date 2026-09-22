@@ -12,6 +12,7 @@ import java.util.Set;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springaicommunity.acp.config.McpServerSpec;
+import org.springaicommunity.acp.config.SkillSpec;
 import org.springaicommunity.acp.config.McpSettings;
 import org.springaicommunity.acp.config.OnUnsupported;
 import org.springaicommunity.acp.config.PoolSettings;
@@ -66,6 +67,12 @@ public class AcpProperties {
 
 	private final Mcp mcp = new Mcp();
 
+	/**
+	 * Skills installed into the workspace's .agents/skills before the agent starts, each one a
+	 * directory holding a SKILL.md: bundled on the classpath (path only), or in a Git repository (url).
+	 */
+	private List<Skill> skills = new ArrayList<>();
+
 	private final Permissions permissions = new Permissions();
 
 	private final FileSystem filesystem = new FileSystem();
@@ -94,6 +101,10 @@ public class AcpProperties {
 
 	public List<McpServerSpec> toMcpServerSpecs() {
 		return mcpServers.stream().map(McpServer::toSpec).toList();
+	}
+
+	public List<SkillSpec> toSkillSpecs() {
+		return skills.stream().map(Skill::toSpec).toList();
 	}
 
 	public McpSettings toMcpSettings() {
@@ -778,6 +789,91 @@ public class AcpProperties {
 		}
 	}
 
+	/**
+	 * One skill. Without {@code url} it is bundled with the application, and {@code path} is its
+	 * directory on the classpath — {@code skills/mailgun} for {@code src/main/resources/skills/mailgun}.
+	 * With {@code url} it comes from that Git repository, and {@code path} is its directory there.
+	 */
+	public static class Skill {
+
+		/** Directory name to install as. Defaults to the last segment of path, or the repository name. */
+		private String name;
+
+		/** A Git repository over HTTPS, e.g. https://github.com/owner/repo. Unset for a bundled skill. */
+		private URI url;
+
+		/** Git only: commit, branch or tag. Defaults to the default branch; a 40-character commit pins it. */
+		private String ref;
+
+		/** The skill's directory: on the classpath when bundled, inside the repository otherwise. */
+		private String path;
+
+		/** Git only: a token for a private repository, e.g. a GitHub personal access token. */
+		private String token;
+
+		/** Expected SHA-256 of the skill's SKILL.md, checked when set. */
+		private String sha256;
+
+		SkillSpec toSpec() {
+			if (url != null) {
+				return new SkillSpec.Git(name, url, ref, path, token, sha256);
+			}
+			if (ref != null || token != null) {
+				throw new IllegalArgumentException("skill '" + (name == null ? path : name)
+						+ "' sets ref or token without a url; a bundled skill needs only a path");
+			}
+			return new SkillSpec.Bundled(name, path, sha256);
+		}
+
+		public String getName() {
+			return name;
+		}
+
+		public void setName(String name) {
+			this.name = name;
+		}
+
+		public URI getUrl() {
+			return url;
+		}
+
+		public void setUrl(URI url) {
+			this.url = url;
+		}
+
+		public String getRef() {
+			return ref;
+		}
+
+		public void setRef(String ref) {
+			this.ref = ref;
+		}
+
+		public String getPath() {
+			return path;
+		}
+
+		public void setPath(String path) {
+			this.path = path;
+		}
+
+		public String getToken() {
+			return token;
+		}
+
+		public void setToken(String token) {
+			this.token = token;
+		}
+
+		public String getSha256() {
+			return sha256;
+		}
+
+		public void setSha256(String sha256) {
+			this.sha256 = sha256;
+		}
+	}
+
 	public String getRuntime() {
 		return runtime;
 	}
@@ -840,6 +936,14 @@ public class AcpProperties {
 
 	public void setMcpServers(List<McpServer> mcpServers) {
 		this.mcpServers = mcpServers;
+	}
+
+	public List<Skill> getSkills() {
+		return skills;
+	}
+
+	public void setSkills(List<Skill> skills) {
+		this.skills = skills;
 	}
 
 	public Permissions getPermissions() {

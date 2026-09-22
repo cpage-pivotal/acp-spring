@@ -118,7 +118,7 @@ public class AcpAutoConfiguration {
 		return AgentSettings.builder(properties.getRuntime(), workspace).runtimeHome(properties.getRuntimeHome())
 				.timeout(properties.getTimeout()).model(properties.getModel())
 				.provider(properties.toProviderSpec()).mode(properties.getMode())
-				.mcpServers(properties.toMcpServerSpecs())
+				.mcpServers(properties.toMcpServerSpecs()).skills(properties.toSkillSpecs())
 				.mcp(properties.toMcpSettings().withCredentials(credentials.getIfAvailable())
 						.withPrincipals(principals.getIfAvailable()))
 				.permissions(properties.toPermissionPolicy())
