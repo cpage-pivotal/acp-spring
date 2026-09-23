@@ -43,7 +43,7 @@ Releases are published to a public Artifact Registry repository; no credentials 
 <dependency>
     <groupId>org.springaicommunity.acp</groupId>
     <artifactId>acp-spring-boot-starter-goose</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
