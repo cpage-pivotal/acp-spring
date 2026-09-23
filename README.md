@@ -268,6 +268,29 @@ for each server, and the sign-ins are kept in `~/.config/<spring.application.nam
 credentials are reached through a loopback proxy, one unguessable route per session. See "MCP
 credentials" in `docs/design.md`.
 
+## A terminal chat, for prototyping the agent
+
+Add `acp-spring-console` and run the application from a terminal: it becomes a chat with its agent.
+There is no code to write. Turns stream as they happen, with tool calls, plans and failures shown as
+they occur. It has line editing and history, and Ctrl-C cancels a turn without ending the
+conversation. `/new`, `/sessions` and `/resume` manage conversations, where the agent supports them.
+It is meant for the stage where the agent itself is being designed: its `AGENTS.md`, its skills, its
+MCP servers.
+
+```yaml
+spring:
+  acp:
+    console:
+      title: Capacity & Cost Agent
+      greeting: Ask about your capacity and cost findings.
+    permissions:
+      policy: ask     # put each of the agent's permission requests to the person at the keyboard
+```
+
+It starts only when the process is attached to an interactive terminal, so the module can stay on
+the classpath of an application that is also tested and deployed. When the user leaves, it closes
+the application.
+
 ## Metrics and traces
 
 With Micrometer on the classpath, every turn and every tool call becomes an observation — a timer,

@@ -32,6 +32,8 @@
         <!-- Pre-1.0 and community-maintained: pinned exactly, like acp-core. -->
         <mcp-security.version>0.1.14</mcp-security.version>
         <mockito.version>5.23.0</mockito.version>
+        <!-- The 3.x line, as Spring Shell 4 uses; only acp-spring-console depends on it. -->
+        <jline.version>3.30.17</jline.version>
     </properties>
 
     <modules>
@@ -48,6 +50,7 @@
         <module>acp-spring-boot-starter-registry</module>
         <module>acp-spring-ai</module>
         <module>acp-spring-mcp-oauth</module>
+        <module>acp-spring-console</module>
         <module>acp-spring-test</module>
         <module>samples/smoke-app</module>
     </modules>
@@ -149,8 +152,29 @@
             </dependency>
             <dependency>
                 <groupId>org.springaicommunity.acp</groupId>
+                <artifactId>acp-spring-console</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springaicommunity.acp</groupId>
                 <artifactId>acp-spring-test</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline-reader</artifactId>
+                <version>${jline.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline-terminal</artifactId>
+                <version>${jline.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline-terminal-jni</artifactId>
+                <version>${jline.version}</version>
             </dependency>
 
             <dependency>

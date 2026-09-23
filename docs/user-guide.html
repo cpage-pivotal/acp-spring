@@ -570,6 +570,7 @@ a:hover { color: var(--link-hover-color); text-decoration: underline; }
 		<li><a href="#permissions">Permissions and the Workspace</a></li>
 		<li><a href="#spring-ai">Spring AI ChatModel</a></li>
 		<li><a href="#http">HTTP Endpoint</a></li>
+		<li><a href="#console">Terminal Console</a></li>
 		<li><a href="#observability">Observability</a></li>
 		<li><a href="#properties">Configuration Properties</a></li>
 		<li class="nav-caption">Guides</li>
@@ -680,6 +681,7 @@ of three tiers, and the tier tells you how portable it is:</p>
 <tr><td><code>acp-spring-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AgentRuntime</code>)</td></tr>
 <tr><td><code>acp-spring-ai</code></td><td><code>AcpChatModel</code>: the agent as a Spring AI <code>ChatModel</code></td></tr>
 <tr><td><code>acp-spring-mcp-oauth</code></td><td>Per-user OAuth sign-in to MCP servers (Spring Security)</td></tr>
+<tr><td><code>acp-spring-console</code></td><td>A terminal chat over the agent, for prototyping it (JLine); answers <code>policy: ask</code></td></tr>
 <tr><td><code>acp-spring-test</code></td><td><code>ScriptedAgent</code>, <code>AgentProbe</code>, and the <code>AgentRuntimeContract</code> conformance suite</td></tr>
 </tbody>
 </table></div>
@@ -1945,12 +1947,13 @@ checkout may pick up that project's instructions too.</p>
 
 <h3 id="perm-policy">Permission policy</h3>
 <p>When an agent asks permission to run a tool (<code>session/request_permission</code>), ACP Spring answers on your
-behalf, since a server-side application has no human at the keyboard. Every request gets an answer, so no turn stalls.</p>
+behalf, since a server-side application has no human at the keyboard. Every request gets an answer, so no turn stalls.
+The exception is <code>ask</code>, for an application someone <em>is</em> sitting at.</p>
 <div class="listing">
 <div class="content"><pre><code class="language-yaml">spring:
   acp:
     permissions:
-      policy: allowlist          # deny (default) | allowlist | auto-approve
+      policy: allowlist          # deny (default) | allowlist | auto-approve | ask
       allowed-tools:
         - developer__text_editor
         - inventory__lookup_part</code></pre></div>
@@ -1961,6 +1964,7 @@ behalf, since a server-side application has no human at the keyboard. Every requ
 <tr><td><code>deny</code></td><td>Rejects everything. The agent degrades to answering from context.</td></tr>
 <tr><td><code>allowlist</code></td><td>Approves exactly the named tools (case-insensitive) and rejects the rest, including any request whose tool name cannot be determined.</td></tr>
 <tr><td><code>auto-approve</code></td><td>Approves everything. Only in a sandbox, or when the gate that matters is elsewhere (see acp-meridian's <code>AGENTS.md</code>).</td></tr>
+<tr><td><code>ask</code></td><td>Puts each request to a person through the application's <code>PermissionPrompt</code> bean. <code>acp-spring-console</code> provides one (see <a href="#console-permissions">the console</a>); without one, the application fails to start rather than guess.</td></tr>
 </tbody>
 </table></div>
 <p>To find the names an agent reports, run once with <code>logging.level.org.springaicommunity.acp: DEBUG</code> and read
@@ -2061,6 +2065,126 @@ String answer = chat.prompt()
 </section>
 
 <!-- ============================================================ -->
+<section id="console">
+<h2>Terminal Console</h2>
+<p><code>acp-spring-console</code> turns the application into a terminal chat with its agent. It is for the stage
+where you are designing the agent itself — its <code>AGENTS.md</code>, its skills, its MCP servers — and want to talk to
+it before there is any other front end. Add the dependency and run the application; there is no code to write.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+    &lt;artifactId&gt;acp-spring-console&lt;/artifactId&gt;
+    &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+&lt;/dependency&gt;</code></pre></div>
+</div>
+<p>It opens the session before the first prompt, so the model the negotiated tier actually applied is on screen before
+any tokens are spent, along with anything the agent reported outside the protocol, such as an MCP server it could not
+load. Each turn is streamed: assistant text as it arrives, a dimmed line per tool call, thought and plan update, a
+line for any tool call that fails, and the agent's context usage when the turn ends.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">Meridian Logistics — Capacity &amp; Cost Agent
+runtime: opencode   ·   /help for commands, /exit to quit
+  MODEL: deepseek-ai/DeepSeek-V4-Flash-0731 → acp/deepseek-ai/DeepSeek-V4-Flash-0731 (CONFIG_OPTION)
+
+Ask about your capacity and cost findings, or what they are costing you.
+
+you › what are my open findings costing me?
+  → getBusinessUnitSummary
+  → listFindings
+(the answer streams in here as the agent writes it)</code></pre></div>
+</div>
+
+<h3 id="console-activation">When it runs</h3>
+<p>The module is safe to leave on the classpath of an application that is also tested and deployed, because by default
+the console only starts when the process is attached to an interactive terminal. Nothing is registered otherwise: no
+bean, no terminal, and nothing reading stdin.</p>
+<div class="table-wrap"><table>
+<thead><tr><th><code>spring.acp.console.enabled</code></th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td>unset (default)</td><td>Runs when stdin and stdout are a terminal: <code>java -jar</code> or <code>mvn spring-boot:run</code> from a shell. A test, a CI job or a deployed service is left alone.</td></tr>
+<tr><td><code>true</code></td><td>Always runs, reading plain lines when there is no terminal. For driving it from a pipe or a script.</td></tr>
+<tr><td><code>false</code></td><td>Never runs.</td></tr>
+</tbody>
+</table></div>
+<p>The console starts on its own thread once the application is ready, so startup completes normally and a web
+application keeps serving while it runs. When the user leaves, the console closes the application context, which stops
+the agent and ends the process. In a web application that stops the server too.</p>
+
+<h3 id="console-using">Using it</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Input</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td>Any text</td><td>A turn in the current named session, so the agent remembers earlier turns. Line editing and history (kept across runs) come from JLine; a multi-line paste is one prompt.</td></tr>
+<tr><td>Ctrl-C during a turn</td><td>Cancels the turn (the client sends <code>session/cancel</code>) and returns to the prompt with the conversation intact.</td></tr>
+<tr><td>Ctrl-C at the prompt</td><td>Clears the line.</td></tr>
+<tr><td><code>/exit</code>, <code>/quit</code>, Ctrl-D</td><td>Leaves.</td></tr>
+<tr><td><code>/new</code></td><td>Starts a fresh conversation in a new named session, closing the old one where the agent supports <code>session/close</code>.</td></tr>
+<tr><td><code>/sessions</code></td><td>Lists the conversations the agent has stored, marking the current one. Needs <code>session/list</code>.</td></tr>
+<tr><td><code>/resume &lt;id&gt;</code></td><td>Continues a stored conversation, with <code>session/resume</code> or else <code>session/load</code>.</td></tr>
+<tr><td><code>/notices</code></td><td>Everything the agent has reported outside the protocol (see <a href="#mcp-failures">When a server fails to load</a>).</td></tr>
+<tr><td><code>/help</code></td><td>Lists the commands. Tab completes them.</td></tr>
+</tbody>
+</table></div>
+<p>When the agent does not implement a session operation, the command says which ACP method is missing rather than
+failing.</p>
+
+<h3 id="console-props">Properties</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.console.enabled</code></td><td>unset</td><td>See <a href="#console-activation">When it runs</a>.</td></tr>
+<tr><td><code>spring.acp.console.title</code></td><td><code>spring.application.name</code></td><td>The heading shown at startup.</td></tr>
+<tr><td><code>spring.acp.console.greeting</code></td><td>none</td><td>Shown once before the first prompt, to tell the user what to ask.</td></tr>
+<tr><td><code>spring.acp.console.session</code></td><td><code>console</code></td><td>The named session turns run in. <code>/new</code> and <code>/resume</code> move to <code>&lt;session&gt;-1</code>, <code>-2</code>, and so on.</td></tr>
+<tr><td><code>spring.acp.console.history-file</code></td><td><code>~/.config/&lt;spring.application.name&gt;/console-history</code></td><td>Input history, kept across runs. Honours <code>$XDG_CONFIG_HOME</code>, like the MCP sign-in file. Not written when input is piped.</td></tr>
+<tr><td><code>spring.acp.console.show-thoughts</code></td><td><code>true</code></td><td>Show the reasoning the agent surfaces, one dimmed line per thought.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="console-permissions">Answering permission requests</h3>
+<p>With <code>policy: ask</code>, the console puts each of the agent's permission requests to you, part-way through
+the turn, as a numbered choice between the options the agent offered:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mode: plan              # so the agent asks before it acts (see "Mode decides whether the question is asked")
+    permissions:
+      policy: ask</code></pre></div>
+</div>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">  ? The agent wants to: Run `./send-report.sh`  (execute · developer__shell)
+    1) Allow once
+    2) Always allow
+    3) Reject
+  choose 1-3 (Ctrl-C to cancel) › 3</code></pre></div>
+</div>
+<p>Ctrl-C at that prompt cancels the request, which the agent hears as a cancellation rather than a refusal. This is
+the most direct way to see what an agent is about to do while designing it. It is also a prompt per tool call, so an
+agent whose job is calling tools may be better served by <code>allowlist</code> and a gate in its instructions, as
+<a href="#meridian">acp-meridian</a> does.</p>
+<div class="admonition note"><span class="label">Note</span>
+<p>Time spent answering counts against the turn's <code>spring.acp.timeout</code>. The prompt applies to every session
+in the application, not only the console's, so an application that also serves web users should leave <code>ask</code>
+to the console-only profile it runs locally.</p>
+</div>
+
+<h3 id="console-custom">Customizing</h3>
+<ul>
+	<li><strong>How turns look</strong>: register a subclass of <code>ConsoleRenderer</code> as a bean. Every method is
+	an override point, and <code>render(AgentEvent)</code> is the one each event goes through.</li>
+	<li><strong>Who answers <code>ask</code></strong>: register your own <code>PermissionPrompt</code> bean, and the
+	console's backs off. <code>PermissionQuestion</code> carries the tool name, the agent's title for the call, its kind
+	and the options.</li>
+	<li><strong>The terminal</strong>: a JLine <code>Terminal</code> bean replaces the system one.</li>
+</ul>
+<div class="admonition tip"><span class="label">Tip</span>
+<p>Log lines are written to the same terminal and land in the middle of the conversation. A console application
+usually wants <code>logging.level.root: WARN</code> and a bare pattern such as <code>logging.pattern.console:
+"%msg%n"</code>, as acp-meridian uses.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
 <section id="observability">
 <h2>Observability</h2>
 <p>With Micrometer on the classpath, every turn and every tool call is an observation: a timer, and a span parented to
@@ -2124,7 +2248,7 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>spring.acp.permissions.policy</code></td><td><code>deny</code></td><td><code>deny</code>, <code>allowlist</code> or <code>auto-approve</code>.</td></tr>
+<tr><td><code>spring.acp.permissions.policy</code></td><td><code>deny</code></td><td><code>deny</code>, <code>allowlist</code>, <code>auto-approve</code> or <code>ask</code>.</td></tr>
 <tr><td><code>spring.acp.permissions.allowed-tools</code></td><td><code>[]</code></td><td>Tool names for <code>allowlist</code>.</td></tr>
 <tr><td><code>spring.acp.filesystem.enabled</code></td><td><code>false</code></td><td>Answer <code>fs/read_text_file</code>.</td></tr>
 <tr><td><code>spring.acp.filesystem.write</code></td><td><code>false</code></td><td>Also answer <code>fs/write_text_file</code>.</td></tr>
@@ -2145,6 +2269,7 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <tr><td><code>spring.acp.pool.session-ttl</code></td><td><code>60m</code></td><td>Idle time before a named session is closed.</td></tr>
 <tr><td><code>spring.acp.pool.max-restarts</code></td><td><code>5</code></td><td>Replacements within five minutes before a connection is left down.</td></tr>
 <tr><td><code>spring.acp.controller.*</code></td><td>off</td><td>See <a href="#http">HTTP Endpoint</a>.</td></tr>
+<tr><td><code>spring.acp.console.*</code></td><td>when in a terminal</td><td>See <a href="#console">Terminal Console</a>; needs <code>acp-spring-console</code>.</td></tr>
 <tr><td><code>spring.acp.protocol.max-version</code></td><td><code>1</code></td><td>Highest ACP version offered. v2 is refused.</td></tr>
 <tr><td><code>spring.acp.protocol.strict</code></td><td><code>false</code></td><td>Fail, rather than clamp, when an agent answers a version it was not offered.</td></tr>
 <tr><td><code>spring.acp.observations.enabled</code></td><td><code>true</code></td><td>Micrometer observations, when Micrometer is present.</td></tr>
@@ -2195,6 +2320,7 @@ guide working together. <strong>Everything that makes it this agent is configura
 <tr><td>Two MCP servers, with per-user OAuth</td><td><code>spring.acp.mcp-servers</code>, <code>spring.acp.mcp.oauth</code></td></tr>
 <tr><td>The system prompt</td><td><code>workspace/AGENTS.md</code></td></tr>
 <tr><td>A skill that sends email</td><td><code>spring.acp.skills</code>, fetched from Git into <code>workspace/.agents/skills/</code></td></tr>
+<tr><td>The terminal UI</td><td><code>acp-spring-console</code>, titled and greeted by <code>spring.acp.console.*</code></td></tr>
 </tbody>
 </table></div>
 
@@ -2204,10 +2330,7 @@ guide working together. <strong>Everything that makes it this agent is configura
 ├── pom.xml
 ├── .envrc                        # GENAI_API_BASE, GENAI_API_KEY, MAILGUN_API_KEY
 ├── src/main/java/org/springaicommunity/acp/meridian/
-│   ├── MeridianApplication.java
-│   └── console/
-│       ├── ConsoleChat.java      # read, prompt, stream loop
-│       └── ConsoleRenderer.java  # how events are shown
+│   └── MeridianApplication.java  # main() and nothing else
 ├── src/main/resources/application.yaml
 └── workspace/                    # spring.acp.workspace
     ├── AGENTS.md                 # the system prompt (checked in)
@@ -2216,12 +2339,13 @@ guide working together. <strong>Everything that makes it this agent is configura
 
 <h3 id="meridian-pom">Dependencies</h3>
 <p>All three runtime starters are on the classpath, so <code>spring.acp.runtime</code> must be set and is the only thing
-that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP servers.</p>
+that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP servers, and
+<code>acp-spring-console</code> is the whole user interface.</p>
 <div class="listing">
 <div class="title">pom.xml</div>
 <div class="content"><pre><code class="language-xml">&lt;properties&gt;
     &lt;java.version&gt;21&lt;/java.version&gt;
-    &lt;acp-spring.version&gt;0.1.0&lt;/acp-spring.version&gt;
+    &lt;acp-spring.version&gt;0.2.0-SNAPSHOT&lt;/acp-spring.version&gt;
 &lt;/properties&gt;
 
 &lt;dependencies&gt;
@@ -2243,6 +2367,11 @@ that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP s
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
         &lt;artifactId&gt;acp-spring-mcp-oauth&lt;/artifactId&gt;
+        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-console&lt;/artifactId&gt;
         &lt;version&gt;${acp-spring.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
@@ -2293,6 +2422,10 @@ that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP s
 
     permissions:
       policy: auto-approve          # the real gate is in AGENTS.md: confirm before createTicket
+    console:                        # acp-spring-console
+      title: Meridian Logistics — Capacity &amp; Cost Agent
+      greeting: Ask about your capacity and cost findings, or what they are costing you.
+      session: meridian-console
     filesystem:
       enabled: false
     terminal:
@@ -2331,65 +2464,20 @@ desk requests to get them fixed.
 </div>
 
 <h3 id="meridian-code">The code</h3>
-<p>No class names an agent. The console loop opens the session up front so the negotiated model is on screen before any
-tokens are spent, then streams each turn:</p>
+<p>One class, and it names neither an agent nor a UI:</p>
 <div class="listing">
-<div class="title">console/ConsoleChat.java (abridged)</div>
-<div class="content"><pre><code class="language-java">@Component
-class ConsoleChat implements ApplicationRunner {
+<div class="title">MeridianApplication.java</div>
+<div class="content"><pre><code class="language-java">@SpringBootApplication
+public class MeridianApplication {
 
-    /** One named session, so the whole terminal run is one conversation the agent remembers. */
-    private static final String SESSION = "meridian-console";
-
-    private final AgentClient agent;
-    private final ConsoleRenderer out;
-
-    ConsoleChat(AgentClient agent, ConsoleRenderer renderer) {
-        this.agent = agent;
-        this.out = renderer;
-    }
-
-    @Override
-    public void run(ApplicationArguments args) throws Exception {
-        out.banner(agent.runtimeId());
-        agent.openSession(SESSION).configuration().resolutions().values().stream()
-                .filter(r -&gt; r.requested() != null)
-                .forEach(r -&gt; out.resolution(r.option().toString(), r.requested(), r.applied(),
-                        String.valueOf(r.mechanism())));
-
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(System.in))) {
-            String line;
-            while (out.prompt() &amp;&amp; (line = in.readLine()) != null) {
-                String input = line.strip();
-                if (input.equalsIgnoreCase("/exit")) {
-                    break;
-                }
-                if (!input.isEmpty()) {
-                    ask(input);
-                }
-            }
-        }
-    }
-
-    private void ask(String question) {
-        agent.prompt().session(SESSION).user(question).stream().events()
-                .doOnNext(this::render)
-                .blockLast();
-    }
-
-    private void render(AgentEvent event) {
-        switch (event) {
-            case AgentEvent.Text text -&gt; out.text(text.text());
-            case AgentEvent.Thought thought -&gt; out.thought(thought.text());
-            case AgentEvent.ToolCallStarted call -&gt; out.toolCall(call.title());
-            case AgentEvent.PlanUpdated plan -&gt; out.plan(plan.entries().size());
-            case AgentEvent.Completed completed -&gt; out.completed(String.valueOf(completed.reason()));
-            case AgentEvent.Failed failed -&gt; out.error(String.valueOf(failed.cause()));
-            default -&gt; { }
-        }
+    public static void main(String[] args) {
+        SpringApplication.run(MeridianApplication.class, args);
     }
 }</code></pre></div>
 </div>
+<p>The read-prompt-stream loop, the rendering of tool calls and plans, Ctrl-C cancellation and the session commands all
+come from <a href="#console">acp-spring-console</a>. Before that module existed, this application carried two classes
+of its own for it, which is what prompted the module.</p>
 
 <h3 id="meridian-profiles">Running it on each runtime</h3>
 <div class="listing">

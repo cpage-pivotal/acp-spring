@@ -19,6 +19,7 @@ import org.springaicommunity.acp.config.PoolSettings;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
 import org.springaicommunity.acp.permission.PermissionPolicy;
+import org.springaicommunity.acp.permission.PermissionPrompt;
 import org.springaicommunity.acp.protocol.AcpProtocol;
 import org.springaicommunity.acp.protocol.ProtocolSettings;
 import org.springaicommunity.acp.workspace.FileSystemAccess;
@@ -115,7 +116,15 @@ public class AcpProperties {
 	}
 
 	public PermissionPolicy toPermissionPolicy() {
-		return permissions.toPolicy();
+		return toPermissionPolicy(null);
+	}
+
+	/**
+	 * @param prompt who {@code policy: ask} asks, or null when nobody can be asked; required for
+	 * {@code ask} and ignored by every other policy
+	 */
+	public PermissionPolicy toPermissionPolicy(PermissionPrompt prompt) {
+		return permissions.toPolicy(prompt);
 	}
 
 	public ProviderSpec toProviderSpec() {
@@ -144,7 +153,13 @@ public class AcpProperties {
 
 	public enum PermissionMode {
 
-		DENY, ALLOWLIST, AUTO_APPROVE
+		DENY, ALLOWLIST, AUTO_APPROVE,
+
+		/**
+		 * Ask a person, through the application's {@code PermissionPrompt} bean. For an application
+		 * someone is sitting at, such as one using acp-spring-console.
+		 */
+		ASK
 	}
 
 	/**
@@ -627,11 +642,19 @@ public class AcpProperties {
 		/** Exact tool names to approve when policy is allowlist. */
 		private Set<String> allowedTools = Set.of();
 
-		PermissionPolicy toPolicy() {
+		PermissionPolicy toPolicy(PermissionPrompt prompt) {
 			return switch (policy) {
 				case DENY -> PermissionPolicy.deny();
 				case AUTO_APPROVE -> PermissionPolicy.autoApprove();
 				case ALLOWLIST -> PermissionPolicy.allowlist(allowedTools);
+				case ASK -> {
+					if (prompt == null) {
+						throw new IllegalStateException("spring.acp.permissions.policy=ask needs someone to ask: "
+								+ "a PermissionPrompt bean, which acp-spring-console registers whenever its console "
+								+ "runs (in an interactive terminal, or with spring.acp.console.enabled=true)");
+					}
+					yield PermissionPolicy.ask(prompt);
+				}
 			};
 		}
 

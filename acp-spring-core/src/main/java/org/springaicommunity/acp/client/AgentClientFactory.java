@@ -28,6 +28,7 @@ import com.agentclientprotocol.sdk.spec.AcpClientTransport;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 /**
  * Starts an agent and hands back a connected {@link AgentClient}.
@@ -392,13 +393,16 @@ public final class AgentClientFactory {
 		return Mono.fromSupplier(() -> {
 			Optional<String> toolName = request.toolCall() == null ? Optional.<String>empty()
 					: runtime.toolNameOf(request.toolCall());
-			var chosen = policy.decide(toolName, request.options());
+			var chosen = policy.decide(request, toolName);
 			logger.debug("Permission for tool {} -> {}", toolName.orElse("(unknown)"),
 					chosen.map(AcpSchema.PermissionOption::optionId).orElse("cancelled"));
 			return new AcpSchema.RequestPermissionResponse(chosen
 					.<AcpSchema.RequestPermissionOutcome>map(o -> new AcpSchema.PermissionSelected(o.optionId()))
 					.orElseGet(AcpSchema.PermissionCancelled::new));
-		});
+		})
+			// A policy may be a person thinking it over, and the transport's inbound thread is also the
+			// one delivering the rest of the turn; blocking it would freeze the text they are reading.
+			.subscribeOn(Schedulers.boundedElastic());
 	}
 
 	/**
