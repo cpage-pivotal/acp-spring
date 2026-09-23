@@ -1,0 +1,2646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACP Spring Reference</title>
+<meta name="description" content="User guide for ACP Spring 0.1.0: drive Goose, Codex, OpenCode or any ACP registry agent from a Spring Boot application.">
+<script>
+/* Apply the saved theme before first paint so the page never flashes the wrong one. */
+(function () {
+	try {
+		var saved = localStorage.getItem('acp-docs-theme');
+		if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+	} catch (e) { /* storage unavailable: follow the OS */ }
+})();
+</script>
+<style>
+/* ------------------------------------------------------------------
+   Tokens. Values follow the Spring Antora UI used by docs.spring.io.
+   ------------------------------------------------------------------ */
+:root {
+	--rem-base: 18;
+	--navbar-height: 72px;
+	--nav-width: 300px;
+	--toc-width: 232px;
+
+	--body-background: #fff;
+	--body-font-color: #191e1e;
+	--body-font-dark-color: #141818;
+	--body-font-light-color: #273030;
+	--heading-font-color: #141818;
+	--muted-color: #5d5d5d;
+	--link-font-color: #1565c0;
+	--link-hover-color: #0d47a1;
+	--brand: #6db33f;
+	--brand-ink: #2a4f13;
+
+	--panel-background: #f6f8fa;
+	--panel-border-color: #eaedf0;
+	--divider-color: #e1e1e1;
+	--code-background: rgba(177, 209, 241, .15);
+	--accent-1: #ebf2f2;
+	--accent-1-hover: #d3dddd;
+	--selected-background: #191e1e;
+	--selected-font: #fff;
+	--nav-secondary-background: #f0f0f0;
+
+	--note-color: #015785;
+	--tip-color: #3e6b1f;
+	--important-color: #960000;
+	--warning-color: #bd7400;
+	--caution-color: #561164;
+	--admonition-background: var(--accent-1);
+	--admonition-font-color: #f0f0f0;
+
+	--hl-font: #24292e;
+	--hl-keyword: #d73a49;
+	--hl-string: #032f62;
+	--hl-comment: #6a737d;
+	--hl-type: #6f42c1;
+	--hl-variable: #005cc5;
+	--hl-tag: #22863a;
+
+	--font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+	--monospace-font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--body-background: #1b1f23;
+		--body-font-color: #bbbcbe;
+		--body-font-dark-color: #cecfd1;
+		--body-font-light-color: #abacaf;
+		--heading-font-color: #cecfd1;
+		--muted-color: #8e8e8e;
+		--link-font-color: #5ea3ea;
+		--link-hover-color: #8cc0f5;
+		--brand-ink: #9fd576;
+		--panel-background: #262a2d;
+		--panel-border-color: #2c3135;
+		--divider-color: #2c3135;
+		--code-background: rgba(177, 209, 241, .1);
+		--accent-1: #272c33;
+		--accent-1-hover: #434d5c;
+		--selected-background: #e5e5e5;
+		--selected-font: #191e1e;
+		--nav-secondary-background: #1b1f23;
+		--note-color: #355463;
+		--tip-color: #4d6340;
+		--important-color: #924040;
+		--warning-color: #967745;
+		--caution-color: #603668;
+		--hl-font: #f6f8fa;
+		--hl-keyword: #ea4a5a;
+		--hl-string: #79b8ff;
+		--hl-comment: #959da5;
+		--hl-type: #b392f0;
+		--hl-variable: #c8e1ff;
+		--hl-tag: #7bcc72;
+	}
+}
+:root[data-theme="dark"] {
+	--body-background: #1b1f23;
+	--body-font-color: #bbbcbe;
+	--body-font-dark-color: #cecfd1;
+	--body-font-light-color: #abacaf;
+	--heading-font-color: #cecfd1;
+	--muted-color: #8e8e8e;
+	--link-font-color: #5ea3ea;
+	--link-hover-color: #8cc0f5;
+	--brand-ink: #9fd576;
+	--panel-background: #262a2d;
+	--panel-border-color: #2c3135;
+	--divider-color: #2c3135;
+	--code-background: rgba(177, 209, 241, .1);
+	--accent-1: #272c33;
+	--accent-1-hover: #434d5c;
+	--selected-background: #e5e5e5;
+	--selected-font: #191e1e;
+	--nav-secondary-background: #1b1f23;
+	--note-color: #355463;
+	--tip-color: #4d6340;
+	--important-color: #924040;
+	--warning-color: #967745;
+	--caution-color: #603668;
+	--hl-font: #f6f8fa;
+	--hl-keyword: #ea4a5a;
+	--hl-string: #79b8ff;
+	--hl-comment: #959da5;
+	--hl-type: #b392f0;
+	--hl-variable: #c8e1ff;
+	--hl-tag: #7bcc72;
+}
+
+/* ------------------------------------------------------------------
+   Page frame: fixed navbar, left nav, article, right "on this page".
+   ------------------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-padding-top: calc(var(--navbar-height) + 16px); -webkit-text-size-adjust: 100%; }
+body {
+	margin: 0;
+	background: var(--body-background);
+	color: var(--body-font-color);
+	font-family: var(--font-family);
+	font-size: 17px;
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+a { color: var(--link-font-color); text-decoration: none; }
+a:hover { color: var(--link-hover-color); text-decoration: underline; }
+
+.navbar {
+	position: fixed;
+	top: 0; left: 0; right: 0;
+	height: var(--navbar-height);
+	z-index: 100;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 0 16px 0 20px;
+	background: var(--body-background);
+	border-bottom: 1px solid var(--divider-color);
+}
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--heading-font-color);
+	font-weight: 600;
+	font-size: 22px;
+	letter-spacing: -.01em;
+}
+.brand:hover { text-decoration: none; color: var(--heading-font-color); }
+.brand svg { width: 34px; height: 34px; flex: none; }
+.brand .word-acp { color: var(--brand); }
+.navbar .spacer { flex: 1; }
+.navbar-links { display: flex; gap: 24px; font-weight: 600; font-size: 15px; }
+.navbar-links a { color: var(--body-font-dark-color); }
+.icon-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px; height: 36px;
+	border: 1px solid var(--panel-border-color);
+	border-radius: 50%;
+	background: var(--panel-background);
+	color: var(--body-font-dark-color);
+	cursor: pointer;
+}
+.icon-button svg { width: 18px; height: 18px; }
+.nav-toggle { display: none; border-radius: 6px; }
+.theme-toggle .moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .moon { display: inline; }
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .theme-toggle .sun { display: none; }
+	:root:not([data-theme="light"]) .theme-toggle .moon { display: inline; }
+}
+
+.frame {
+	display: grid;
+	grid-template-columns: var(--nav-width) minmax(0, 1fr) var(--toc-width);
+	padding-top: var(--navbar-height);
+	min-height: 100vh;
+}
+
+/* Left navigation */
+.nav {
+	position: sticky;
+	top: var(--navbar-height);
+	height: calc(100vh - var(--navbar-height));
+	overflow-y: auto;
+	border-right: 1px solid var(--divider-color);
+	background: var(--body-background);
+	font-size: 15px;
+	line-height: 1.35;
+}
+.nav-header {
+	padding: 18px 18px 14px;
+	border-bottom: 1px solid var(--divider-color);
+}
+.nav-header .component { font-weight: 600; color: var(--heading-font-color); }
+.version-badge {
+	display: inline-block;
+	margin-top: 6px;
+	padding: 2px 8px;
+	border-radius: 3px;
+	background: var(--brand);
+	color: #0b1a02;
+	font-size: 13px;
+	font-weight: 600;
+}
+.nav-list, .nav-list ul { list-style: none; margin: 0; padding: 0; }
+.nav-list { padding: 12px 14px 32px; }
+.nav-caption {
+	margin: 14px 4px 6px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .06em;
+	text-transform: uppercase;
+	color: var(--muted-color);
+}
+.nav-list a {
+	display: block;
+	padding: 7px 10px;
+	border-radius: 4px;
+	color: var(--body-font-color);
+}
+.nav-list a:hover { background: var(--accent-1); text-decoration: none; }
+.nav-list a.is-current { background: var(--selected-background); color: var(--selected-font); font-weight: 600; }
+
+/* Article */
+.article { min-width: 0; padding: 0 40px 96px; }
+.breadcrumbs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	padding: 20px 0 16px;
+	margin: 0 0 8px;
+	border-bottom: 1px solid var(--divider-color);
+	font-size: 16px;
+	color: var(--body-font-light-color);
+	list-style: none;
+}
+.breadcrumbs li + li::before { content: "/"; margin-right: 8px; }
+.doc { max-width: 880px; margin: 0 auto 0 0; }
+.doc h1 {
+	margin: 28px 0 12px;
+	font-size: 42px;
+	line-height: 1.2;
+	font-weight: 600;
+	color: var(--heading-font-color);
+	letter-spacing: -.01em;
+}
+.doc h2, .doc h3, .doc h4 {
+	position: relative;
+	color: var(--heading-font-color);
+	font-weight: 600;
+	line-height: 1.3;
+}
+.doc h2 { font-size: 28px; margin: 64px 0 0; padding-top: 18px; border-top: 1px solid var(--divider-color); }
+.doc section:first-of-type > h2 { border-top: 0; margin-top: 32px; padding-top: 0; }
+.doc h3 { font-size: 21px; margin: 40px 0 0; }
+.doc h4 { font-size: 17px; margin: 28px 0 0; }
+.doc .anchor {
+	position: absolute;
+	left: -1.1em;
+	width: 1em;
+	visibility: hidden;
+	color: var(--muted-color);
+	font-weight: 400;
+	text-decoration: none;
+}
+.doc h2 .anchor { top: 18px; }
+.doc h2:hover .anchor, .doc h3:hover .anchor, .doc h4:hover .anchor { visibility: visible; }
+.doc p, .doc ul, .doc ol, .doc dl { margin: 16px 0 0; }
+.doc li + li { margin-top: 6px; }
+.doc ul ul { margin-top: 6px; }
+.doc .lead { font-size: 20px; color: var(--body-font-light-color); margin-top: 8px; }
+.doc strong { color: var(--body-font-dark-color); font-weight: 600; }
+.doc code {
+	font-family: var(--monospace-font-family);
+	font-size: .92em;
+	background: var(--code-background);
+	border-radius: .25em;
+	padding: .1em .3em;
+	color: var(--body-font-color);
+	overflow-wrap: anywhere;
+}
+.doc a code { color: var(--link-font-color); }
+.doc dt { font-weight: 600; margin-top: 14px; color: var(--body-font-dark-color); }
+.doc dd { margin: 4px 0 0 20px; }
+
+/* Listings */
+.listing { margin: 20px 0 0; }
+.listing .title {
+	overflow-wrap: anywhere;
+	font-size: 15px;
+	font-style: italic;
+	color: var(--body-font-light-color);
+	padding-bottom: 4px;
+}
+.listing .content { position: relative; }
+.doc pre {
+	margin: 0;
+	padding: 16px 18px;
+	background: var(--panel-background);
+	border: 1px solid var(--panel-border-color);
+	border-radius: 4px;
+	overflow-x: auto;
+	font-family: var(--monospace-font-family);
+	font-size: 14.5px;
+	line-height: 1.55;
+	color: var(--hl-font);
+	tab-size: 4;
+}
+.doc pre code { background: none; padding: 0; font-size: inherit; color: inherit; overflow-wrap: normal; }
+.copy {
+	position: absolute;
+	top: 8px; right: 8px;
+	padding: 3px 9px;
+	font: 600 12px var(--font-family);
+	color: var(--muted-color);
+	background: var(--body-background);
+	border: 1px solid var(--panel-border-color);
+	border-radius: 4px;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity .15s;
+}
+.listing .content:hover .copy, .copy:focus-visible { opacity: 1; }
+.copy.done { color: var(--tip-color); }
+@media (hover: none) { .copy { opacity: 1; } }
+
+/* highlight.js tokens, mapped onto the Spring UI palette */
+.hljs-keyword, .hljs-literal, .hljs-built_in, .hljs-selector-tag, .hljs-bullet { color: var(--hl-keyword); }
+.hljs-string, .hljs-number, .hljs-regexp, .hljs-symbol { color: var(--hl-string); }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-meta, .hljs-meta .hljs-keyword { color: var(--hl-comment); }
+.hljs-title, .hljs-title.class_, .hljs-title.function_, .hljs-type, .hljs-attribute { color: var(--hl-type); }
+.hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-params .hljs-variable, .hljs-section { color: var(--hl-variable); }
+.hljs-tag, .hljs-name, .hljs-addition { color: var(--hl-tag); }
+.hljs-section, .hljs-strong { font-weight: 600; }
+.hljs-emphasis { font-style: italic; }
+
+/* Tabs (Maven / Gradle) */
+.tabs { margin: 20px 0 0; }
+.tablist { display: flex; gap: 2px; border-bottom: 2px solid var(--selected-background); }
+.tablist button {
+	padding: 6px 16px;
+	border: 0;
+	border-radius: 4px 4px 0 0;
+	background: var(--accent-1);
+	color: var(--body-font-color);
+	font: 600 15px var(--font-family);
+	cursor: pointer;
+}
+.tablist button:hover { background: var(--accent-1-hover); }
+.tablist button[aria-selected="true"] { background: var(--selected-background); color: var(--selected-font); }
+.tabs .tabpanel { display: none; }
+.tabs .tabpanel.is-active { display: block; }
+.tabs .tabpanel .listing { margin-top: 0; }
+.tabs .tabpanel pre { border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* Admonitions: a coloured label pill on a tinted panel, as on docs.spring.io */
+.admonition {
+	position: relative;
+	margin: 30px 0 0;
+	padding: 20px 20px 14px;
+	background: var(--admonition-background);
+	border-radius: 2px;
+	font-size: 16px;
+	word-wrap: anywhere;
+}
+.admonition > .label {
+	position: absolute;
+	top: 0; left: -8px;
+	transform: translateY(-50%);
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 2px 10px 2px 8px;
+	border-radius: .45rem;
+	color: var(--admonition-font-color);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: .04em;
+	text-transform: uppercase;
+	line-height: 1.5;
+}
+.admonition > .label::before {
+	content: "";
+	width: 15px; height: 15px;
+	background: currentColor;
+	-webkit-mask: var(--icon) center / contain no-repeat;
+	mask: var(--icon) center / contain no-repeat;
+}
+.admonition > :nth-child(2) { margin-top: 0; }
+.admonition p, .admonition ul { margin-top: 10px; }
+.admonition .listing { margin-top: 12px; }
+.admonition.note > .label { background: var(--note-color); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0Zm0 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13ZM7 7h2v5H7Zm0-3h2v2H7Z'/%3E%3C/svg%3E"); }
+.admonition.tip > .label { background: var(--tip-color); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0a5.5 5.5 0 0 0-3.3 9.9c.5.4.8 1 .8 1.6V12h5v-.5c0-.6.3-1.2.8-1.6A5.5 5.5 0 0 0 8 0ZM5.5 13h5v1.2c0 .9-.7 1.8-1.6 1.8H7.1c-.9 0-1.6-.9-1.6-1.8Z'/%3E%3C/svg%3E"); }
+.admonition.important > .label { background: var(--important-color); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0ZM7 3.5h2V9H7Zm0 7h2v2H7Z'/%3E%3C/svg%3E"); }
+.admonition.warning > .label { background: var(--warning-color); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 .8 0 15h16Zm-1 5h2v5H7Zm0 6h2v2H7Z'/%3E%3C/svg%3E"); }
+.admonition.caution > .label { background: var(--caution-color); --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 0s5 4.5 5 9.2A5 5 0 0 1 8 16a5 5 0 0 1-5-6.8C3.4 7.3 5 6 5 6s.3 2.3 2 2.7C7.3 5.4 8 0 8 0Z'/%3E%3C/svg%3E"); }
+
+/* Tables */
+.table-wrap { margin: 20px 0 0; overflow-x: auto; }
+.doc table { width: 100%; border-collapse: collapse; font-size: 15.5px; line-height: 1.5; }
+.doc th, .doc td {
+	padding: 8px 12px;
+	text-align: left;
+	vertical-align: top;
+	border: 1px solid var(--panel-border-color);
+}
+.doc thead th { background: var(--panel-background); font-weight: 600; color: var(--body-font-dark-color); }
+.doc tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-background) 55%, transparent); }
+.doc td code { white-space: nowrap; }
+.doc td.wrap code { white-space: normal; }
+.yes { color: var(--tip-color); font-weight: 600; }
+.no { color: var(--important-color); font-weight: 600; }
+
+/* Architecture figure */
+.figure {
+	margin: 24px 0 0;
+	padding: 20px;
+	border: 1px solid var(--panel-border-color);
+	border-radius: 4px;
+	background: var(--panel-background);
+}
+.figure .caption { margin-top: 10px; font-size: 15px; font-style: italic; color: var(--body-font-light-color); }
+.stack { display: grid; gap: 8px; max-width: 640px; margin: 0 auto; }
+.stack .layer {
+	padding: 10px 14px;
+	border-radius: 4px;
+	border: 1px solid var(--panel-border-color);
+	background: var(--body-background);
+	font-size: 15px;
+	line-height: 1.4;
+}
+.stack .layer b { color: var(--body-font-dark-color); font-weight: 600; }
+.stack .layer span { display: block; color: var(--muted-color); font-size: 14px; }
+.stack .layer.app { border-left: 4px solid var(--brand); }
+.stack .agents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stack .agents .layer { text-align: center; }
+.stack .arrow { text-align: center; color: var(--muted-color); font-size: 14px; line-height: 1; }
+
+/* Right "on this page" */
+.toc {
+	position: sticky;
+	top: var(--navbar-height);
+	height: calc(100vh - var(--navbar-height));
+	overflow-y: auto;
+	padding: 34px 16px 32px 0;
+	font-size: 13.5px;
+	line-height: 1.25;
+}
+.toc .toc-title { font-weight: 600; color: var(--heading-font-color); margin: 0 0 12px; font-size: 15px; }
+.toc ul { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--panel-border-color); }
+.toc li a { display: block; padding: 5px 0 5px 12px; margin-left: -2px; border-left: 2px solid transparent; color: var(--body-font-color); }
+.toc li a:hover { text-decoration: none; background: var(--accent-1); }
+.toc li a.is-active { border-left-color: var(--brand); color: var(--heading-font-color); }
+.toc .toc-empty { color: var(--muted-color); font-style: italic; }
+
+.page-footer {
+	margin-top: 72px;
+	padding-top: 18px;
+	border-top: 1px solid var(--divider-color);
+	font-size: 14px;
+	color: var(--muted-color);
+}
+
+/* Responsive */
+@media (max-width: 1240px) {
+	.frame { grid-template-columns: var(--nav-width) minmax(0, 1fr); }
+	.toc { display: none; }
+}
+@media (max-width: 960px) {
+	.frame { grid-template-columns: minmax(0, 1fr); }
+	.nav-toggle { display: inline-flex; }
+	.navbar-links { display: none; }
+	.nav {
+		position: fixed;
+		top: var(--navbar-height);
+		left: 0;
+		width: min(320px, 88vw);
+		z-index: 90;
+		transform: translateX(-100%);
+		transition: transform .2s ease;
+	}
+	body.nav-open .nav { transform: none; box-shadow: 0 8px 30px rgba(0, 0, 0, .18); }
+	.article { padding: 0 16px 72px; }
+	.doc h1 { font-size: 32px; }
+	.doc h2 { font-size: 24px; }
+	.doc h3 { font-size: 19px; }
+	.doc .anchor { display: none; }
+	.stack .agents { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+	.brand { font-size: 19px; }
+	.doc pre { font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<header class="navbar">
+	<button class="icon-button nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+	</button>
+	<a class="brand" href="#overview">
+		<svg viewBox="0 0 34 34" aria-hidden="true">
+			<rect x="1" y="1" width="32" height="32" rx="8" fill="#6db33f"/>
+			<path d="M9 22.5 17 8l8 14.5M12.2 17h9.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+			<circle cx="17" cy="25.5" r="1.8" fill="#fff"/>
+		</svg>
+		<span><span class="word-acp">acp</span>-spring</span>
+	</a>
+	<span class="spacer"></span>
+	<nav class="navbar-links" aria-label="Project links">
+		<a href="#getting-started">Getting Started</a>
+		<a href="#properties">Properties</a>
+		<a href="https://agentclientprotocol.com">ACP</a>
+	</nav>
+	<button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode">
+		<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2.5M12 20v2.5M1.5 12H4M20 12h2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg>
+		<svg class="moon" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1Z"/></svg>
+	</button>
+</header>
+
+<div class="frame">
+
+<aside class="nav" aria-label="Guide contents">
+	<div class="nav-header">
+		<div class="component">ACP Spring</div>
+		<span class="version-badge">0.1.0</span>
+	</div>
+	<ul class="nav-list">
+		<li class="nav-caption">Overview</li>
+		<li><a href="#overview">Introduction</a></li>
+		<li><a href="#getting-started">Getting Started</a></li>
+		<li class="nav-caption">Reference</li>
+		<li><a href="#agent-client">AgentClient API</a></li>
+		<li><a href="#runtimes">Agent Runtimes</a></li>
+		<li><a href="#runtime-config">Runtime Configuration</a></li>
+		<li><a href="#models">Models and Providers</a></li>
+		<li><a href="#mcp">MCP Servers</a></li>
+		<li><a href="#skills">Skills</a></li>
+		<li><a href="#agents-md">Agent Instructions (AGENTS.md)</a></li>
+		<li><a href="#permissions">Permissions and the Workspace</a></li>
+		<li><a href="#spring-ai">Spring AI ChatModel</a></li>
+		<li><a href="#http">HTTP Endpoint</a></li>
+		<li><a href="#observability">Observability</a></li>
+		<li><a href="#properties">Configuration Properties</a></li>
+		<li class="nav-caption">Guides</li>
+		<li><a href="#meridian">Example: acp-meridian</a></li>
+		<li><a href="#testing">Testing</a></li>
+		<li><a href="#troubleshooting">Troubleshooting</a></li>
+	</ul>
+</aside>
+
+<main class="article" id="top">
+<ol class="breadcrumbs">
+	<li>ACP Spring</li>
+	<li>Reference</li>
+	<li id="crumb">Introduction</li>
+</ol>
+
+<article class="doc">
+
+<!-- ============================================================ -->
+<section id="overview">
+<h1>ACP Spring Reference</h1>
+<p class="lead">ACP Spring drives any <a href="https://agentclientprotocol.com">Agent Client Protocol</a> coding
+agent (Goose, Codex, OpenCode, or any of the agents in the ACP registry) from a Spring Boot application,
+behind one API and one configuration model.</p>
+
+<p>ACP Spring relates to coding agents the way Spring Data relates to databases:</p>
+<ul>
+	<li>application code talks to one abstraction, <code>AgentClient</code>;</li>
+	<li>configuration carries options that work on <strong>every</strong> agent, plus a per-agent escape hatch;</li>
+	<li>the agent behind it is chosen by one property, <code>spring.acp.runtime</code>.</li>
+</ul>
+
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: goose        # or codex, opencode, a registry id
+    model: gpt-5.6-terra  # a request, not an assignment</code></pre></div>
+</div>
+
+<div class="listing">
+<div class="content"><pre><code class="language-java">String answer = agentClient.prompt()
+        .session("review-123")
+        .user("Inspect this change")
+        .call()
+        .content();</code></pre></div>
+</div>
+
+<p>The agent itself is a separate process: ACP Spring launches it (or attaches to it), speaks ACP to it over
+stdio or WebSocket, supervises it, and turns what it streams back into typed Java events. Around that
+conversation, ACP Spring configures the things that make an agent <em>yours</em>:</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Concern</th><th>What it gives the agent</th><th>Configured by</th></tr></thead>
+<tbody>
+<tr><td><strong>Runtime</strong></td><td>Which agent runs</td><td><code>spring.acp.runtime</code> and a runtime starter (<a href="#runtimes">Agent Runtimes</a>)</td></tr>
+<tr><td><strong>Model</strong></td><td>Which LLM it thinks with, and where it reaches it</td><td><code>spring.acp.model</code>, <code>spring.acp.provider.*</code> (<a href="#models">Models and Providers</a>)</td></tr>
+<tr><td><strong>MCP servers</strong></td><td>Tools: your APIs, databases, internal services</td><td><code>spring.acp.mcp-servers</code> (<a href="#mcp">MCP Servers</a>)</td></tr>
+<tr><td><strong>Skills</strong></td><td>Procedures it loads when a task calls for them</td><td><code>spring.acp.skills</code> (<a href="#skills">Skills</a>)</td></tr>
+<tr><td><strong>Instructions</strong></td><td>A standing system prompt, always in context</td><td><code>AGENTS.md</code> in the workspace (<a href="#agents-md">Agent Instructions</a>)</td></tr>
+<tr><td><strong>Permissions</strong></td><td>Which tool calls it may make without a human</td><td><code>spring.acp.permissions</code>, <code>spring.acp.mode</code> (<a href="#permissions">Permissions</a>)</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="overview-architecture">Architecture</h3>
+
+<div class="figure">
+	<div class="stack">
+		<div class="layer app"><b>Your application</b><span>AgentClient · AgentSessions · AcpChatModel (Spring AI) · optional HTTP endpoint</span></div>
+		<div class="arrow">▼</div>
+		<div class="layer"><b>acp-spring-core</b><span>connection pool · session registry · config negotiation · permission policy · MCP credential proxy · skill installer · workspace jail · observations</span></div>
+		<div class="arrow">▼ <code>AgentRuntime</code> SPI</div>
+		<div class="agents">
+			<div class="layer"><b>goose</b><span>stdio or WebSocket</span></div>
+			<div class="layer"><b>codex</b><span>codex-acp via npx</span></div>
+			<div class="layer"><b>opencode</b><span>stdio</span></div>
+			<div class="layer"><b>registry</b><span>any published agent</span></div>
+		</div>
+		<div class="arrow">▼ ACP v1 (<code>com.agentclientprotocol:acp-core</code>)</div>
+		<div class="layer"><b>Agent process</b><span>reads AGENTS.md and .agents/skills/ from the workspace, calls MCP servers, calls the model</span></div>
+	</div>
+	<div class="caption">Figure 1. Application code depends only on the top layer. Vendor knowledge lives only in the runtime adapters.</div>
+</div>
+
+<h3 id="overview-tiers">Three tiers of configuration</h3>
+
+<p>ACP standardizes the <em>conversation</em>, not the <em>provisioning</em>. So each property belongs to one
+of three tiers, and the tier tells you how portable it is:</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Tier</th><th>Where</th><th>Guarantee</th></tr></thead>
+<tbody>
+<tr><td><strong>Portable</strong></td><td><code>spring.acp.*</code></td><td>Honoured by every runtime: <code>workspace</code>, <code>mcp-servers</code>, <code>skills</code>, <code>permissions</code>, <code>timeout</code>, <code>provider</code> credentials.</td></tr>
+<tr><td><strong>Negotiated</strong></td><td><code>spring.acp.model</code>, <code>.mode</code>, <code>.provider.id</code></td><td>A <em>request</em>. Resolved against the options the agent advertises; <code>on-unsupported</code> decides what happens when it cannot be honoured.</td></tr>
+<tr><td><strong>Runtime-specific</strong></td><td><code>spring.acp.runtimes.&lt;id&gt;.*</code></td><td>Passed to that one adapter untouched and ignored by every other, so blocks for several runtimes can sit side by side.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="overview-modules">Modules</h3>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Artifact</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><code>acp-spring-boot-starter-goose</code></td><td>Starter plus the Goose adapter</td></tr>
+<tr><td><code>acp-spring-boot-starter-codex</code></td><td>Starter plus the Codex adapter (<code>@agentclientprotocol/codex-acp</code>)</td></tr>
+<tr><td><code>acp-spring-boot-starter-opencode</code></td><td>Starter plus the OpenCode adapter</td></tr>
+<tr><td><code>acp-spring-boot-starter-registry</code></td><td>Starter plus the registry runtime: any agent the ACP registry publishes</td></tr>
+<tr><td><code>acp-spring-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AgentRuntime</code>)</td></tr>
+<tr><td><code>acp-spring-ai</code></td><td><code>AcpChatModel</code>: the agent as a Spring AI <code>ChatModel</code></td></tr>
+<tr><td><code>acp-spring-mcp-oauth</code></td><td>Per-user OAuth sign-in to MCP servers (Spring Security)</td></tr>
+<tr><td><code>acp-spring-test</code></td><td><code>ScriptedAgent</code>, <code>AgentProbe</code>, and the <code>AgentRuntimeContract</code> conformance suite</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="getting-started">
+<h2>Getting Started</h2>
+
+<h3 id="gs-prereq">Prerequisites</h3>
+<ul>
+	<li><strong>Java 21</strong> and <strong>Spring Boot 4.1</strong>.</li>
+	<li><strong>An agent you can run.</strong> ACP Spring does not package agent binaries. For the compiled adapters:
+		<ul>
+			<li><strong>Goose</strong>: the <code>goose</code> CLI on the <code>PATH</code>, or <code>GOOSE_CLI_PATH</code> pointing at it. Verified against goose 1.51.</li>
+			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.0</code>, so the first start downloads it.</li>
+			<li><strong>OpenCode</strong>: the <code>opencode</code> CLI on the <code>PATH</code>, or <code>OPENCODE_CLI_PATH</code>. Verified against opencode 1.18.</li>
+			<li><strong>Registry agents</strong>: nothing pre-installed; the agent is downloaded and checksum-verified. Agents distributed through npm or PyPI need <code>npx</code> or <code>uvx</code>.</li>
+		</ul>
+	</li>
+	<li><strong>Model credentials</strong>, either already configured in the agent itself (for example <code>goose configure</code> or <code>codex login</code>) or given to ACP Spring through <code>spring.acp.provider</code> (see <a href="#models">Models and Providers</a>).</li>
+</ul>
+
+<h3 id="gs-deps">Add the dependency</h3>
+<p>Releases are published to a public Artifact Registry repository; no credentials are needed to read it.
+Add the repository and <strong>one runtime starter</strong>:</p>
+
+<div class="tabs">
+<div class="tablist" role="tablist">
+	<button type="button" role="tab" aria-selected="true" data-tab="Maven">Maven</button>
+	<button type="button" role="tab" aria-selected="false" data-tab="Gradle">Gradle</button>
+</div>
+<div class="tabpanel is-active" data-tab="Maven" role="tabpanel">
+<div class="listing"><div class="content"><pre><code class="language-xml">&lt;repositories&gt;
+    &lt;repository&gt;
+        &lt;id&gt;acp-spring&lt;/id&gt;
+        &lt;url&gt;https://us-central1-maven.pkg.dev/cf-mcp/maven-public&lt;/url&gt;
+    &lt;/repository&gt;
+&lt;/repositories&gt;
+
+&lt;dependencies&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-boot-starter-goose&lt;/artifactId&gt;
+        &lt;version&gt;0.1.0&lt;/version&gt;
+    &lt;/dependency&gt;
+&lt;/dependencies&gt;</code></pre></div></div>
+</div>
+<div class="tabpanel" data-tab="Gradle" role="tabpanel">
+<div class="listing"><div class="content"><pre><code class="language-kotlin">repositories {
+    mavenCentral()
+    maven { url = uri("https://us-central1-maven.pkg.dev/cf-mcp/maven-public") }
+}
+
+dependencies {
+    implementation("org.springaicommunity.acp:acp-spring-boot-starter-goose:0.1.0")
+}</code></pre></div></div>
+</div>
+</div>
+
+<p>Replace <code>-goose</code> with <code>-codex</code>, <code>-opencode</code> or <code>-registry</code> for
+another agent. No <code>@Enable…</code> annotation or bean definition is needed.</p>
+
+<h3 id="gs-config">Configure</h3>
+<div class="listing">
+<div class="title">src/main/resources/application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: goose                  # optional while goose is the only adapter on the classpath
+    workspace: ${AGENT_WORKSPACE:./workspace}   # the agent's working directory; must exist
+    timeout: 5m                     # longest a single turn may take</code></pre></div>
+</div>
+
+<p>The <strong>workspace</strong> is the agent's working directory (its ACP session <code>cwd</code>). It is
+also where the agent looks for <code>AGENTS.md</code> and where skills are installed, so most of this guide
+comes back to it. A relative path is resolved against the JVM's working directory; left unset, the JVM's
+working directory itself is used. It must be an existing directory.</p>
+
+<h3 id="gs-prompt">Send a prompt</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-java">@SpringBootApplication
+public class ReviewApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ReviewApplication.class, args);
+    }
+
+    @Bean
+    ApplicationRunner demo(AgentClient agent) {
+        return args -&gt; System.out.println(
+                agent.prompt("Summarize what is in this directory").call().content());
+    }
+}</code></pre></div>
+</div>
+
+<p><code>AgentClient</code> is a thread-safe singleton. The agent process is started on the <strong>first
+prompt</strong>, not at context refresh: an application whose agent is misconfigured still starts, and reports
+the problem the first time it is used. The process is stopped when the context closes.</p>
+
+<div class="admonition tip"><span class="label">Tip</span>
+<p>The repository's <code>samples/smoke-app</code> has all three adapters and the registry on its classpath.
+After <code>mvn install</code> in the ACP Spring checkout, run it against each agent in turn:</p>
+<div class="listing"><div class="content"><pre><code class="language-bash">mvn -pl samples/smoke-app spring-boot:run
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
+mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=gemini</code></pre></div></div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="agent-client">
+<h2>AgentClient API</h2>
+
+<p>Every call starts with <code>prompt()</code> and describes one <em>turn</em>. Nothing is sent until
+<code>call()</code> or <code>stream()</code>.</p>
+
+<h3 id="ac-call">Blocking and streaming</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-java">// Blocking: wait for the finished answer.
+AgentClient.AgentResponse response = agent.prompt()
+        .session("review-123")                          // a named, reusable conversation
+        .user("Inspect the pending change")
+        .options(o -&gt; o.timeout(Duration.ofMinutes(10)))
+        .call();
+
+String text = response.content();                        // assistant text only
+AcpSchema.StopReason why = response.completion().reason();
+
+// Streaming: every event as it happens.
+Flux&lt;AgentEvent&gt; events = agent.prompt()
+        .session("review-123")
+        .user("Now focus on security")
+        .stream()
+        .events();
+
+// Or just the text, e.g. for a server-sent-events endpoint.
+Flux&lt;String&gt; text = agent.prompt("Explain the build").stream().content();</code></pre></div>
+</div>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Method</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>session(name)</code></td><td>Runs in a named conversation; repeat calls with the same name keep context. Without it the turn runs in a throwaway session closed when the turn ends. Names match <code>[A-Za-z0-9][A-Za-z0-9._-]{0,127}</code>.</td></tr>
+<tr><td><code>user(text)</code></td><td>Appends user text; call more than once to build up a prompt. <code>prompt(text)</code> is shorthand.</td></tr>
+<tr><td><code>options(…)</code></td><td>Per-turn overrides of <code>timeout</code>, <code>model</code>, <code>mode</code> and <code>provider</code>, as an <code>AgentOptions</code> or a builder lambda.</td></tr>
+<tr><td><code>principal(p)</code></td><td>Runs on behalf of a user: their MCP credentials, their session (see <a href="#mcp-oauth">per-user OAuth</a>).</td></tr>
+<tr><td><code>call()</code></td><td>Blocks and returns the finished turn.</td></tr>
+<tr><td><code>stream()</code></td><td>A <code>Flux</code> ending in exactly one terminal event. Cancelling the subscription cancels the turn on the agent.</td></tr>
+</tbody>
+</table></div>
+
+<div class="admonition note"><span class="label">Note</span>
+<p>Workspace, credentials and MCP servers are not per-request options. They are fixed when the agent
+process starts, so a per-request override would silently do nothing.</p>
+</div>
+
+<h3 id="ac-events">Events</h3>
+<p><code>AgentEvent</code> is a sealed interface of records, so a <code>switch</code> over it can be exhaustive:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">agent.prompt().session("review-123").user("Review the diff").stream().events()
+        .doOnNext(event -&gt; {
+            switch (event) {
+                case AgentEvent.Text t            -&gt; ui.append(t.text());
+                case AgentEvent.Thought t         -&gt; log.debug("thinking: {}", t.text());
+                case AgentEvent.ToolCallStarted s -&gt; ui.toolStarted(s.id(), s.title(), s.kind());
+                case AgentEvent.ToolCallUpdated u -&gt; ui.toolProgress(u.id(), u.status());
+                case AgentEvent.PlanUpdated p     -&gt; ui.replacePlan(p.entries());
+                case AgentEvent.ConfigChanged c   -&gt; log.info("agent reconfigured: {}", c.options());
+                case AgentEvent.ModeChanged m     -&gt; log.info("mode is now {}", m.modeId());
+                case AgentEvent.UsageUpdated u    -&gt; meter.context(u.contextUsed(), u.contextSize());
+                case AgentEvent.Completed c       -&gt; ui.done(c.reason());
+                case AgentEvent.Failed f          -&gt; ui.error(f.cause());
+            }
+        })
+        .blockLast();</code></pre></div>
+</div>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>Text</code></td><td>Assistant-visible text, as deltas. What <code>content()</code> collects.</td></tr>
+<tr><td><code>Thought</code></td><td>Reasoning the agent chose to surface. Not part of the answer.</td></tr>
+<tr><td><code>ToolCallStarted</code></td><td>A tool call began: id, human-readable title, kind.</td></tr>
+<tr><td><code>ToolCallUpdated</code></td><td>Progress or completion of a call, keyed by the same id.</td></tr>
+<tr><td><code>PlanUpdated</code></td><td>The agent's current plan. <strong>Replaces</strong> any earlier plan in the turn.</td></tr>
+<tr><td><code>ConfigChanged</code>, <code>ModeChanged</code></td><td>The agent reconfigured itself mid-turn.</td></tr>
+<tr><td><code>UsageUpdated</code></td><td>Context window used of its size, cumulative for the session, with cost when the agent reports one.</td></tr>
+<tr><td><code>Completed</code> <em>(terminal)</em></td><td>The turn reached the agent's own stop condition.</td></tr>
+<tr><td><code>Failed</code> <em>(terminal)</em></td><td>It did not: error, timeout, lost connection or cancellation.</td></tr>
+</tbody>
+</table></div>
+
+<p>Every turn emits <strong>exactly one</strong> terminal event, whatever happens, so a UI can close its
+progress indicator in one place. <code>event.terminal()</code> tests for either.</p>
+
+<h3 id="ac-sessions">Named sessions</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-java">agent.prompt().session("pr-482").user("What does this PR change?").call();
+agent.prompt().session("pr-482").user("Any security concerns in it?").call();   // remembers the first turn</code></pre></div>
+</div>
+<p>Idle named sessions are closed after <code>spring.acp.pool.session-ttl</code> (60 minutes by default).
+Scope names to a unit of work, such as a PR, a ticket or a chat, so context does not grow without bound. Only one
+turn runs in a session at a time.</p>
+
+<p><code>openSession(name)</code> opens a session without spending a turn. It is how to learn what the
+negotiated tier actually achieved before the first prompt:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
+
+SessionConfiguration config = agent.openSession("review-123").configuration();
+config.applied(PortableOption.MODEL);          // Optional: the model this session is really using
+config.unsupported();                          // what was asked for and could not be honoured
+config.resolutions().values().forEach(r -&gt;     // requested, applied, and by which mechanism
+        log.info("{}: {} -&gt; {} ({})", r.option(), r.requested(), r.applied(), r.mechanism()));</code></pre></div>
+</div>
+
+<h3 id="ac-stored">Stored conversations</h3>
+<p><code>agent.sessions()</code> manages the conversations the agent keeps. Every operation is optional in
+ACP, and the runtimes implement different subsets, so ask first:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">AgentSessions sessions = agent.sessions();
+if (sessions.supports(AgentSessions.Operation.LIST)) {
+    List&lt;StoredSession&gt; stored = sessions.list();
+}
+if (sessions.supports(AgentSessions.Operation.LOAD)) {
+    sessions.load("review-123", storedId);      // reattach and replay history under this name
+}
+sessions.close("review-123");                   // always succeeds, told or not</code></pre></div>
+</div>
+
+<div class="table-wrap"><table>
+<thead><tr><th></th><th><code>list</code></th><th><code>load</code></th><th><code>resume</code></th><th><code>delete</code></th><th><code>close</code></th></tr></thead>
+<tbody>
+<tr><td>goose 1.51</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">no</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+<tr><td>codex-acp 1.12</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+<tr><td>opencode 1.18</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">no</td><td class="yes">yes</td></tr>
+</tbody>
+</table></div>
+<p>An operation the agent does not advertise throws <code>UnsupportedAgentOperationException</code> naming the
+ACP method, rather than failing on the wire.</p>
+
+<h3 id="ac-other">Other methods</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Method</th><th>Returns</th></tr></thead>
+<tbody>
+<tr><td><code>runtimeId()</code></td><td>The selected runtime, e.g. <code>"goose"</code>.</td></tr>
+<tr><td><code>agentInfo()</code></td><td>What the agent called itself during <code>initialize</code>.</td></tr>
+<tr><td><code>protocolVersion()</code></td><td>The ACP version the connection settled on (always 1 today).</td></tr>
+<tr><td><code>notices()</code></td><td>What the agent reported outside the protocol, such as an MCP server it could not load (see <a href="#mcp-failures">below</a>).</td></tr>
+<tr><td><code>isAlive()</code></td><td>Whether the connection is usable. Optimistic: <code>false</code> is never wrong, <code>true</code> may be.</td></tr>
+</tbody>
+</table></div>
+
+<div class="admonition tip"><span class="label">Tip</span>
+<p>Migrating from the <code>goose-buildpack</code> <code>java-wrapper</code>? An <code>AgentExecutor</code> bean
+offers the old <code>GooseExecutor</code> method signatures and newline-delimited JSON events, with
+<code>AgentOptions</code> in place of <code>GooseOptions</code>.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="runtimes">
+<h2>Agent Runtimes</h2>
+
+<p>A runtime is an adapter that knows how to launch one agent and what that agent calls its options. Application
+code never names one; <code>spring.acp.runtime</code> does.</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th><code>spring.acp.runtime</code></th><th>Starter</th><th>Launches</th><th>Transport</th></tr></thead>
+<tbody>
+<tr><td><code>goose</code></td><td><code>acp-spring-boot-starter-goose</code></td><td><code>goose acp</code>, or a supervised <code>goose serve</code></td><td>stdio, or WebSocket</td></tr>
+<tr><td><code>codex</code></td><td><code>acp-spring-boot-starter-codex</code></td><td><code>npx -y @agentclientprotocol/codex-acp@1.13.0</code></td><td>stdio</td></tr>
+<tr><td><code>opencode</code></td><td><code>acp-spring-boot-starter-opencode</code></td><td><code>opencode acp</code></td><td>stdio</td></tr>
+<tr><td>any registry id, e.g. <code>gemini</code></td><td><code>acp-spring-boot-starter-registry</code></td><td>whatever the <a href="https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json">ACP registry</a> publishes</td><td>stdio</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="rt-selection">How the runtime is selected</h3>
+<ul>
+	<li><strong>One adapter on the classpath</strong>: <code>spring.acp.runtime</code> may be left out.</li>
+	<li><strong>Several adapters, or only the registry</strong>: it must be set. There is no default agent; startup fails with a message listing the choices.</li>
+	<li><strong>A compiled adapter always wins</strong> over the registry for the same id, because it knows things the catalogue does not.</li>
+	<li><strong>A <code>spring.acp.runtimes.&lt;id&gt;</code> block for an id nothing can supply</strong> fails startup rather than being silently ignored.</li>
+</ul>
+
+<h3 id="rt-swap">Swapping the runtime</h3>
+<p>There are three ways to move an application from one agent to another. None involves changing Java code.</p>
+
+<h4>1. Replace the starter</h4>
+<p>Swap <code>acp-spring-boot-starter-goose</code> for <code>acp-spring-boot-starter-opencode</code> (say), and
+change or remove <code>spring.acp.runtime</code>. Best when a deployment only ever uses one agent: the other
+adapters stay off the classpath.</p>
+
+<h4>2. Ship several adapters and choose at run time</h4>
+<p>Put every starter you want to support on the classpath and pick one with any Spring property source:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-bash"># command line
+java -jar app.jar --spring.acp.runtime=opencode
+
+# environment variable (relaxed binding)
+SPRING_ACP_RUNTIME=codex java -jar app.jar
+
+# a profile that carries the runtime and everything that goes with it
+java -jar app.jar --spring.profiles.active=codex</code></pre></div>
+</div>
+<p>A profile is the right tool when the runtimes need different models or credentials, as in
+<a href="#meridian-profiles">the acp-meridian example</a>:</p>
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: goose
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider: { id: openai, api-type: openai, base-url: ${GENAI_API_BASE}, api-key: ${GENAI_API_KEY} }
+---
+spring:
+  config:
+    activate:
+      on-profile: codex
+  acp:
+    runtime: codex
+    model: gpt-5.6-terra
+    provider: { id: openai, api-type: openai, base-url: "", api-key: ${OPENAI_API_KEY} }</code></pre></div>
+</div>
+
+<h4>3. Let an operator decide with <code>agents.yaml</code></h4>
+<p>Import a standalone file whose keys are implicitly under <code>spring.acp</code>. It gets relaxed binding,
+profiles and <code>${…}</code> placeholders like any other config file, and validation errors point at its lines:</p>
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  config:
+    import: optional:agents.yaml          # or optional:acp:/etc/myapp/agent-config.yaml</code></pre></div>
+</div>
+<div class="listing">
+<div class="title">agents.yaml (next to the jar)</div>
+<div class="content"><pre><code class="language-yaml">runtime: opencode
+model: gpt-5.4-mini
+permissions:
+  policy: deny
+runtimes:
+  opencode:
+    config: { share: disabled }</code></pre></div>
+</div>
+<p>Keys that already start with <code>spring.</code> are left alone, so the file may carry an unrelated property too.</p>
+
+<h3 id="rt-checklist">What moves when you swap</h3>
+<p>Most configuration is portable and carries over unchanged. These are the exceptions worth checking:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Area</th><th>Portable?</th><th>What to check</th></tr></thead>
+<tbody>
+<tr><td>MCP servers, skills, workspace, timeout, permissions policy</td><td class="yes">Yes</td><td>Nothing.</td></tr>
+<tr><td><code>AGENTS.md</code></td><td class="yes">Goose, Codex, OpenCode</td><td>Registry agents may read another file name (Gemini CLI reads <code>GEMINI.md</code>). See <a href="#agents-md">Agent Instructions</a>.</td></tr>
+<tr><td><code>spring.acp.model</code></td><td class="yes">Yes</td><td>Spelling differences (<code>gpt-5.4-mini</code> vs <code>openai/gpt-5.4-mini</code>) are matched for you, but each agent only offers the models its provider sells.</td></tr>
+<tr><td><code>spring.acp.mode</code></td><td>Values differ</td><td>Goose says <code>approve</code> where Codex and OpenCode say <code>plan</code>. See <a href="#models-mode">Mode</a>.</td></tr>
+<tr><td>Own endpoint (<code>provider.base-url</code>)</td><td>Mostly</td><td>Codex speaks only the OpenAI <em>Responses</em> API; an endpoint serving only <code>/chat/completions</code> works with Goose and OpenCode but not Codex.</td></tr>
+<tr><td><code>spring.acp.runtimes.&lt;id&gt;</code></td><td>By design, no</td><td>Inert for every other runtime, so blocks for several runtimes can stay side by side.</td></tr>
+<tr><td>Stored session operations</td><td>Partly</td><td>Guard with <code>sessions().supports(…)</code>.</td></tr>
+<tr><td>MCP load-failure notices</td><td>Goose only</td><td>Other agents do not report an MCP server they failed to load.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="rt-install">Installing each agent</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Runtime</th><th>What must be on the machine</th><th>Pointing at a specific binary</th></tr></thead>
+<tbody>
+<tr><td><code>goose</code></td><td>The <a href="https://block.github.io/goose/">goose CLI</a></td><td><code>GOOSE_CLI_PATH</code> environment variable</td></tr>
+<tr><td><code>codex</code></td><td>Node.js with <code>npx</code> (codex-acp is downloaded on first start)</td><td><code>spring.acp.runtimes.codex.command</code></td></tr>
+<tr><td><code>opencode</code></td><td>The <a href="https://opencode.ai">OpenCode CLI</a></td><td><code>OPENCODE_CLI_PATH</code>, or <code>spring.acp.runtimes.opencode.command</code></td></tr>
+<tr><td>registry</td><td>Nothing; <code>npx</code> or <code>uvx</code> for agents distributed through npm or PyPI</td><td>Downloaded into <code>spring.acp.registry.cache</code></td></tr>
+</tbody>
+</table></div>
+<p>A path set with <code>GOOSE_CLI_PATH</code> or <code>OPENCODE_CLI_PATH</code> is checked at startup, so a wrong value
+fails with a message naming the file. Everything else an agent can be told is covered in
+<a href="#runtime-config">Runtime Configuration</a>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="runtime-config">
+<h2>Runtime Configuration</h2>
+
+<p>Each agent has settings of its own that ACP does not standardize: Goose's built-in extensions, Codex's sandbox,
+OpenCode's per-tool permissions. They live in the third configuration tier, one block per runtime:</p>
+
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: goose
+    runtimes:
+      goose:    { builtins: developer }                       # used: goose is selected
+      codex:    { config-toml: { model_reasoning_effort: high } }   # ignored until codex is selected
+      opencode: { config: { share: disabled } }               # ignored until opencode is selected</code></pre></div>
+</div>
+
+<ul>
+	<li><strong>Only the selected runtime reads its block.</strong> Blocks for the others are inert, so an application can
+	keep settings for every agent it supports side by side. A block for an id that no adapter or registry can supply
+	fails startup, which catches a misspelled runtime name.</li>
+	<li><strong>Applied last.</strong> Whatever the adapter derives from portable properties (provider credentials, a
+	bring-your-own endpoint) is written first, and the tier-3 block is laid over it. <code>env</code> therefore wins
+	over every variable the adapter sets. For the config-file blocks the merge is by top-level key, so a top-level key you
+	set replaces the adapter's value for that key, including a whole table.</li>
+	<li><strong>Any property source works.</strong> Top-level keys bind relaxed, while nested keys keep the spelling you
+	wrote, because they end up verbatim in a file the agent parses:
+<div class="listing"><div class="content"><pre><code class="language-properties">spring.acp.runtimes.codex.config-toml.model_reasoning_effort=high
+spring.acp.runtimes.goose.env.GOOSE_MAX_TURNS=40</code></pre></div></div></li>
+	<li><strong>Files are written to <code>spring.acp.runtime-home</code></strong> (a directory under the JVM's temp
+	directory by default), never to the workspace.</li>
+</ul>
+
+<div class="admonition tip"><span class="label">Tip</span>
+<p>Prefer the portable property whenever one exists. It keeps working when you swap agents, and the negotiated ones
+report what was applied. Use tier 3 for what is genuinely agent-specific.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>To set…</th><th>Use</th><th>Not</th></tr></thead>
+<tbody>
+<tr><td>Model, mode, provider</td><td><code>spring.acp.model</code>, <code>.mode</code>, <code>.provider</code></td><td><code>GOOSE_MODEL</code>, <code>GOOSE_MODE</code>, <code>model</code> in <code>config-toml</code> or <code>config</code></td></tr>
+<tr><td>MCP servers</td><td><code>spring.acp.mcp-servers</code></td><td>Goose extensions, Codex <code>mcp_servers</code>, OpenCode <code>mcp</code></td></tr>
+<tr><td>Skills</td><td><code>spring.acp.skills</code></td><td>OpenCode <code>skills</code> paths</td></tr>
+<tr><td>Instructions</td><td><code>&lt;workspace&gt;/AGENTS.md</code></td><td>OpenCode <code>instructions</code>, unless you need more than one file</td></tr>
+</tbody>
+</table></div>
+</div>
+
+<!-- ------------------------------------------------------------ -->
+<h3 id="rt-goose">Goose</h3>
+<p>The adapter launches <code>goose acp</code> over stdio and sets <code>GOOSE_DISABLE_KEYRING=1</code> and
+<code>GOOSE_TELEMETRY_ENABLED=false</code>. Goose still reads its own <code>~/.config/goose/config.yaml</code> for anything
+not set here.</p>
+
+<div class="listing">
+<div class="title">application.yaml: every Goose key</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      goose:
+        builtins: [ developer, todo, skills ]  # --with-builtin; a comma-separated string works too
+        env:                                   # environment for the goose process, applied last
+          GOOSE_THINKING_EFFORT: high
+          GOOSE_MAX_TURNS: "40"
+        serve:                                 # speak ACP over goose's WebSocket server instead of stdio
+          transport: websocket                 # stdio (default) | websocket
+          host: 127.0.0.1
+          port: 0                              # 0 = any free port
+          startup-timeout: PT30S
+        log-dir: /var/log/goose/logs           # where goose writes its log, if not the default
+        mcp:
+          answer-discover: true                # workaround for MCP gateways; see below</code></pre></div>
+</div>
+
+<h4 id="goose-builtins">Built-in extensions</h4>
+<p>Goose's own tools come from extensions bundled in the binary. <code>builtins</code> enables them by name, each passed
+as <code>--with-builtin</code>:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Name</th><th>Provides</th></tr></thead>
+<tbody>
+<tr><td><code>developer</code></td><td>Code editing and shell access. Needed for the agent to change files or run commands, including a skill's scripts.</td></tr>
+<tr><td><code>computercontroller</code></td><td>Web scraping, file caching and automation.</td></tr>
+<tr><td><code>memory</code></td><td>Tools to save and retrieve durable memories.</td></tr>
+<tr><td><code>autovisualiser</code></td><td>Data visualisation and UI generation (charts, diagrams).</td></tr>
+<tr><td><code>tutorial</code></td><td>Interactive goose tutorials. Rarely useful in an application.</td></tr>
+<tr><td><code>todo</code>, <code>skills</code></td><td>Goose platform extensions: a task list the agent keeps for multi-step work, and support for Agent Skills.</td></tr>
+</tbody>
+</table></div>
+<p><code>builtins</code> <em>adds to</em> the extensions enabled in goose's own <code>config.yaml</code>. A developer machine
+usually has several enabled there. A server or container usually has no goose config at all, so name every extension
+the application relies on. For example, <code>developer</code> and <code>skills</code> if it uses skills with scripts.
+Otherwise an application that works on your laptop quietly loses its tools in production.</p>
+<div class="admonition note"><span class="label">Note</span>
+<p>A misspelled name does not stop goose. It writes <code>Failed to load extension &lt;name&gt;: … Unknown extension</code>
+to its log and carries on. ACP Spring reads that log for agents it started, so the mistake appears as a WARN line and in
+<code>AgentClient.notices()</code>, worded as a server that could not be loaded.</p>
+</div>
+<p>For tools that are not built in, declare an MCP server under <code>spring.acp.mcp-servers</code> rather than a goose
+extension. It is the same thing to goose, and it stays portable.</p>
+
+<h4 id="goose-env">Environment variables</h4>
+<p>Goose reads each of its <code>config.yaml</code> settings from an environment variable of the same name first, so the
+<code>env</code> block can set any of them. Some that are useful from an application:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>GOOSE_THINKING_EFFORT</code></td><td>Reasoning effort: <code>off</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>max</code>. Goose advertises this as its <code>thinking_effort</code> option, which has no portable property.</td></tr>
+<tr><td><code>GOOSE_MAX_TURNS</code></td><td>Maximum agent turns without user input.</td></tr>
+<tr><td><code>GOOSE_AUTO_COMPACT_THRESHOLD</code>, <code>GOOSE_CONTEXT_LIMIT</code></td><td>When goose compacts its context, and the context size it assumes.</td></tr>
+<tr><td><code>GOOSE_TEMPERATURE</code></td><td>Sampling temperature, for providers that accept one.</td></tr>
+<tr><td><code>OPENAI_BASE_PATH</code></td><td>Pins the OpenAI wire API (e.g. <code>v1/chat/completions</code>). Left unset, goose chooses per model; see <a href="#models-byo">Bring your own endpoint</a>.</td></tr>
+<tr><td><code>GOOSE_DISABLE_KEYRING</code></td><td><code>"0"</code> lets goose read secrets from the OS keychain again (the adapter disables it for servers).</td></tr>
+</tbody>
+</table></div>
+<p>Environment values are strings, so quote numbers in YAML. <code>GOOSE_MODE</code>, <code>GOOSE_PROVIDER</code> and
+<code>GOOSE_MODEL</code> work too, but use the portable <code>spring.acp.mode</code>, <code>.provider</code> and
+<code>.model</code> instead.</p>
+
+<h4 id="goose-modes">Modes</h4>
+<div class="table-wrap"><table>
+<thead><tr><th><code>spring.acp.mode</code></th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td><code>auto</code> <em>(default)</em></td><td>Edits, creates and deletes files and uses extensions freely. No permission requests.</td></tr>
+<tr><td><code>approve</code></td><td>Every tool call, extension use and file change asks first.</td></tr>
+<tr><td><code>smart_approve</code></td><td>Asks before editing, creating or deleting files and using extensions.</td></tr>
+<tr><td><code>chat</code></td><td>No tools at all: the model only converses.</td></tr>
+</tbody>
+</table></div>
+<p>In <code>approve</code> and <code>smart_approve</code>, each question is answered by
+<a href="#permissions"><code>spring.acp.permissions</code></a>.</p>
+
+<h4 id="goose-serve">Running goose as a WebSocket server</h4>
+<p>With <code>serve.transport: websocket</code>, the adapter starts <code>goose serve</code> on <code>host</code> and
+<code>port</code>, generates a secret it sends as a header on every connection, and supervises the process: it is
+health-checked and restarted with backoff, and stopped when the application closes. Use it when you want goose to outlive
+individual connections, as the goose buildpack did. Stdio stays the default because it is what every other runtime
+supports. Keep <code>host</code> on loopback unless you mean to expose the server.</p>
+
+<h4 id="goose-logs">Log directory and MCP gateways</h4>
+<ul>
+	<li><code>log-dir</code> tells ACP Spring where goose writes its log, which is the only place goose reports an MCP server
+	or extension it could not load. Defaults to <code>$XDG_STATE_HOME/goose/logs</code>, else
+	<code>~/.local/state/goose/logs</code>. Set it only if your deployment moves goose's state.</li>
+	<li><code>mcp.answer-discover: true</code> answers goose's <code>server/discover</code> probe on behalf of MCP gateways
+	that reply to it with an error goose cannot correlate. See <a href="#mcp-goose">MCP Servers</a>.</li>
+</ul>
+
+<!-- ------------------------------------------------------------ -->
+<h3 id="rt-codex">Codex</h3>
+<p>Codex has no ACP mode in its own binary. The adapter runs the <code>@agentclientprotocol/codex-acp</code> npm package,
+which wraps Codex, and the first start pays an <code>npx</code> download.</p>
+
+<div class="listing">
+<div class="title">application.yaml: every Codex key</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      codex:
+        package: "@agentclientprotocol/codex-acp@1.13.0"   # what npx runs (this is the default)
+        # command: /usr/local/bin/codex-acp                # a pre-installed adapter instead of npx
+        args: [ ]                                           # extra arguments for the adapter
+        home: /var/lib/codex                                # CODEX_HOME; see "Codex's home directory"
+        config-toml:                                        # written as CODEX_HOME/config.toml
+          model_reasoning_effort: high
+        env:
+          RUST_LOG: warn</code></pre></div>
+</div>
+
+<h4 id="codex-sandbox">Sandbox and approvals</h4>
+<p>codex-acp exposes Codex's approval and sandbox settings as three presets of its <code>mode</code> option, and
+<code>spring.acp.mode</code> selects one:</p>
+<div class="table-wrap"><table>
+<thead><tr><th><code>spring.acp.mode</code></th><th>codex-acp name</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td><code>read-only</code></td><td>Ask for approval</td><td>Always asks to edit files outside the workspace and to use the internet. <strong>Still writes inside the workspace without asking.</strong></td></tr>
+<tr><td><code>agent</code> <em>(default)</em></td><td>Approve for me</td><td>Sandboxed; asks only for actions it detects as potentially unsafe.</td></tr>
+<tr><td><code>agent-full-access</code></td><td>Full access</td><td>No sandbox: unrestricted access to the internet and to any file the process can reach. Never asks.</td></tr>
+<tr><td><code>plan</code></td><td>Plan (<code>collaboration_mode</code>)</td><td>Plans before changing anything; the mode to pair with <code>permissions.policy: deny</code> for a reviewer.</td></tr>
+</tbody>
+</table></div>
+
+<p><strong>To run Codex outside its sandbox</strong>, select full access:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: codex
+    mode: agent-full-access
+    on-unsupported: fail        # refuse to run if the preset cannot be applied</code></pre></div>
+</div>
+<p>or only for the turns that need it:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">agent.prompt().session("migration").user("Run the full integration build")
+        .options(o -&gt; o.mode("agent-full-access"))
+        .call();</code></pre></div>
+</div>
+
+<div class="admonition important"><span class="label">Important</span>
+<p>Setting <code>sandbox_mode</code> or <code>approval_policy</code> in <code>config-toml</code> does <strong>not</strong>
+change this. Measured against codex-acp 1.13.0: with <code>sandbox_mode = "danger-full-access"</code> and
+<code>approval_policy = "never"</code> in <code>config.toml</code>, new sessions still start in <code>agent</code>. Use
+<code>spring.acp.mode</code>. With <code>on-unsupported: fail</code> you will know if it was not applied.</p>
+</div>
+<div class="admonition warning"><span class="label">Warning</span>
+<p>Under <code>agent-full-access</code> Codex asks nothing, so <code>spring.acp.permissions</code> never gets a request to
+refuse. Whatever the JVM's user can reach, the agent can change, and the model's credentials are in its environment. Only
+run it where the machine or container is itself the sandbox: a disposable container with no secrets beyond the ones
+it needs, and nothing mounted that you would mind losing.</p>
+</div>
+<p><code>spring.acp.mode</code> takes one value. codex-acp offers both a <code>mode</code> and a
+<code>collaboration_mode</code> option, and ACP Spring applies the value to whichever option offers it.</p>
+
+<h4 id="codex-config-toml">config.toml</h4>
+<p><code>config-toml</code> is written as Codex's <code>config.toml</code>. YAML maps become TOML tables, and lists of
+scalars become arrays. Keys are Codex's own; see the
+<a href="https://github.com/openai/codex/blob/main/docs/config.md">Codex configuration reference</a>.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      codex:
+        config-toml:
+          model_reasoning_effort: high           # low | medium | high | xhigh | max | ultra, as codex-acp advertises
+          model_reasoning_summary: concise
+          shell_environment_policy:              # becomes the [shell_environment_policy] table
+            inherit: core</code></pre></div>
+</div>
+<p><code>model_reasoning_effort</code> is the way to set reasoning effort: codex-acp advertises it as a
+<code>reasoning_effort</code> option with no portable property, and a value in <code>config.toml</code> becomes that
+option's starting value (verified against 1.13.0).</p>
+
+<div class="admonition caution"><span class="label">Caution</span>
+<p>The file the adapter writes is the <strong>only</strong> <code>config.toml</code> Codex reads. Setting
+<code>config-toml</code> moves <code>CODEX_HOME</code> to a directory the adapter owns, so a developer's
+<code>~/.codex/config.toml</code> (their model, MCP servers, profiles) stops applying. That is deliberate, since a
+server should not depend on a personal file, but it can surprise you locally.</p>
+</div>
+
+<h4 id="codex-home">Codex's home directory and credentials</h4>
+<p>Codex keeps its config <em>and</em> its login (<code>auth.json</code>) under <code>CODEX_HOME</code>, so where that
+points decides both:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Configuration</th><th><code>CODEX_HOME</code></th><th>Credentials used</th></tr></thead>
+<tbody>
+<tr><td>No <code>config-toml</code>, no key, no endpoint</td><td>Inherited (<code>~/.codex</code>)</td><td>The existing <code>codex login</code>, untouched</td></tr>
+<tr><td><code>config-toml</code> only</td><td><code>&lt;runtime-home&gt;</code></td><td>The existing login, linked in (a symlink to <code>~/.codex/auth.json</code>)</td></tr>
+<tr><td><code>spring.acp.provider.api-key</code> against OpenAI</td><td><code>&lt;runtime-home&gt;</code></td><td>That key, sent with ACP <code>authenticate</code> and held in memory only</td></tr>
+<tr><td>A bring-your-own endpoint</td><td><code>&lt;runtime-home&gt;</code></td><td>The endpoint's key, read by Codex from the environment</td></tr>
+<tr><td><code>home</code> set</td><td>That directory</td><td>As above, but in the directory you chose</td></tr>
+</tbody>
+</table></div>
+<div class="admonition warning"><span class="label">Warning</span>
+<p>Do not point <code>home</code> at your own <code>~/.codex</code> while also setting <code>config-toml</code> or a
+provider: the adapter writes <code>config.toml</code> into its home and would replace yours.</p>
+</div>
+
+<h4 id="codex-launch">Pinning or pre-installing codex-acp</h4>
+<p><code>package</code> pins the npm version <code>npx</code> runs; the default is the version this release was tested
+against. To avoid the download at startup, for example in a container image, install the adapter at build time and
+set <code>command</code> to it. <code>package</code> is then ignored, and <code>args</code> are passed to the command
+you named.</p>
+
+<!-- ------------------------------------------------------------ -->
+<h3 id="rt-opencode">OpenCode</h3>
+<p>The adapter launches <code>opencode acp</code> over stdio. OpenCode advertises exactly two options, <code>model</code>
+and <code>mode</code>, so nearly all of its behaviour is configured through its own <code>opencode.json</code>.</p>
+
+<div class="listing">
+<div class="title">application.yaml: every OpenCode key</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      opencode:
+        command: /opt/opencode/bin/opencode   # default: OPENCODE_CLI_PATH, else "opencode" on the PATH
+        args: [ --print-logs ]
+        config:                               # written as opencode.json, pointed at by OPENCODE_CONFIG
+          share: disabled
+          autoupdate: false
+        config-file: /etc/myapp/opencode.json # where to write it, instead of <runtime-home>/opencode.json
+        env:
+          HTTPS_PROXY: http://proxy.internal:3128</code></pre></div>
+</div>
+
+<h4 id="opencode-config">opencode.json</h4>
+<p><code>config</code> is written as JSON with OpenCode's own keys; see the
+<a href="https://opencode.ai/docs/config/">OpenCode config reference</a>. OpenCode <em>merges</em> configuration files
+rather than replacing them, in this order (later wins, key by key):</p>
+<ol>
+	<li>the global <code>~/.config/opencode/opencode.json</code>;</li>
+	<li>the file the adapter writes (<code>OPENCODE_CONFIG</code>);</li>
+	<li>a project <code>opencode.json</code> in the workspace.</li>
+</ol>
+<p>Measured against opencode 1.18.31: a <code>model</code> in the workspace's <code>opencode.json</code> overrode the one in
+the adapter's file, while the adapter's other keys still applied. Unlike Codex, relocating the config file does not
+affect OpenCode's login, which lives elsewhere.</p>
+
+<h4 id="opencode-permissions">Per-tool permissions</h4>
+<p>OpenCode's <code>permission</code> block sets, per tool, whether it may act (<code>allow</code>), must not
+(<code>deny</code>), or must ask (<code>ask</code>). An <code>ask</code> reaches your application as an ACP permission
+request and is answered by <a href="#permissions"><code>spring.acp.permissions</code></a>. This gives you a review
+gate in the default <code>build</code> mode, finer than switching to <code>plan</code>:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      opencode:
+        config:
+          permission:
+            edit: ask                  # every file change asks
+            bash:
+              "*": ask                 # shell commands ask…
+              "git status": allow      # …except these
+              "git diff*": allow
+            webfetch: deny
+            external_directory: deny   # nothing outside the workspace
+    permissions:
+      policy: deny                     # every ask is refused: the agent reads, and runs only git status/diff</code></pre></div>
+</div>
+<p>Tools include <code>read</code>, <code>edit</code>, <code>glob</code>, <code>grep</code>, <code>list</code>,
+<code>bash</code>, <code>task</code>, <code>webfetch</code>, <code>websearch</code>, <code>skill</code> and
+<code>external_directory</code>. A single value (<code>permission: ask</code>) applies to all of them.</p>
+
+<h4 id="opencode-agents">Modes and custom agents</h4>
+<p>OpenCode's modes are its <em>primary agents</em>: <code>build</code> (the default) and <code>plan</code>. Define your
+own in <code>config.agent</code> and it becomes a mode that <code>spring.acp.mode</code> can select. Verified against
+1.18.31, where a custom <code>review</code> agent appeared as a mode beside <code>build</code> and <code>plan</code> and
+could be set:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: opencode
+    mode: review                        # select the agent defined below
+    runtimes:
+      opencode:
+        config:
+          agent:
+            review:
+              mode: primary             # primary agents are ACP modes
+              description: Reviews changes without editing them
+              prompt: You review code for correctness and security. Never edit files.
+              permission:
+                edit: deny
+                bash: ask</code></pre></div>
+</div>
+<p><code>default_agent</code> in <code>config</code> sets the mode new sessions start in. Prefer
+<code>spring.acp.mode</code>, which reports whether it was applied.</p>
+
+<h4 id="opencode-other">Other useful settings</h4>
+<div class="table-wrap"><table>
+<thead><tr><th>Key under <code>config</code></th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>share: disabled</code></td><td>Never publish sessions to OpenCode's share service. Recommended for servers.</td></tr>
+<tr><td><code>autoupdate: false</code></td><td>Do not update the binary at run time; pin the version in your image instead.</td></tr>
+<tr><td><code>small_model</code></td><td>A cheaper <code>provider/model</code> for side tasks such as session titles.</td></tr>
+<tr><td><code>instructions</code></td><td>Extra instruction files or globs, loaded as well as <code>AGENTS.md</code>.</td></tr>
+<tr><td><code>enabled_providers</code>, <code>disabled_providers</code></td><td>Restrict which of OpenCode's built-in providers can be used.</td></tr>
+<tr><td><code>snapshot: false</code></td><td>Stop recording filesystem snapshots for undo, which saves disk in large workspaces.</td></tr>
+</tbody>
+</table></div>
+<div class="admonition note"><span class="label">Note</span>
+<p>With a bring-your-own endpoint, the adapter writes <code>provider</code>, <code>model</code> and
+<code>disabled_providers</code> into the same file. A top-level key of the same name in <code>config</code> replaces
+the adapter's value outright, so leave those three to <code>spring.acp.provider</code> unless you intend to describe the
+providers yourself.</p>
+</div>
+
+<!-- ------------------------------------------------------------ -->
+<h3 id="rt-registry">Registry agents</h3>
+<p>With <code>acp-spring-boot-starter-registry</code>, <code>spring.acp.runtime</code> can name any agent in the ACP
+registry that no compiled adapter claims. The agent is resolved from a cached catalogue snapshot, downloaded, verified
+against its published SHA-256, unpacked and launched:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: gemini
+    registry:
+      require-checksum: true        # default; refuse agents published without a sha256
+      cache: ${user.home}/.acp-spring/agents
+      refresh: 24h
+      offline: false                # true: bundled snapshot and already-installed agents only
+    runtimes:
+      gemini:
+        args: [ --debug ]           # appended to the arguments the registry specifies
+        env:
+          GEMINI_API_KEY: ${GEMINI_API_KEY}</code></pre></div>
+</div>
+<p>A registry agent has only two tier-3 keys, <code>args</code> and <code>env</code>, because nothing is known about its
+config files. It reaches the negotiated tier only through ACP's own option categories and the obvious ids
+<code>model</code>, <code>mode</code> and <code>provider</code>. Provider credentials reach it as
+<code>&lt;API_TYPE&gt;_API_KEY</code> and <code>&lt;API_TYPE&gt;_BASE_URL</code>; anything else goes in <code>env</code>.</p>
+<div class="admonition warning"><span class="label">Warning</span>
+<p>A registry agent is an executable downloaded from the internet and run with your application's credentials in its
+environment. Several binary agents publish no checksum; running one requires
+<code>spring.acp.registry.require-checksum: false</code>, which you should set only deliberately. Pin the catalogue with a
+<code>file:</code> URL in <code>spring.acp.registry.url</code> for reproducible builds.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="models">
+<h2>Models and Providers</h2>
+
+<h3 id="models-select">Selecting a model</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    model: gpt-5.6-terra
+    on-unsupported: fail       # fail | warn (default) | ignore</code></pre></div>
+</div>
+<p><code>spring.acp.model</code> is a <strong>request</strong>. When a session opens, ACP Spring reads the options the
+agent advertises and matches the request against them, in order: exact id, display name,
+<code>&lt;provider&gt;/&lt;model&gt;</code>, then a suffix match that must be unique. Only then does it send
+<code>session/set_config_option</code>. It never sends a value the agent did not advertise, because some agents (goose)
+accept an unknown model id and fail later, inside the turn.</p>
+
+<p>When nothing matches, <code>on-unsupported</code> decides:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Value</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td><code>fail</code></td><td>Throws <code>UnsupportedAgentOptionException</code> when the session opens. Use in production when a wrong model is worse than a failed request.</td></tr>
+<tr><td><code>warn</code></td><td>Logs once per option per runtime, naming what the agent <em>does</em> offer, and continues on the agent's default.</td></tr>
+<tr><td><code>ignore</code></td><td>Continues silently.</td></tr>
+</tbody>
+</table></div>
+
+<div class="listing">
+<div class="title">A warn, naming the alternatives</div>
+<div class="content"><pre><code class="language-plaintext">WARN  Runtime 'goose' cannot honor model='gpt-4o-from-2024' (the agent's 'model' option offers
+      gpt-6-astra, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra, … (94 in all));
+      continuing with the agent's own default.</code></pre></div>
+</div>
+
+<div class="admonition tip"><span class="label">Tip</span>
+<p>Leave <code>model</code> unset to use whatever the agent is already configured with, which is the one model its
+credentials are sure to reach. To see what an agent offers, set a deliberately wrong model with <code>warn</code> and
+read the warning, or inspect <code>agent.openSession("probe").configOptions()</code>.</p>
+</div>
+
+<p>Override per turn with <code>.options(o -&gt; o.model("gpt-5.6-sol"))</code>. Options are negotiated once per
+session, and again only when a turn asks for something different. To see what was applied, read
+<code>openSession(name).configuration()</code> (<a href="#ac-sessions">above</a>); each option reports a
+<code>Mechanism</code>: <code>CONFIG_OPTION</code>, <code>ENDPOINT</code>, <code>SESSION_MODE</code>,
+<code>SESSION_MODEL</code>, <code>PROVIDERS_SET</code>, <code>OUT_OF_BAND</code>, <code>UNSUPPORTED</code> or
+<code>NOT_REQUESTED</code>.</p>
+
+<h3 id="models-credentials">Provider credentials</h3>
+<p>An agent either already has credentials (its own login or config file), or you give it one through
+<code>spring.acp.provider</code>. The provider block is fixed at process start and never per request.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    model: gpt-5.6-terra
+    provider:
+      id: openai                  # negotiated: the provider as the agent names it
+      api-type: openai            # the API dialect; also names the env vars (OPENAI_API_KEY, …)
+      api-key: ${OPENAI_API_KEY}  # never logged
+      # base-url: …               # only for an endpoint of your own; see below
+      # headers: { X-Team: platform }</code></pre></div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>provider.id</code></td><td>Which provider to use, as the agent names it. Negotiated like <code>model</code>; OpenCode takes it as the model prefix.</td></tr>
+<tr><td><code>provider.api-type</code></td><td>The wire dialect. Its upper-cased form names the environment variables: <code>openai</code> → <code>OPENAI_API_KEY</code>, <code>OPENAI_BASE_URL</code>; <code>azure_openai</code> → <code>AZURE_OPENAI_API_KEY</code>.</td></tr>
+<tr><td><code>provider.api-key</code></td><td>The key. Travels in the agent's environment or config file (as an <code>{env:…}</code> reference where the format allows), or through ACP <code>authenticate</code> for Codex.</td></tr>
+<tr><td><code>provider.base-url</code></td><td>An endpoint of your own. HTTPS, or HTTP for loopback and <code>.apps.internal</code> only.</td></tr>
+<tr><td><code>provider.headers</code></td><td>Extra headers for the provider endpoint.</td></tr>
+</tbody>
+</table></div>
+<p>Any variable an adapter derives can be overridden from the runtime's tier-3 <code>env</code> block, which is applied last.</p>
+
+<h3 id="models-byo">Bring your own endpoint</h3>
+<p>Point the agent at a platform gateway, a proxy, or a model server you run, with four properties and no
+runtime-specific block:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: goose
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider:
+      id: openai
+      api-type: openai
+      base-url: https://gateway.example.com/team-x/openai   # "/v1" is added when there is no version segment
+      api-key: ${GENAI_API_KEY}</code></pre></div>
+</div>
+<p>With <code>base-url</code> set, the <strong>endpoint's own <code>/models</code> listing</strong> decides which models
+exist, not the agent's built-in catalogue, and the model is applied even though the agent never advertised it
+(<code>Mechanism.ENDPOINT</code>). An endpoint that publishes no listing refuses nothing. This applies to
+<code>model</code> only; <code>mode</code> and <code>provider.id</code> are still checked against the agent.</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Runtime</th><th>How the endpoint reaches the agent</th></tr></thead>
+<tbody>
+<tr><td>goose</td><td class="wrap"><code>OPENAI_HOST</code> (origin and path prefix, version stripped), plus <code>GOOSE_PROVIDER</code>/<code>GOOSE_MODEL</code> at launch. The wire API is not pinned: goose chooses Responses or Chat Completions per model.</td></tr>
+<tr><td>codex</td><td class="wrap">A <code>[model_providers.&lt;id&gt;]</code> table in <code>config.toml</code>, the key via <code>env_key</code>.</td></tr>
+<tr><td>opencode</td><td class="wrap">An <code>@ai-sdk/openai-compatible</code> provider in <code>opencode.json</code>, keyed <code>acp</code> when <code>id</code> equals <code>api-type</code>, with that vendor's built-in provider disabled so the key cannot leak to it.</td></tr>
+<tr><td>registry</td><td class="wrap"><code>OPENAI_BASE_URL</code> and <code>OPENAI_API_KEY</code> (named from <code>api-type</code>), nothing more.</td></tr>
+</tbody>
+</table></div>
+
+<div class="admonition important"><span class="label">Important</span>
+<p>The endpoint has to speak the agent's dialect. codex-acp 1.12+ supports only the OpenAI <strong>Responses</strong> API,
+so a gateway that serves only <code>/chat/completions</code> fails inside Codex's first turn. Goose and OpenCode work
+with either. When one runtime needs a different endpoint, give it its own profile (<a href="#rt-swap">above</a>).
+To pin goose to one dialect, set <code>OPENAI_BASE_PATH</code> in <code>spring.acp.runtimes.goose.env</code>.</p>
+</div>
+
+<h3 id="models-mode">Mode</h3>
+<p><code>spring.acp.mode</code> selects the agent's session mode, and is negotiated exactly like <code>model</code>.
+Its values are the agent's own:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Runtime</th><th>Default</th><th>Asks before acting</th><th>Option id</th></tr></thead>
+<tbody>
+<tr><td>goose</td><td><code>auto</code></td><td><code>approve</code>, <code>smart_approve</code></td><td><code>mode</code> (<a href="#goose-modes">all values</a>)</td></tr>
+<tr><td>codex</td><td><code>agent</code></td><td><code>plan</code></td><td><code>collaboration_mode</code>; sandbox presets are <code>mode</code> (<a href="#codex-sandbox">details</a>)</td></tr>
+<tr><td>opencode</td><td><code>build</code></td><td><code>plan</code></td><td><code>mode</code>; custom agents add values (<a href="#opencode-agents">details</a>)</td></tr>
+</tbody>
+</table></div>
+<p>Mode matters for safety: see <a href="#permissions">Permissions</a>. Other agent-specific tuning, such as reasoning
+effort, belongs in tier 3: <code>spring.acp.runtimes.codex.config-toml.model_reasoning_effort: high</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="mcp">
+<h2>MCP Servers</h2>
+
+<p>MCP servers give the agent tools. They are the most portable part of the configuration: ACP passes the
+list to the agent in <code>session/new</code>, so every compliant agent honours it with no adapter involved.
+Servers are offered to every session the client opens.</p>
+
+<h3 id="mcp-declare">Declaring servers</h3>
+<p>Each server sets <strong>either</strong> <code>url</code> (HTTP) <strong>or</strong> <code>command</code> (stdio).
+Both, or neither, fails at startup.</p>
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mcp-servers:
+      # Remote server over streamable HTTP.
+      - name: inventory
+        url: https://mcp.example.com/inventory/mcp
+        headers:
+          Authorization: "Bearer ${INVENTORY_TOKEN}"
+
+      # Local server the agent launches as a child process.
+      - name: filesystem
+        command: npx
+        args: [ "-y", "@modelcontextprotocol/server-filesystem", "/srv/agent-workspace" ]
+        env:
+          LOG_LEVEL: info</code></pre></div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Field</th><th>Transport</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>both</td><td>Required, unique. Tools usually surface prefixed with it.</td></tr>
+<tr><td><code>url</code></td><td>HTTP</td><td>HTTPS, or HTTP for <code>localhost</code>/loopback and <code>*.apps.internal</code>. No credentials in the URL.</td></tr>
+<tr><td><code>headers</code></td><td>HTTP</td><td>Static headers such as a service token. Validated; never logged.</td></tr>
+<tr><td><code>auth</code></td><td>HTTP</td><td><code>none</code> (default) or <code>oauth</code> for per-user sign-in (<a href="#mcp-oauth">below</a>).</td></tr>
+<tr><td><code>command</code></td><td>stdio</td><td>The executable the agent launches.</td></tr>
+<tr><td><code>args</code></td><td>stdio</td><td>Arguments, in order.</td></tr>
+<tr><td><code>env</code></td><td>stdio</td><td>Environment for the server process.</td></tr>
+</tbody>
+</table></div>
+
+<p>A Spring AI MCP server of your own is just another HTTP entry. At <code>INFO</code>, ACP Spring logs the host and
+path of each server it offers when a session opens, never its headers.</p>
+
+<div class="admonition important"><span class="label">Important</span>
+<p><strong>Declaring a server is not permission to call it.</strong> If the agent asks permission before calling a
+tool, the default policy (<code>deny</code>) refuses it. Configuring MCP servers is two steps: declare them here, then
+grant them in <a href="#permissions">Permissions</a>.</p>
+</div>
+
+<h3 id="mcp-failures">When a server fails to load</h3>
+<p>An MCP server the agent cannot reach is reported nowhere in ACP: the session opens normally, the model answers,
+and it simply has no tools. Goose writes the failure only to its own log file, and ACP Spring watches that log for
+agents it started:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mcp:
+      on-server-failure: fail    # warn (default): log it and carry on; fail: refuse the session
+      detect-timeout: 2s         # how long session opening waits for a report (fail only)</code></pre></div>
+</div>
+<div class="listing">
+<div class="content"><pre><code class="language-java">agent.notices().forEach(n -&gt; log.warn("{} {}: {}", n.severity(), n.subject(), n.detail()));</code></pre></div>
+</div>
+<div class="admonition note"><span class="label">Note</span>
+<p>Only the Goose adapter can report load failures today. On other runtimes these settings are inert and
+<code>notices()</code> stays empty; the symptom is the model saying it lacks tools its instructions say it has.</p>
+</div>
+
+<h3 id="mcp-credentials">Credentials the agent never sees</h3>
+<p>Static <code>headers</code> are handed to the agent and frozen for the session. For expiring tokens, or
+tokens that belong to a particular user, contribute an <code>McpCredentialsProvider</code> bean instead:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">@Bean
+McpCredentialsProvider mcpCredentials(TokenService tokens) {
+    return (server, principal) -&gt; server.name().equals("inventory")
+            ? Optional.of(McpCredentials.bearer(() -&gt; tokens.currentToken(principal)))   // asked per request
+            : Optional.empty();                                                         // as configured
+}</code></pre></div>
+</div>
+<p>Each server the provider answers for is routed through a loopback proxy on <code>127.0.0.1</code>. The agent is
+given <code>http://127.0.0.1:&lt;port&gt;/&lt;random-token&gt;/&lt;server&gt;</code>; the proxy adds the headers on
+every forwarded request (so a token refresh lands between two tool calls) and drops the agent's own
+<code>Authorization</code>. Each session gets its own unguessable route, released when the session ends. A provider that
+throws refuses the session before the agent hears of it.</p>
+
+<h3 id="mcp-oauth">Per-user OAuth</h3>
+<p>For MCP servers that implement the MCP authorization spec, add <code>acp-spring-mcp-oauth</code> and mark the
+server <code>auth: oauth</code>. Authorization-server discovery, dynamic client registration, PKCE and the
+<code>resource</code> parameter are handled for you; each user signs in once per server, and tokens are refreshed as needed.</p>
+<div class="listing">
+<div class="title">pom.xml</div>
+<div class="content"><pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+    &lt;artifactId&gt;acp-spring-mcp-oauth&lt;/artifactId&gt;
+    &lt;version&gt;0.1.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre></div>
+</div>
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mcp-servers:
+      - name: finops-mcp
+        url: https://gateway.example.com/finops-mcp/mcp
+        auth: oauth
+    mcp:
+      oauth:
+        mode: web                  # web (default) | local
+        client-name: Capacity Agent
+        store: jdbc                # memory (web default) | jdbc | file (local default)</code></pre></div>
+</div>
+
+<h4>Web applications</h4>
+<p>Users sign in through Spring Security's redirect. Add the MCP configurer to your filter chain:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">@Bean
+SecurityFilterChain security(HttpSecurity http) throws Exception {
+    return http
+            .authorizeHttpRequests(auth -&gt; auth.anyRequest().authenticated())
+            .oauth2Login(Customizer.withDefaults())
+            .with(McpClientOAuth2Configurer.mcpClientOAuth2(), mcp -&gt; mcp.cimd(false))
+            .build();
+}</code></pre></div>
+</div>
+<p>The signed-in user becomes the <code>SessionPrincipal</code> of every prompt described on a request thread. A named
+session belongs to its principal; another user reusing the name gets <code>SessionOwnershipException</code>. On a
+reactive stack, pass <code>.principal(SessionPrincipal.of(name))</code> explicitly. To send a user to sign in before a
+stream starts, call <code>OAuth2McpCredentialsProvider.requireAuthorized(principal)</code> in the controller.
+With <code>store: jdbc</code>, registrations and tokens are shared across instances (schema:
+<code>org/springaicommunity/acp/mcp/oauth/acp-mcp-oauth-schema.sql</code> plus Spring Security's
+<code>oauth2_authorized_client</code>).</p>
+
+<h4>Terminal applications</h4>
+<p><code>mode: local</code> needs no filter chain. The first run opens a browser for each server (a loopback redirect on
+<code>127.0.0.1</code>); the operating-system user is the principal, and sign-ins are kept in
+<code>~/.config/&lt;spring.application.name&gt;/acp-mcp-oauth.json</code> (mode 600), so later runs refresh silently.</p>
+
+<h3 id="mcp-goose">Goose and MCP gateways</h3>
+<p>Goose 1.51 opens an HTTP MCP connection with a <code>server/discover</code> probe. Some gateways answer it with an
+error goose cannot correlate, so goose never falls back to <code>initialize</code> and the server silently never loads.
+<code>spring.acp.runtimes.goose.mcp.answer-discover: true</code> answers the probe correctly on the gateway's behalf.
+Enable it only for gateways that need it, and remove it once either side is fixed.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="skills">
+<h2>Skills</h2>
+
+<p>A skill is a directory holding a <code>SKILL.md</code>: a named, described procedure the agent loads when the task
+matches its description, optionally with scripts and reference files beside it. Skills are how you teach an agent
+<em>your</em> procedures (a release checklist, a review rubric, how to send an email) without putting them in every
+prompt.</p>
+
+<p>ACP says nothing about skills, but Goose, Codex and OpenCode all read them from
+<code>&lt;workspace&gt;/.agents/skills/&lt;name&gt;/</code>. ACP Spring installs the skills you configure into that
+directory <strong>before the agent starts</strong>, so they are portable across runtimes.</p>
+
+<h3 id="skills-bundled">Skills bundled with the application</h3>
+<p>The default way to ship a skill, because it travels with the build that was tested with it. Put it on the classpath:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">src/main/resources/
+└── skills/
+    └── release-checks/
+        ├── SKILL.md
+        └── scripts/
+            └── check_versions.sh</code></pre></div>
+</div>
+<div class="listing">
+<div class="title">application.yaml</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    skills:
+      - path: skills/release-checks          # classpath directory; installed as "release-checks"</code></pre></div>
+</div>
+<p>This works from an IDE (<code>target/classes</code>) and from an executable jar. Scripts that start with a shebang
+are marked executable when copied out of a jar.</p>
+
+<h3 id="skills-git">Skills from a Git repository</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    skills:
+      - url: https://github.com/acme/agent-skills
+        path: plugins/mailgun/skills/mailgun        # directory inside the repository
+        ref: 8ae7aaf85bd1283dedb449d7fdb2192e05e27b5a  # full commit pins it; a branch or tag also works
+        sha256: 3f9c…                               # optional: expected SHA-256 of SKILL.md
+
+      - url: https://github.com/acme/private-skills
+        path: review-rubric
+        token: ${GITHUB_TOKEN}                      # for a private repository</code></pre></div>
+</div>
+<ul>
+	<li>Fetched with the system <code>git</code>, so <code>git</code> must be on the <code>PATH</code>. HTTPS only.</li>
+	<li>Without <code>ref</code>, the default branch is used, and the startup log names the commit to pin it to. A 40-character
+	commit is checked against what Git actually resolved.</li>
+	<li>A <code>token</code> reaches only that one git process, as an environment-borne header: never in a URL, an argument, a
+	file or a log line.</li>
+</ul>
+
+<h3 id="skills-props">Skill properties</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Bundled</th><th>Git</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>optional</td><td>optional</td><td>Directory to install as. Defaults to the last segment of <code>path</code>, or the repository name.</td></tr>
+<tr><td><code>path</code></td><td>required</td><td>optional</td><td>The skill's directory on the classpath, or inside the repository (default: its root).</td></tr>
+<tr><td><code>url</code></td><td>—</td><td>required</td><td>The repository, over HTTPS, without credentials. Its presence makes the skill a Git skill.</td></tr>
+<tr><td><code>ref</code></td><td>—</td><td>optional</td><td>Commit, branch or tag.</td></tr>
+<tr><td><code>token</code></td><td>—</td><td>optional</td><td>Access token for a private repository.</td></tr>
+<tr><td><code>sha256</code></td><td>optional</td><td>optional</td><td>Expected SHA-256 of <code>SKILL.md</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="skills-lifecycle">How installation behaves</h3>
+<ul>
+	<li><strong>Before first use.</strong> Skills are installed when the first agent connection opens, once per JVM for a given
+	workspace and skill list.</li>
+	<li><strong>Fails closed.</strong> A skill that cannot be fetched, has no <code>SKILL.md</code>, contains a symbolic link, or fails
+	its digest or pin check stops the agent from starting, rather than letting it start without a capability you rely on.</li>
+	<li><strong>Reconciled.</strong> Each installed skill carries a <code>.acp-spring-skill</code> marker. A skill removed from
+	configuration is removed from the workspace at the next start.</li>
+	<li><strong>Your own skills are safe.</strong> A directory under <code>.agents/skills/</code> without the marker is never
+	overwritten or removed; a configured skill with the same name fails instead. You can still author skills by hand
+	directly in <code>&lt;workspace&gt;/.agents/skills/</code> without configuring them.</li>
+</ul>
+
+<h3 id="skills-write">Writing a skill</h3>
+<div class="listing">
+<div class="title">skills/release-checks/SKILL.md</div>
+<div class="content"><pre><code class="language-markdown">---
+name: release-checks
+description: Verify a release candidate before it is tagged. Use when asked to check,
+  validate or sign off a release, RC or version bump.
+---
+
+# Release checks
+
+1. Confirm the version in `pom.xml` has no `-SNAPSHOT` suffix.
+2. Confirm `CHANGELOG.md` has an entry for this version.
+3. Run `scripts/check_versions.sh` and report any dependency whose version changed.
+
+Report each step as PASS or FAIL with one line of evidence. Do not tag anything.</code></pre></div>
+</div>
+<p>The <code>description</code> is what the agent matches a task against, so write it as <em>when to use this</em>. Name
+the skill in the prompt ("…using the release-checks skill") when you need deterministic behaviour.</p>
+
+<div class="admonition warning"><span class="label">Warning</span>
+<p>A skill that runs scripts needs the agent to have a shell tool, and runs that script with the agent's environment,
+which it inherits from your JVM. Goose needs its <code>developer</code> builtin
+(<code>spring.acp.runtimes.goose.builtins: developer</code>) unless its own config already enables it. A secret the
+script reads (say <code>MAILGUN_API_KEY</code>) must be in your application's environment. The
+<code>spring.acp.terminal</code> settings do not govern the agent's own shell.</p>
+</div>
+
+<div class="admonition tip"><span class="label">Tip</span>
+<p>If the workspace lives in your source tree, add <code>workspace/.agents/</code> to <code>.gitignore</code>: it is
+rebuilt from configuration on every start.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="agents-md">
+<h2>Agent Instructions (AGENTS.md)</h2>
+
+<p><code>AGENTS.md</code> is a Markdown file of standing instructions: who the agent is serving, what the project
+is, its conventions, what it must never do. It is effectively the agent's system prompt. Unlike a skill, which
+loads on demand, <code>AGENTS.md</code> is in context on <strong>every</strong> turn.</p>
+
+<p>Agents read it from their working directory. ACP Spring does not push instructions over the protocol; it sets the
+working directory with <code>spring.acp.workspace</code>. <strong>So installing instructions means putting
+<code>AGENTS.md</code> at the workspace root.</strong> Goose, Codex and OpenCode all read it there.</p>
+
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">workspace/                      ← spring.acp.workspace
+├── AGENTS.md                   ← always in context
+└── .agents/
+    └── skills/                 ← installed by ACP Spring; loaded on demand
+        └── release-checks/
+            └── SKILL.md</code></pre></div>
+</div>
+
+<h3 id="agents-md-write">Writing AGENTS.md</h3>
+<div class="listing">
+<div class="title">workspace/AGENTS.md</div>
+<div class="content"><pre><code class="language-markdown"># Orders service assistant
+
+You help the order-management team investigate failed orders. The people you talk to
+run operations, not infrastructure: lead with business impact and keep jargon out.
+
+## Tools
+
+- `orders__getOrder`, `orders__listFailures`: read-only, call freely.
+- `orders__refund`: moves money. Present the refund and wait for an explicit "yes".
+
+## Conventions
+
+- Cite order ids in every answer.
+- Never guess a customer's details; look them up or say you cannot.</code></pre></div>
+</div>
+<p>Keep it short and about things that apply to every turn. It is paid for on every turn and competes for attention
+with everything else in context. Anything that starts "when asked to…" belongs in a <a href="#skills">skill</a>.</p>
+
+<h3 id="agents-md-install">Installing it</h3>
+
+<h4>Option 1: a workspace directory in your project</h4>
+<p>The simplest approach, used by <a href="#meridian">acp-meridian</a>: keep a <code>workspace/</code> directory
+in the repository with <code>AGENTS.md</code> in it, and point at it.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    workspace: ${WORKSPACE_DIR:./workspace}</code></pre></div>
+</div>
+<p>The relative path is resolved against the JVM's working directory, so run the application from the project root,
+or set <code>WORKSPACE_DIR</code> to an absolute path in deployment.</p>
+
+<h4>Option 2: ship it in the jar and stage it at startup</h4>
+<p>When the application runs from a jar with a workspace it does not own (a container volume, a temp directory),
+package <code>AGENTS.md</code> as a resource and copy it into place. The agent is launched on the first prompt, so a
+component that runs during context startup is always in time:</p>
+<div class="listing">
+<div class="title">src/main/java/com/example/orders/agent/InstructionsInstaller.java</div>
+<div class="content"><pre><code class="language-java">@Component
+class InstructionsInstaller {
+
+    /** Copies classpath:agent/AGENTS.md to the workspace root before the agent is launched. */
+    InstructionsInstaller(AgentSettings settings,
+            @Value("classpath:agent/AGENTS.md") Resource instructions) throws IOException {
+        try (InputStream in = instructions.getInputStream()) {
+            Files.copy(in, settings.workspace().resolve("AGENTS.md"), StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+}</code></pre></div>
+</div>
+<p><code>AgentSettings</code> is the auto-configured bean carrying the resolved, absolute workspace. The same component
+is the natural place to render the file from a template if it must vary per deployment.</p>
+
+<h3 id="agents-md-compare">AGENTS.md, skills or prompt?</h3>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th><code>AGENTS.md</code></th><th>Skill</th><th>Prompt text</th></tr></thead>
+<tbody>
+<tr><td>In context</td><td>Every turn</td><td>When its description matches</td><td>This turn</td></tr>
+<tr><td>Good for</td><td>Role, audience, constraints, tool etiquette</td><td>Multi-step procedures, checklists, scripts</td><td>The task at hand</td></tr>
+<tr><td>Cost</td><td>Every turn: keep it short</td><td>Only when loaded</td><td>Per call</td></tr>
+<tr><td>Configured by</td><td><code>&lt;workspace&gt;/AGENTS.md</code></td><td><code>spring.acp.skills</code></td><td><code>.user(…)</code></td></tr>
+</tbody>
+</table></div>
+
+<div class="admonition warning"><span class="label">Warning</span>
+<p><strong>Nothing validates it.</strong> A misspelled file name, or a workspace other than the one you think, fails
+silently: the agent just behaves as if it had no instructions. The <code>ACP runtime '…' selected, workspace …</code>
+line at <code>INFO</code> names the directory actually used.</p>
+</div>
+<div class="admonition caution"><span class="label">Caution</span>
+<p><code>AGENTS.md</code> is an agent convention, not part of ACP. Registry agents may use another name (Gemini CLI reads
+<code>GEMINI.md</code>; stage the same content under both names). Some agents also merge instruction files from parent
+directories or the user's home (for example <code>~/.codex/AGENTS.md</code>), so a workspace inside another project's
+checkout may pick up that project's instructions too.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="permissions">
+<h2>Permissions and the Workspace</h2>
+
+<h3 id="perm-policy">Permission policy</h3>
+<p>When an agent asks permission to run a tool (<code>session/request_permission</code>), ACP Spring answers on your
+behalf, since a server-side application has no human at the keyboard. Every request gets an answer, so no turn stalls.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    permissions:
+      policy: allowlist          # deny (default) | allowlist | auto-approve
+      allowed-tools:
+        - developer__text_editor
+        - inventory__lookup_part</code></pre></div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Policy</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td><code>deny</code></td><td>Rejects everything. The agent degrades to answering from context.</td></tr>
+<tr><td><code>allowlist</code></td><td>Approves exactly the named tools (case-insensitive) and rejects the rest, including any request whose tool name cannot be determined.</td></tr>
+<tr><td><code>auto-approve</code></td><td>Approves everything. Only in a sandbox, or when the gate that matters is elsewhere (see acp-meridian's <code>AGENTS.md</code>).</td></tr>
+</tbody>
+</table></div>
+<p>To find the names an agent reports, run once with <code>logging.level.org.springaicommunity.acp: DEBUG</code> and read
+them off the permission requests.</p>
+
+<h3 id="perm-mode">Mode decides whether the question is asked</h3>
+<div class="admonition warning"><span class="label">Warning</span>
+<p><code>policy: deny</code> alone does <strong>not</strong> stop an agent writing files. In their default modes, Goose,
+Codex and OpenCode all edit files with their own tools without asking at all. The <strong>mode</strong> decides whether
+permission is requested; the <strong>policy</strong> decides the answer. For a read-only reviewer, set both:</p>
+<div class="listing"><div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mode: plan            # goose: approve
+    permissions:
+      policy: deny</code></pre></div></div>
+<p>Codex's <code>read-only</code> mode still writes inside the workspace without asking; use <code>plan</code>.</p>
+</div>
+
+<h3 id="perm-fs">Lending the client's filesystem and terminal</h3>
+<p>ACP lets an agent borrow the <em>client's</em> file and terminal access. A server-side application rarely needs
+either, so both are off, and are declared unsupported to the agent:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    filesystem:
+      enabled: false        # answer fs/read_text_file
+      write: false          # also answer fs/write_text_file (implies enabled)
+    terminal:
+      enabled: false        # answer terminal/*: arbitrary execution as this JVM's user
+      allowed-commands: []  # empty allows any; matched by file name
+      output-limit: 1MB
+      command-timeout: 5m
+      max-concurrent: 8</code></pre></div>
+</div>
+<p>When enabled, every path is confined to the workspace by its <em>real</em> path, with symlinks followed, so neither
+<code>..</code> nor a planted symlink escapes. This governs only what the agent asks <em>this client</em> to do. Its own
+process's file access is the operating system's to restrict: run the agent as a user, or in a container, that can reach
+only what it should.</p>
+
+<h3 id="perm-runtime-home">Where adapters write</h3>
+<p>Adapters write agent config files (<code>config.toml</code>, <code>opencode.json</code>) to
+<code>spring.acp.runtime-home</code>, never to the workspace. It defaults to a directory under the JVM's temp
+directory named for the runtime. The only thing ACP Spring writes into the workspace is <code>.agents/skills/</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="spring-ai">
+<h2>Spring AI ChatModel</h2>
+<p>Add <code>acp-spring-ai</code> and an <code>AcpChatModel</code> bean appears wherever a Spring AI application looks for a
+<code>ChatModel</code>:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">ChatClient chat = ChatClient.create(chatModel);
+
+String answer = chat.prompt()
+        .user("Review the pending changes")
+        .options(AcpChatOptions.builder().session("review-123").mode("plan").build())
+        .call()
+        .content();</code></pre></div>
+</div>
+<ul>
+	<li><strong>No session</strong> (the default): each call is a throwaway ACP session, and the whole message list is sent.
+	Use this with Spring AI's <code>ChatMemory</code>.</li>
+	<li><strong>A named session</strong>: the agent already holds the conversation, so only messages after the last assistant
+	message are sent. Don't combine it with a <code>ChatMemory</code> advisor.</li>
+	<li><code>temperature</code>, <code>topP</code>, <code>maxTokens</code> and similar have no ACP equivalent; they are logged
+	once and ignored. Spring AI <code>ToolCallback</code>s are not visible to the agent; give it tools as
+	<a href="#mcp">MCP servers</a>.</li>
+	<li>Disable with <code>spring.acp.chat-model.enabled=false</code>.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="http">
+<h2>HTTP Endpoint</h2>
+<p>An optional WebFlux controller exposes the agent over HTTP. It requires <code>spring-boot-starter-webflux</code>
+<em>and</em> <code>spring.acp.controller.enabled=true</code>, so adding either alone publishes nothing.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    controller:
+      enabled: true
+      path: /api/acp
+      allow-unauthenticated: false    # requests need a Principal
+      allow-request-overrides: false  # a request may not choose its own model or provider
+      max-prompt-chars: 32000
+      max-timeout: 10m</code></pre></div>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Endpoint</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td><code>POST {path}/prompt</code></td><td>Body <code>{"prompt", "session", "timeout", "model", "provider", "mode"}</code>; returns <code>{"content", "stopReason", "error", "requestId"}</code>.</td></tr>
+<tr><td><code>POST {path}/stream</code></td><td>Same body; server-sent events of assistant text only (tool calls and plans can name workspace paths).</td></tr>
+<tr><td><code>GET {path}/sessions</code></td><td>Stored sessions, or 501 when the agent cannot list them.</td></tr>
+<tr><td><code>DELETE {path}/sessions/{name}</code></td><td>Closes a named session.</td></tr>
+<tr><td><code>GET {path}/health</code></td><td>Unauthenticated; whether the agent is up, and which runtime.</td></tr>
+</tbody>
+</table></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="observability">
+<h2>Observability</h2>
+<p>With Micrometer on the classpath, every turn and every tool call is an observation: a timer, and a span parented to
+whatever the caller was in.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">acp.turn{acp.runtime=goose, acp.model=gpt-5.6-terra, acp.session.kind=named, acp.outcome=END_TURN}
+acp.tool.call{acp.runtime=goose, acp.tool.kind=READ, acp.tool.status=COMPLETED}</code></pre></div>
+</div>
+<p><code>acp.model</code> is the model the session is <em>really</em> using, not the one requested. Session names, tool
+titles and usage are span attributes, not meter tags; contribute an <code>ObservationConvention</code> to change that.
+Disable with <code>spring.acp.observations.enabled=false</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="properties">
+<h2>Configuration Properties</h2>
+<p>All properties live under <code>spring.acp</code> (or at the top level of an imported <code>agents.yaml</code>).</p>
+
+<h3 id="props-core">Core</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.enabled</code></td><td><code>true</code></td><td>Switches the auto-configuration off entirely.</td></tr>
+<tr><td><code>spring.acp.runtime</code></td><td>—</td><td>Agent to run. Optional with exactly one adapter on the classpath.</td></tr>
+<tr><td><code>spring.acp.workspace</code></td><td>JVM working dir</td><td>The agent's working directory. Must exist.</td></tr>
+<tr><td><code>spring.acp.runtime-home</code></td><td>temp dir</td><td>Where adapters write agent config files. Never the workspace.</td></tr>
+<tr><td><code>spring.acp.timeout</code></td><td><code>5m</code></td><td>Longest a turn may take (max 24h).</td></tr>
+<tr><td><code>spring.acp.model</code></td><td>—</td><td>Requested model. Negotiated.</td></tr>
+<tr><td><code>spring.acp.mode</code></td><td>—</td><td>Requested session mode. Negotiated.</td></tr>
+<tr><td><code>spring.acp.on-unsupported</code></td><td><code>warn</code></td><td><code>fail</code>, <code>warn</code> or <code>ignore</code>.</td></tr>
+<tr><td><code>spring.acp.provider.id</code></td><td>—</td><td>Provider as the agent names it. Negotiated.</td></tr>
+<tr><td><code>spring.acp.provider.api-type</code></td><td>—</td><td>API dialect; names the credential env vars.</td></tr>
+<tr><td><code>spring.acp.provider.base-url</code></td><td>—</td><td>Your own endpoint; makes its <code>/models</code> authoritative.</td></tr>
+<tr><td><code>spring.acp.provider.api-key</code></td><td>—</td><td>Provider key. Never logged.</td></tr>
+<tr><td><code>spring.acp.provider.headers</code></td><td>—</td><td>Extra provider headers.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="props-mcp">MCP and skills</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.mcp-servers[n].name</code></td><td>—</td><td>Required, unique.</td></tr>
+<tr><td><code>spring.acp.mcp-servers[n].url</code>, <code>.headers</code>, <code>.auth</code></td><td>—, —, <code>none</code></td><td>HTTP transport.</td></tr>
+<tr><td><code>spring.acp.mcp-servers[n].command</code>, <code>.args</code>, <code>.env</code></td><td>—</td><td>stdio transport.</td></tr>
+<tr><td><code>spring.acp.mcp.on-server-failure</code></td><td><code>warn</code></td><td><code>warn</code> or <code>fail</code> (Goose only).</td></tr>
+<tr><td><code>spring.acp.mcp.detect-timeout</code></td><td><code>2s</code></td><td>Wait for a load-failure report when <code>fail</code>.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.mode</code></td><td><code>web</code></td><td><code>web</code> or <code>local</code>. Needs <code>acp-spring-mcp-oauth</code>.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.client-name</code></td><td>app name</td><td>Shown on consent screens.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.base-url</code></td><td>from request</td><td>Public base URL for the redirect URI.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.redirect-uri</code></td><td><code>{baseUrl}/login/oauth2/code/{registrationId}</code></td><td>Registered callback.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.store</code></td><td>by mode</td><td><code>memory</code>, <code>jdbc</code> or <code>file</code>.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.file</code></td><td><code>~/.config/&lt;app&gt;/acp-mcp-oauth.json</code></td><td>For <code>store: file</code>.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.sign-in-timeout</code></td><td><code>5m</code></td><td>How long a <code>local</code> sign-in waits.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.allow-loopback</code></td><td><code>false</code></td><td>Allow http/loopback OAuth endpoints (development only).</td></tr>
+<tr><td><code>spring.acp.skills[n].name</code>, <code>.path</code>, <code>.url</code>, <code>.ref</code>, <code>.token</code>, <code>.sha256</code></td><td>—</td><td>See <a href="#skills-props">Skill properties</a>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="props-safety">Permissions, filesystem, terminal</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.permissions.policy</code></td><td><code>deny</code></td><td><code>deny</code>, <code>allowlist</code> or <code>auto-approve</code>.</td></tr>
+<tr><td><code>spring.acp.permissions.allowed-tools</code></td><td><code>[]</code></td><td>Tool names for <code>allowlist</code>.</td></tr>
+<tr><td><code>spring.acp.filesystem.enabled</code></td><td><code>false</code></td><td>Answer <code>fs/read_text_file</code>.</td></tr>
+<tr><td><code>spring.acp.filesystem.write</code></td><td><code>false</code></td><td>Also answer <code>fs/write_text_file</code>.</td></tr>
+<tr><td><code>spring.acp.terminal.enabled</code></td><td><code>false</code></td><td>Answer <code>terminal/*</code>.</td></tr>
+<tr><td><code>spring.acp.terminal.allowed-commands</code></td><td><code>[]</code> (any)</td><td>Permitted command names.</td></tr>
+<tr><td><code>spring.acp.terminal.output-limit</code></td><td><code>1MB</code></td><td>Output kept per terminal.</td></tr>
+<tr><td><code>spring.acp.terminal.command-timeout</code></td><td><code>5m</code></td><td>Kill a command after this.</td></tr>
+<tr><td><code>spring.acp.terminal.max-concurrent</code></td><td><code>8</code></td><td>Terminals per connection.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="props-pool">Pool, endpoint, protocol, integrations</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.pool.max-processes</code></td><td><code>1</code></td><td>Agent processes to run. Raise for unrelated conversations in parallel.</td></tr>
+<tr><td><code>spring.acp.pool.max-sessions-per-process</code></td><td><code>32</code></td><td>Named sessions per process before another is preferred.</td></tr>
+<tr><td><code>spring.acp.pool.session-ttl</code></td><td><code>60m</code></td><td>Idle time before a named session is closed.</td></tr>
+<tr><td><code>spring.acp.pool.max-restarts</code></td><td><code>5</code></td><td>Replacements within five minutes before a connection is left down.</td></tr>
+<tr><td><code>spring.acp.controller.*</code></td><td>off</td><td>See <a href="#http">HTTP Endpoint</a>.</td></tr>
+<tr><td><code>spring.acp.protocol.max-version</code></td><td><code>1</code></td><td>Highest ACP version offered. v2 is refused.</td></tr>
+<tr><td><code>spring.acp.protocol.strict</code></td><td><code>false</code></td><td>Fail, rather than clamp, when an agent answers a version it was not offered.</td></tr>
+<tr><td><code>spring.acp.observations.enabled</code></td><td><code>true</code></td><td>Micrometer observations, when Micrometer is present.</td></tr>
+<tr><td><code>spring.acp.chat-model.enabled</code></td><td><code>true</code></td><td>The <code>AcpChatModel</code> bean, when <code>acp-spring-ai</code> is present.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="props-registry">Registry</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.registry.enabled</code></td><td><code>true</code></td><td>Consult the registry for a runtime no adapter claims.</td></tr>
+<tr><td><code>spring.acp.registry.url</code></td><td>ACP CDN <code>registry.json</code></td><td>Catalogue location; <code>file:</code> pins a snapshot.</td></tr>
+<tr><td><code>spring.acp.registry.cache</code></td><td><code>~/.acp-spring/agents</code></td><td>Snapshot and downloaded agents.</td></tr>
+<tr><td><code>spring.acp.registry.refresh</code></td><td><code>24h</code></td><td>Catalogue refresh interval.</td></tr>
+<tr><td><code>spring.acp.registry.offline</code></td><td><code>false</code></td><td>No network: bundled snapshot and installed agents only.</td></tr>
+<tr><td><code>spring.acp.registry.require-checksum</code></td><td><code>true</code></td><td>Refuse agents published without a SHA-256.</td></tr>
+<tr><td><code>spring.acp.registry.download-timeout</code></td><td><code>10m</code></td><td>Longest one download may take.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="props-tier3">Runtime-specific (tier 3)</h3>
+<p>Described per runtime in <a href="#runtime-config">Runtime Configuration</a>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Runtime</th><th>Keys under <code>spring.acp.runtimes.&lt;id&gt;</code></th></tr></thead>
+<tbody>
+<tr><td><code>goose</code></td><td class="wrap"><code>builtins</code>, <code>env</code>, <code>serve.transport</code>, <code>serve.host</code>, <code>serve.port</code>, <code>serve.startup-timeout</code>, <code>log-dir</code>, <code>mcp.answer-discover</code></td></tr>
+<tr><td><code>codex</code></td><td class="wrap"><code>package</code>, <code>command</code>, <code>args</code>, <code>home</code>, <code>config-toml</code>, <code>env</code></td></tr>
+<tr><td><code>opencode</code></td><td class="wrap"><code>command</code>, <code>args</code>, <code>config</code>, <code>config-file</code>, <code>env</code></td></tr>
+<tr><td>registry ids</td><td class="wrap"><code>args</code>, <code>env</code></td></tr>
+</tbody>
+</table></div>
+<p>Keys bind relaxed (<code>config-toml</code>, <code>configToml</code> and <code>config_toml</code> are one key), while nested
+keys keep their spelling because they end up verbatim in the agent's own config file.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="meridian">
+<h2>Example: acp-meridian</h2>
+<p><code>acp-meridian</code> is a complete client built on ACP Spring: a terminal chat application that helps business
+staff investigate cloud capacity and cost findings, and files service desk tickets for them. It shows every piece of this
+guide working together. <strong>Everything that makes it this agent is configuration:</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>What</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td>The agent runtime</td><td><code>spring.acp.runtime: goose</code>, or <code>opencode</code>, or the <code>codex</code> profile</td></tr>
+<tr><td>The model and the endpoint behind it</td><td><code>spring.acp.model</code> and <code>spring.acp.provider.*</code></td></tr>
+<tr><td>Two MCP servers, with per-user OAuth</td><td><code>spring.acp.mcp-servers</code>, <code>spring.acp.mcp.oauth</code></td></tr>
+<tr><td>The system prompt</td><td><code>workspace/AGENTS.md</code></td></tr>
+<tr><td>A skill that sends email</td><td><code>spring.acp.skills</code>, fetched from Git into <code>workspace/.agents/skills/</code></td></tr>
+</tbody>
+</table></div>
+
+<h3 id="meridian-layout">Project layout</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">acp-meridian/
+├── pom.xml
+├── .envrc                        # GENAI_API_BASE, GENAI_API_KEY, MAILGUN_API_KEY
+├── src/main/java/org/springaicommunity/acp/meridian/
+│   ├── MeridianApplication.java
+│   └── console/
+│       ├── ConsoleChat.java      # read, prompt, stream loop
+│       └── ConsoleRenderer.java  # how events are shown
+├── src/main/resources/application.yaml
+└── workspace/                    # spring.acp.workspace
+    ├── AGENTS.md                 # the system prompt (checked in)
+    └── .agents/skills/mailgun/   # installed at startup (git-ignored)</code></pre></div>
+</div>
+
+<h3 id="meridian-pom">Dependencies</h3>
+<p>All three runtime starters are on the classpath, so <code>spring.acp.runtime</code> must be set and is the only thing
+that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP servers.</p>
+<div class="listing">
+<div class="title">pom.xml</div>
+<div class="content"><pre><code class="language-xml">&lt;properties&gt;
+    &lt;java.version&gt;21&lt;/java.version&gt;
+    &lt;acp-spring.version&gt;0.1.0&lt;/acp-spring.version&gt;
+&lt;/properties&gt;
+
+&lt;dependencies&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-boot-starter-goose&lt;/artifactId&gt;
+        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-boot-starter-opencode&lt;/artifactId&gt;
+        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-boot-starter-codex&lt;/artifactId&gt;
+        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
+        &lt;artifactId&gt;acp-spring-mcp-oauth&lt;/artifactId&gt;
+        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter&lt;/artifactId&gt;
+    &lt;/dependency&gt;
+&lt;/dependencies&gt;</code></pre></div>
+</div>
+
+<h3 id="meridian-config">Configuration</h3>
+<div class="listing">
+<div class="title">src/main/resources/application.yaml (comments abridged)</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  application:
+    name: acp-meridian              # also names ~/.config/acp-meridian/ for the MCP sign-ins
+  acp:
+    runtime: goose                  # the only line that picks the agent
+    workspace: ${WORKSPACE_DIR:./workspace}   # AGENTS.md lives here
+
+    model: deepseek-ai/DeepSeek-V4-Flash-0731
+    provider:                       # a platform's OpenAI-compatible endpoint
+      id: openai
+      api-type: openai
+      base-url: ${GENAI_API_BASE}
+      api-key: ${GENAI_API_KEY}
+    on-unsupported: warn
+
+    mcp-servers:                    # each user signs in; the agent never sees a token
+      - name: finops-mcp
+        url: https://mcp-gateway.example.com/finops-mcp/mcp
+        auth: oauth
+      - name: servicedesk-mcp
+        url: https://mcp-gateway.example.com/servicedesk-mcp/mcp
+        auth: oauth
+    mcp:
+      oauth:
+        mode: local                 # terminal app: browser sign-in, tokens in a mode-600 file
+        client-name: Meridian Capacity &amp; Cost Agent
+
+    skills:                         # fetched into workspace/.agents/skills before the agent starts
+      - url: https://github.com/cpage-pivotal/claude-plugin-marketplace
+        path: plugins/mailgun/skills/mailgun
+
+    runtimes:                       # read only by the runtime it names
+      goose:
+        mcp:
+          answer-discover: true     # this gateway breaks goose's discovery probe
+
+    permissions:
+      policy: auto-approve          # the real gate is in AGENTS.md: confirm before createTicket
+    filesystem:
+      enabled: false
+    terminal:
+      enabled: false
+    timeout: 5m
+    pool:
+      max-processes: 1
+      max-sessions-per-process: 4
+      session-ttl: 60m
+
+  main:
+    web-application-type: none</code></pre></div>
+</div>
+
+<h3 id="meridian-agents-md">Instructions</h3>
+<p>The system prompt is <code>workspace/AGENTS.md</code>, checked in next to the code. It defines the audience, lists
+the MCP tools and which of them need the user's explicit confirmation, and lays out the workflow. An excerpt:</p>
+<div class="listing">
+<div class="title">workspace/AGENTS.md (excerpt)</div>
+<div class="content"><pre><code class="language-markdown"># Meridian Logistics Capacity &amp; Cost Agent
+
+You help **business unit staff at Meridian Logistics** understand capacity and cost
+issues flagged against their workloads on the shared private cloud, and file service
+desk requests to get them fixed.
+
+## Available Tools
+
+**FinOps Insights**: read-only, no side effects, call freely:
+- `getBusinessUnitSummary()`: the caller's business unit: budget, spend, forecast
+- `listFindings(severity?, status?)`: flagged capacity/cost issues
+
+**Service Desk**:
+
+*Requires explicit human confirmation:*
+- `createTicket(requestType, fields)`: files a real request that real people will act on</code></pre></div>
+</div>
+
+<h3 id="meridian-code">The code</h3>
+<p>No class names an agent. The console loop opens the session up front so the negotiated model is on screen before any
+tokens are spent, then streams each turn:</p>
+<div class="listing">
+<div class="title">console/ConsoleChat.java (abridged)</div>
+<div class="content"><pre><code class="language-java">@Component
+class ConsoleChat implements ApplicationRunner {
+
+    /** One named session, so the whole terminal run is one conversation the agent remembers. */
+    private static final String SESSION = "meridian-console";
+
+    private final AgentClient agent;
+    private final ConsoleRenderer out;
+
+    ConsoleChat(AgentClient agent, ConsoleRenderer renderer) {
+        this.agent = agent;
+        this.out = renderer;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
+        out.banner(agent.runtimeId());
+        agent.openSession(SESSION).configuration().resolutions().values().stream()
+                .filter(r -&gt; r.requested() != null)
+                .forEach(r -&gt; out.resolution(r.option().toString(), r.requested(), r.applied(),
+                        String.valueOf(r.mechanism())));
+
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(System.in))) {
+            String line;
+            while (out.prompt() &amp;&amp; (line = in.readLine()) != null) {
+                String input = line.strip();
+                if (input.equalsIgnoreCase("/exit")) {
+                    break;
+                }
+                if (!input.isEmpty()) {
+                    ask(input);
+                }
+            }
+        }
+    }
+
+    private void ask(String question) {
+        agent.prompt().session(SESSION).user(question).stream().events()
+                .doOnNext(this::render)
+                .blockLast();
+    }
+
+    private void render(AgentEvent event) {
+        switch (event) {
+            case AgentEvent.Text text -&gt; out.text(text.text());
+            case AgentEvent.Thought thought -&gt; out.thought(thought.text());
+            case AgentEvent.ToolCallStarted call -&gt; out.toolCall(call.title());
+            case AgentEvent.PlanUpdated plan -&gt; out.plan(plan.entries().size());
+            case AgentEvent.Completed completed -&gt; out.completed(String.valueOf(completed.reason()));
+            case AgentEvent.Failed failed -&gt; out.error(String.valueOf(failed.cause()));
+            default -&gt; { }
+        }
+    }
+}</code></pre></div>
+</div>
+
+<h3 id="meridian-profiles">Running it on each runtime</h3>
+<div class="listing">
+<div class="content"><pre><code class="language-bash">set -a &amp;&amp; source .envrc &amp;&amp; set +a
+mvn package
+
+java -jar target/acp-meridian-0.1.0-SNAPSHOT.jar                              # goose
+java -jar target/acp-meridian-0.1.0-SNAPSHOT.jar --spring.acp.runtime=opencode   # same endpoint, same result
+java -jar target/acp-meridian-0.1.0-SNAPSHOT.jar --spring.profiles.active=codex  # OpenAI itself</code></pre></div>
+</div>
+<p>Goose and OpenCode reach the platform's Chat Completions endpoint unchanged. Codex speaks only the Responses API,
+which that endpoint does not serve, so a <code>codex</code> profile swaps model and provider for OpenAI:</p>
+<div class="listing">
+<div class="title">application.yaml (continued)</div>
+<div class="content"><pre><code class="language-yaml">---
+spring:
+  config:
+    activate:
+      on-profile: codex
+  acp:
+    runtime: codex
+    model: gpt-5.6-terra
+    provider:
+      id: openai
+      api-type: openai
+      base-url: ""                  # clear the platform endpoint
+      api-key: ${OPENAI_API_KEY}    # reaches Codex via ACP authenticate; never written to disk</code></pre></div>
+</div>
+<p>MCP servers, sign-in, skill and <code>AGENTS.md</code> are identical on all three.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="testing">
+<h2>Testing</h2>
+
+<h3 id="testing-app">Testing your application</h3>
+<p>Switch the auto-configuration off and mock the client. No agent process, no provider key:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-java">@SpringBootTest(properties = "spring.acp.enabled=false")
+class ReviewControllerTests {
+
+    @MockitoBean
+    AgentClient agent;
+
+    @Test
+    void summarizes() {
+        AgentClient.PromptSpec spec = mock(AgentClient.PromptSpec.class, RETURNS_SELF);
+        AgentClient.AgentResponse response = mock(AgentClient.AgentResponse.class);
+        given(agent.prompt()).willReturn(spec);
+        given(agent.prompt(anyString())).willReturn(spec);   // prompt(text) is a default method
+        given(spec.call()).willReturn(response);
+        given(response.content()).willReturn("Looks good");
+        // …
+    }
+}</code></pre></div>
+</div>
+<p>For a test against a real agent, gate it on the agent being usable so CI without one stays green, and pin the model
+so a developer's local agent config cannot change the outcome.</p>
+
+<h3 id="testing-adapters">Testing a runtime adapter</h3>
+<p><code>acp-spring-test</code> is for adapter authors. <code>AgentRuntimeContract</code> is the conformance suite every
+compiled adapter extends; it asserts only what ACP standardizes. <code>ScriptedAgent</code> is a fake agent speaking raw
+JSON-RPC over an in-memory transport, and <code>AgentProbe</code> skips live suites when an agent is absent or has no
+credentials. Live suites cost real tokens, so they only run with <code>-Dacp-spring.test.live=true</code>.</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="troubleshooting">
+<h2>Troubleshooting</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+<tbody>
+<tr><td>Startup fails: <em>spring.acp.runtime is not set and more than one runtime adapter is on the classpath</em></td><td>Set <code>spring.acp.runtime</code> to one of the listed ids.</td></tr>
+<tr><td>Startup fails: <em>No AgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>acp-spring-boot-starter-registry</code> for a registry id.</td></tr>
+<tr><td>Startup fails: <em>spring.acp.runtimes has options for unregistered runtime(s)</em></td><td>A tier-3 block names a runtime nothing supplies; usually a typo.</td></tr>
+<tr><td><em>workspace '…' is not an existing directory</em></td><td>Create it first; ACP Spring will not. A relative path is resolved against the JVM's working directory.</td></tr>
+<tr><td>The first prompt fails with <em>Could not install skill …</em></td><td>A skill failed to fetch or check. Pin a <code>ref</code> that exists, check <code>path</code>, make sure <code>git</code> is installed, and remove any symlinks from the skill.</td></tr>
+<tr><td>The agent ignores <code>AGENTS.md</code></td><td>It is not at the root of the workspace actually used; check the <code>workspace</code> in the startup <code>INFO</code> line.</td></tr>
+<tr><td>A skill is never used</td><td>Check <code>&lt;workspace&gt;/.agents/skills/&lt;name&gt;/SKILL.md</code> exists, the description says <em>when</em> to use it, and the agent has the tools it needs (goose: <code>builtins: developer</code>).</td></tr>
+<tr><td>The model says it has no tools from an MCP server</td><td>The server failed to load, which ACP never reports. On goose, check the <code>notices()</code> or WARN log; try <code>mcp.answer-discover</code> for gateways; confirm HTTPS, headers and OAuth sign-in.</td></tr>
+<tr><td>Tool calls are refused</td><td>Default <code>policy: deny</code>. Use <code>allowlist</code> with names read off a DEBUG log, or <code>auto-approve</code>.</td></tr>
+<tr><td>A warning that a model or mode cannot be honoured</td><td>The agent does not advertise the value; the warning lists what it does offer. With your own endpoint, check its <code>/models</code>.</td></tr>
+<tr><td>Codex: <em>Authentication required</em></td><td>No usable login: set <code>spring.acp.provider.api-key</code> (and <code>api-type: openai</code>). Against your own endpoint, check it serves the Responses API.</td></tr>
+<tr><td>Goose cannot find the key <code>goose configure</code> saved</td><td>The adapter sets <code>GOOSE_DISABLE_KEYRING=1</code>, so a key kept in the OS keychain is not read. Set <code>spring.acp.provider.api-key</code>, or export the provider's key variable.</td></tr>
+<tr><td>Turns end in <code>Failed</code> with a timeout</td><td>Raise <code>spring.acp.timeout</code>, or per turn with <code>.options(o -&gt; o.timeout(…))</code>.</td></tr>
+</tbody>
+</table></div>
+
+<footer class="page-footer">
+ACP Spring 0.1.0 · MIT License ·
+Protocol reference at <a href="https://agentclientprotocol.com">agentclientprotocol.com</a>
+</footer>
+</section>
+
+</article>
+</main>
+
+<aside class="toc" aria-label="On this page">
+	<p class="toc-title" id="toc-title">On this page</p>
+	<ul id="toc-list"></ul>
+</aside>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+	'use strict';
+
+	/* Syntax highlighting; the page reads fine without it (offline, blocked CDN). */
+	if (window.hljs) {
+		document.querySelectorAll('pre code').forEach(function (block) {
+			if (block.className.indexOf('language-plaintext') === -1) window.hljs.highlightElement(block);
+		});
+	}
+
+	/* Theme toggle: follow the OS until the reader chooses. */
+	var root = document.documentElement;
+	document.querySelector('.theme-toggle').addEventListener('click', function () {
+		var current = root.getAttribute('data-theme')
+			|| (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+		var next = current === 'dark' ? 'light' : 'dark';
+		root.setAttribute('data-theme', next);
+		try { localStorage.setItem('acp-docs-theme', next); } catch (e) { /* not persisted */ }
+	});
+
+	/* Mobile navigation drawer. */
+	var toggle = document.querySelector('.nav-toggle');
+	toggle.addEventListener('click', function () {
+		var open = document.body.classList.toggle('nav-open');
+		toggle.setAttribute('aria-expanded', String(open));
+	});
+	document.querySelectorAll('.nav a').forEach(function (link) {
+		link.addEventListener('click', function () {
+			document.body.classList.remove('nav-open');
+			toggle.setAttribute('aria-expanded', 'false');
+		});
+	});
+
+	/* Tabs, kept in sync across the page by label (as on docs.spring.io). */
+	function selectTab(label) {
+		document.querySelectorAll('.tabs').forEach(function (tabs) {
+			if (!tabs.querySelector('[data-tab="' + label + '"]')) return;
+			tabs.querySelectorAll('.tablist button').forEach(function (b) {
+				b.setAttribute('aria-selected', String(b.dataset.tab === label));
+			});
+			tabs.querySelectorAll('.tabpanel').forEach(function (p) {
+				p.classList.toggle('is-active', p.dataset.tab === label);
+			});
+		});
+	}
+	document.querySelectorAll('.tablist button').forEach(function (button) {
+		button.addEventListener('click', function () { selectTab(button.dataset.tab); });
+	});
+
+	/* Copy buttons on listings. */
+	document.querySelectorAll('.listing .content').forEach(function (content) {
+		var button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'copy';
+		button.textContent = 'Copy';
+		button.addEventListener('click', function () {
+			var text = content.querySelector('pre').innerText;
+			var done = function () {
+				button.textContent = 'Copied';
+				button.classList.add('done');
+				setTimeout(function () { button.textContent = 'Copy'; button.classList.remove('done'); }, 1500);
+			};
+			if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+		});
+		content.appendChild(button);
+	});
+
+	/* Heading anchors. */
+	document.querySelectorAll('.doc h2, .doc h3, .doc h4').forEach(function (h) {
+		var id = h.id || (h.parentElement.tagName === 'SECTION' && h.parentElement.firstElementChild === h ? h.parentElement.id : null);
+		if (!id || h.hidden) return;
+		var a = document.createElement('a');
+		a.className = 'anchor';
+		a.href = '#' + id;
+		a.setAttribute('aria-hidden', 'true');
+		a.textContent = '#';
+		h.insertBefore(a, h.firstChild);
+	});
+
+	/* Scroll spy: the left nav marks the current chapter, the right column lists its sections. */
+	var sections = Array.prototype.slice.call(document.querySelectorAll('.doc > section'));
+	var navLinks = {};
+	document.querySelectorAll('.nav-list a').forEach(function (a) { navLinks[a.getAttribute('href').slice(1)] = a; });
+	var tocList = document.getElementById('toc-list');
+	var tocTitle = document.getElementById('toc-title');
+	var crumb = document.getElementById('crumb');
+	var currentSection = null;
+
+	function chapterTitle(section) {
+		var link = navLinks[section.id];
+		return link ? link.textContent : section.id;
+	}
+
+	function buildToc(section) {
+		tocList.innerHTML = '';
+		tocTitle.textContent = chapterTitle(section);
+		var heads = section.querySelectorAll('h3[id]');
+		if (!heads.length) {
+			var li = document.createElement('li');
+			li.innerHTML = '<span class="toc-empty">No subsections</span>';
+			tocList.appendChild(li);
+			return;
+		}
+		heads.forEach(function (h) {
+			var li = document.createElement('li');
+			var a = document.createElement('a');
+			a.href = '#' + h.id;
+			a.textContent = h.textContent.replace(/^#/, '');
+			li.appendChild(a);
+			tocList.appendChild(li);
+		});
+	}
+
+	function onScroll() {
+		var offset = 120;
+		var active = sections[0];
+		for (var i = 0; i < sections.length; i++) {
+			if (sections[i].getBoundingClientRect().top - offset <= 0) active = sections[i];
+		}
+		if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) active = sections[sections.length - 1];
+
+		if (active !== currentSection) {
+			currentSection = active;
+			Object.keys(navLinks).forEach(function (id) { navLinks[id].classList.toggle('is-current', id === active.id); });
+			buildToc(active);
+			crumb.textContent = chapterTitle(active);
+		}
+
+		var heads = active.querySelectorAll('h3[id]');
+		var activeHead = null;
+		heads.forEach(function (h) { if (h.getBoundingClientRect().top - offset <= 0) activeHead = h; });
+		tocList.querySelectorAll('a').forEach(function (a) {
+			a.classList.toggle('is-active', !!activeHead && a.getAttribute('href') === '#' + activeHead.id);
+		});
+	}
+
+	var ticking = false;
+	window.addEventListener('scroll', function () {
+		if (ticking) return;
+		ticking = true;
+		requestAnimationFrame(function () { onScroll(); ticking = false; });
+	}, { passive: true });
+	window.addEventListener('resize', onScroll);
+	onScroll();
+})();
+</script>
+</body>
+</html>
