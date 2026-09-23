@@ -104,13 +104,15 @@ public class AcpAutoConfiguration {
 	 * <p>A {@code McpCredentialsProvider} bean puts the HTTP MCP servers it answers for behind the
 	 * loopback proxy, with that session's credentials; a {@code SessionPrincipalResolver} bean says
 	 * whose session it is when a prompt does not. Neither is required, and without them every server
-	 * is handed to the agent as configured.
+	 * is handed to the agent as configured. A {@code PermissionPrompt} bean is who
+	 * {@code permissions.policy: ask} asks, and that policy fails to start without one.
 	 */
 	@Bean
 	@ConditionalOnMissingBean
 	AgentSettings acpAgentSettings(AcpProperties properties, SelectedRuntime selected,
 			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.mcp.McpCredentialsProvider> credentials,
-			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.session.SessionPrincipalResolver> principals) {
+			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.session.SessionPrincipalResolver> principals,
+			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.permission.PermissionPrompt> prompts) {
 		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
 				: properties.getWorkspace().toAbsolutePath();
 		warnAboutUnprotectedOAuthServers(properties, credentials);
@@ -122,7 +124,7 @@ public class AcpAutoConfiguration {
 				.mcpServers(properties.toMcpServerSpecs()).skills(properties.toSkillSpecs())
 				.mcp(properties.toMcpSettings().withCredentials(credentials.getIfAvailable())
 						.withPrincipals(principals.getIfAvailable()))
-				.permissions(properties.toPermissionPolicy())
+				.permissions(properties.toPermissionPolicy(prompts.getIfAvailable()))
 				.filesystem(properties.toFileSystemAccess()).terminal(properties.toTerminalAccess())
 				.onUnsupported(properties.getOnUnsupported()).sessionTtl(properties.getPool().getSessionTtl())
 				.pool(properties.toPoolSettings()).protocol(properties.toProtocolSettings())

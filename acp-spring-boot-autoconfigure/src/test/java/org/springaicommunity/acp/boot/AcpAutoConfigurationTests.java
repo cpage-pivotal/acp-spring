@@ -74,6 +74,48 @@ class AcpAutoConfigurationTests {
 	}
 
 	@Test
+	void askPutsTheQuestionToThePermissionPromptBean() {
+		AcpSchema.PermissionOption allow = new AcpSchema.PermissionOption("a", "Allow",
+				AcpSchema.PermissionOptionKind.ALLOW_ONCE);
+		List<String> asked = new java.util.ArrayList<>();
+		org.springaicommunity.acp.permission.PermissionPrompt prompt = question -> {
+			asked.add(question.describe());
+			return Optional.of(allow);
+		};
+		runner.withBean(org.springaicommunity.acp.permission.PermissionPrompt.class, () -> prompt)
+			.withPropertyValues("spring.acp.permissions.policy=ask")
+			.run(context -> {
+				PermissionPolicy policy = context.getBean(AgentSettings.class).permissions();
+
+				assertThat(policy.decide(Optional.of("developer__shell"), List.of(allow))).contains(allow);
+				assertThat(asked).containsExactly("developer__shell");
+			});
+	}
+
+	@Test
+	void askWithNobodyToAskFailsToStartAndSaysWhatIsMissing() {
+		runner.withPropertyValues("spring.acp.permissions.policy=ask")
+			.run(context -> assertThat(context).hasFailed()
+				.getFailure()
+				.rootCause()
+				.hasMessageContaining("acp-spring-console"));
+	}
+
+	@Test
+	void aPermissionPromptAloneDoesNotOverrideTheConfiguredPolicy() {
+		org.springaicommunity.acp.permission.PermissionPrompt prompt = question -> {
+			throw new AssertionError("nobody should have been asked");
+		};
+		runner.withBean(org.springaicommunity.acp.permission.PermissionPrompt.class, () -> prompt).run(context -> {
+			AcpSchema.PermissionOption reject = new AcpSchema.PermissionOption("r", "Reject",
+					AcpSchema.PermissionOptionKind.REJECT_ONCE);
+
+			assertThat(context.getBean(AgentSettings.class).permissions().decide(Optional.of("t"), List.of(reject)))
+				.contains(reject);
+		});
+	}
+
+	@Test
 	void bindsHttpAndStdioMcpServers() {
 		runner.withPropertyValues("spring.acp.mcp-servers[0].name=remote",
 				"spring.acp.mcp-servers[0].url=https://tools.example.com/mcp",

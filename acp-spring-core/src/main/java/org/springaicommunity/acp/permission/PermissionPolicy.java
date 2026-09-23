@@ -25,6 +25,47 @@ public interface PermissionPolicy {
 	 */
 	Optional<AcpSchema.PermissionOption> decide(Optional<String> toolName, List<AcpSchema.PermissionOption> options);
 
+	/**
+	 * Decides with the whole request in view. The client calls this one; the default reads only the
+	 * tool name and options, which is all a rule needs. A policy that hands the question to a person
+	 * overrides it, because a person also needs the agent's description of the call.
+	 *
+	 * @param request the agent's request as it arrived
+	 * @param toolName the tool being requested, when the agent made it knowable
+	 */
+	default Optional<AcpSchema.PermissionOption> decide(AcpSchema.RequestPermissionRequest request,
+			Optional<String> toolName) {
+		return decide(toolName, request.options());
+	}
+
+	/**
+	 * Asks a person, every time. For an application with someone at the keyboard — a terminal, a
+	 * prototype UI — where the question is the point: it shows what the agent wants to do before it
+	 * does it. The answer is taken as given, so an option the agent did not offer is treated as a
+	 * cancellation rather than sent back.
+	 */
+	static PermissionPolicy ask(PermissionPrompt prompt) {
+		java.util.Objects.requireNonNull(prompt, "prompt");
+		return new PermissionPolicy() {
+			@Override
+			public Optional<AcpSchema.PermissionOption> decide(Optional<String> toolName,
+					List<AcpSchema.PermissionOption> options) {
+				return offered(prompt.ask(new PermissionQuestion(toolName, null, null, options)), options);
+			}
+
+			@Override
+			public Optional<AcpSchema.PermissionOption> decide(AcpSchema.RequestPermissionRequest request,
+					Optional<String> toolName) {
+				return offered(prompt.ask(PermissionQuestion.of(request, toolName)), request.options());
+			}
+		};
+	}
+
+	private static Optional<AcpSchema.PermissionOption> offered(Optional<AcpSchema.PermissionOption> chosen,
+			List<AcpSchema.PermissionOption> options) {
+		return chosen.filter(option -> options != null && options.contains(option));
+	}
+
 	/** Rejects everything. */
 	static PermissionPolicy deny() {
 		return (toolName, options) -> pick(options, AcpSchema.PermissionOptionKind.REJECT_ONCE,
