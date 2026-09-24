@@ -55,7 +55,7 @@ Run everything from the repository root.
    and a human decision, not a test edit. Report it and stop.
 
 5. **Live verification (opt-in, ask first).** The live suites spend real tokens, and moving a
-   local install (`brew upgrade goose`, `opencode upgrade`) changes the user's machine, so do
+   local install (`brew upgrade --cask block-goose`, `brew upgrade opencode`) changes the user's machine, so do
    neither without a yes. Codex needs no install: its live suite runs `npx` with the new
    `DEFAULT_PACKAGE`. Check what is installed with `goose --version` and `opencode --version`.
    With the user's go-ahead and the agent at the new version:
