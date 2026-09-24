@@ -14,7 +14,7 @@
 
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-acp</artifactId>
-    <version>0.3.0</version>
+    <version>0.3.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Spring AI ACP</name>
