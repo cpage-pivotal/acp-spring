@@ -48,7 +48,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * Tier-3 options, under {@code spring.acp.runtimes.codex}:
  *
  * <pre>{@code
- * package: "@agentclientprotocol/codex-acp@1.13.0"   # what npx runs
+ * package: "@agentclientprotocol/codex-acp@1.13.1"   # what npx runs
  * command: /usr/local/bin/codex-acp                  # instead of npx
  * args: [ --verbose ]
  * home: /var/lib/codex                               # CODEX_HOME
@@ -64,7 +64,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * Pinned rather than floating: an agent that changes under a running application is
 	 * not a feature.
 	 */
-	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.13.0";
+	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.13.1";
 
 	/** Codex reads its configuration, and keeps its credentials, under this directory. */
 	public static final String HOME_ENV = "CODEX_HOME";

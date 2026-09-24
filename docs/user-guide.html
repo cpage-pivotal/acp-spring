@@ -697,7 +697,7 @@ of three tiers, and the tier tells you how portable it is:</p>
 	<li><strong>An agent you can run.</strong> Spring AI ACP does not package agent binaries. For the compiled adapters:
 		<ul>
 			<li><strong>Goose</strong>: the <code>goose</code> CLI on the <code>PATH</code>, or <code>GOOSE_CLI_PATH</code> pointing at it. Verified against goose 1.51.</li>
-			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.0</code>, so the first start downloads it.</li>
+			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.1</code>, so the first start downloads it.</li>
 			<li><strong>OpenCode</strong>: the <code>opencode</code> CLI on the <code>PATH</code>, or <code>OPENCODE_CLI_PATH</code>. Verified against opencode 1.18.</li>
 			<li><strong>Registry agents</strong>: nothing pre-installed; the agent is downloaded and checksum-verified. Agents distributed through npm or PyPI need <code>npx</code> or <code>uvx</code>.</li>
 		</ul>
@@ -953,7 +953,7 @@ code never names one; <code>spring.acp.runtime</code> does.</p>
 <thead><tr><th><code>spring.acp.runtime</code></th><th>Starter</th><th>Launches</th><th>Transport</th></tr></thead>
 <tbody>
 <tr><td><code>goose</code></td><td><code>spring-ai-acp-boot-starter-goose</code></td><td><code>goose acp</code>, or a supervised <code>goose serve</code></td><td>stdio, or WebSocket</td></tr>
-<tr><td><code>codex</code></td><td><code>spring-ai-acp-boot-starter-codex</code></td><td><code>npx -y @agentclientprotocol/codex-acp@1.13.0</code></td><td>stdio</td></tr>
+<tr><td><code>codex</code></td><td><code>spring-ai-acp-boot-starter-codex</code></td><td><code>npx -y @agentclientprotocol/codex-acp@1.13.1</code></td><td>stdio</td></tr>
 <tr><td><code>opencode</code></td><td><code>spring-ai-acp-boot-starter-opencode</code></td><td><code>opencode acp</code></td><td>stdio</td></tr>
 <tr><td>any registry id, e.g. <code>gemini</code></td><td><code>spring-ai-acp-boot-starter-registry</code></td><td>whatever the <a href="https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json">ACP registry</a> publishes</td><td>stdio</td></tr>
 </tbody>
@@ -1217,7 +1217,7 @@ which wraps Codex, and the first start pays an <code>npx</code> download.</p>
   acp:
     runtimes:
       codex:
-        package: "@agentclientprotocol/codex-acp@1.13.0"   # what npx runs (this is the default)
+        package: "@agentclientprotocol/codex-acp@1.13.1"   # what npx runs (this is the default)
         # command: /usr/local/bin/codex-acp                # a pre-installed adapter instead of npx
         args: [ ]                                           # extra arguments for the adapter
         home: /var/lib/codex                                # CODEX_HOME; see "Codex's home directory"
