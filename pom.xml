@@ -5,18 +5,47 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.springaicommunity.acp</groupId>
-    <artifactId>acp-spring</artifactId>
-    <version>0.2.1-SNAPSHOT</version>
+    <parent>
+        <groupId>org.springaicommunity</groupId>
+        <artifactId>spring-ai-community-parent</artifactId>
+        <version>1.0.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>org.springaicommunity</groupId>
+    <artifactId>spring-ai-acp</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>ACP Spring</name>
+    <name>Spring AI ACP</name>
     <description>Spring abstraction over Agent Client Protocol coding agents</description>
+    <url>https://github.com/cpage-pivotal/acp-spring</url>
+
+    <organization>
+        <name>Spring AI Community</name>
+        <url>https://github.com/spring-ai-community</url>
+    </organization>
+
+    <scm>
+        <url>https://github.com/cpage-pivotal/acp-spring</url>
+        <connection>scm:git:https://github.com/cpage-pivotal/acp-spring.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/cpage-pivotal/acp-spring.git</developerConnection>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/cpage-pivotal/acp-spring/issues</url>
+    </issueManagement>
+
+    <ciManagement>
+        <system>GitHub Actions</system>
+        <url>https://github.com/cpage-pivotal/acp-spring/actions</url>
+    </ciManagement>
 
     <licenses>
         <license>
-            <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -32,26 +61,27 @@
         <!-- Pre-1.0 and community-maintained: pinned exactly, like acp-core. -->
         <mcp-security.version>0.1.14</mcp-security.version>
         <mockito.version>5.23.0</mockito.version>
-        <!-- The 3.x line, as Spring Shell 4 uses; only acp-spring-console depends on it. -->
+        <jacoco.version>0.8.15</jacoco.version>
+        <!-- The 3.x line, as Spring Shell 4 uses; only spring-ai-acp-console depends on it. -->
         <jline.version>3.30.17</jline.version>
     </properties>
 
     <modules>
-        <module>acp-spring-core</module>
-        <module>acp-spring-runtime-goose</module>
-        <module>acp-spring-runtime-codex</module>
-        <module>acp-spring-runtime-opencode</module>
-        <module>acp-spring-runtime-registry</module>
-        <module>acp-spring-boot-autoconfigure</module>
-        <module>acp-spring-boot-starter</module>
-        <module>acp-spring-boot-starter-goose</module>
-        <module>acp-spring-boot-starter-codex</module>
-        <module>acp-spring-boot-starter-opencode</module>
-        <module>acp-spring-boot-starter-registry</module>
-        <module>acp-spring-ai</module>
-        <module>acp-spring-mcp-oauth</module>
-        <module>acp-spring-console</module>
-        <module>acp-spring-test</module>
+        <module>spring-ai-acp-core</module>
+        <module>spring-ai-acp-runtime-goose</module>
+        <module>spring-ai-acp-runtime-codex</module>
+        <module>spring-ai-acp-runtime-opencode</module>
+        <module>spring-ai-acp-runtime-registry</module>
+        <module>spring-ai-acp-boot-autoconfigure</module>
+        <module>spring-ai-acp-boot-starter</module>
+        <module>spring-ai-acp-boot-starter-goose</module>
+        <module>spring-ai-acp-boot-starter-codex</module>
+        <module>spring-ai-acp-boot-starter-opencode</module>
+        <module>spring-ai-acp-boot-starter-registry</module>
+        <module>spring-ai-acp-ai</module>
+        <module>spring-ai-acp-mcp-oauth</module>
+        <module>spring-ai-acp-console</module>
+        <module>spring-ai-acp-test</module>
         <module>samples/smoke-app</module>
     </modules>
 
@@ -86,78 +116,78 @@
             </dependency>
 
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-core</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-autoconfigure</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-autoconfigure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-runtime-goose</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-runtime-goose</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-starter</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-starter-goose</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-starter-codex</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-starter-codex</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-starter-opencode</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-starter-opencode</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-boot-starter-registry</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-boot-starter-registry</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-runtime-codex</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-runtime-codex</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-runtime-opencode</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-runtime-opencode</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-runtime-registry</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-runtime-registry</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-ai</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-mcp-oauth</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-mcp-oauth</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-console</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-console</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.springaicommunity.acp</groupId>
-                <artifactId>acp-spring-test</artifactId>
+                <groupId>org.springaicommunity</groupId>
+                <artifactId>spring-ai-acp-test</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -222,6 +252,40 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>io.spring.javaformat</groupId>
+                <artifactId>spring-javaformat-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>validate-spring-format</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>validate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 
     <profiles>

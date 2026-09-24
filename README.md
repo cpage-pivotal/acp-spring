@@ -1,4 +1,10 @@
-# acp-spring
+# spring-ai-acp
+
+[![CI](https://github.com/cpage-pivotal/acp-spring/actions/workflows/ci.yml/badge.svg)](https://github.com/cpage-pivotal/acp-spring/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange.svg)](https://adoptium.net/temurin/releases/?version=21)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.x-6DB33F.svg)](https://docs.spring.io/spring-boot/)
+[![Spring AI](https://img.shields.io/badge/Spring%20AI-2.x-6DB33F.svg)](https://docs.spring.io/spring-ai/reference/)
 
 A Spring library that talks to **any** [Agent Client Protocol](https://agentclientprotocol.com)
 coding agent — Goose, Codex, OpenCode, and others — behind one programming model and one
@@ -35,27 +41,27 @@ Releases are published to a public Artifact Registry repository; no credentials 
 ```xml
 <repositories>
     <repository>
-        <id>acp-spring</id>
+        <id>spring-ai-acp</id>
         <url>https://us-central1-maven.pkg.dev/cf-mcp/maven-public</url>
     </repository>
 </repositories>
 
 <dependency>
-    <groupId>org.springaicommunity.acp</groupId>
-    <artifactId>acp-spring-boot-starter-goose</artifactId>
-    <version>0.2.0</version>
+    <groupId>org.springaicommunity</groupId>
+    <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
+    <version>0.1.0</version>
 </dependency>
 ```
 
-Add one runtime starter. Each brings `acp-spring-boot-starter` (core and auto-configuration, no
+Add one runtime starter. Each brings `spring-ai-acp-boot-starter` (core and auto-configuration, no
 agent) plus one adapter:
 
 | Starter | Agent |
 | --- | --- |
-| `acp-spring-boot-starter-goose` | Goose |
-| `acp-spring-boot-starter-codex` | Codex (`codex-acp`) |
-| `acp-spring-boot-starter-opencode` | OpenCode |
-| `acp-spring-boot-starter-registry` | Any agent the ACP registry publishes, named by `spring.acp.runtime` |
+| `spring-ai-acp-boot-starter-goose` | Goose |
+| `spring-ai-acp-boot-starter-codex` | Codex (`codex-acp`) |
+| `spring-ai-acp-boot-starter-opencode` | OpenCode |
+| `spring-ai-acp-boot-starter-registry` | Any agent the ACP registry publishes, named by `spring.acp.runtime` |
 
 With exactly one adapter on the classpath, `spring.acp.runtime` can be left out. There is no default
 agent: with several adapters, or only the registry, it must be set, and startup fails naming the
@@ -84,16 +90,28 @@ M4 added the registry-driven runtime with SHA-256-verified downloads, `AcpChatMo
 a Micrometer observation per turn and per tool call, `AgentEvent.UsageUpdated`, and real ACP version
 negotiation behind a feature flag.
 
-The design is in **[docs/design.md](docs/design.md)** — the feasibility analysis, the configuration
-model, the runtime SPI, seven known gaps in the ACP Java SDK, and what each milestone measured.
+The reference is in **[docs/user-guide.html](docs/user-guide.html)** — the configuration model,
+the runtime SPI, and the protocol handling; the feasibility analysis and what each milestone
+measured are in this README and the [changelog](CHANGELOG.md).
+
+## Requirements
+
+| Technology | Supported version |
+| --- | --- |
+| Java | 21 or later |
+| Spring Boot | 4.1.x |
+| Spring AI | 2.x |
+| Maven | Maven Wrapper included |
+
+Spring Boot 3.x is not a supported target for this project.
 
 ## Try it
 
 ```bash
-mvn install
-mvn -pl samples/smoke-app spring-boot:run
-mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
-mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
+./mvnw install
+./mvnw -pl samples/smoke-app spring-boot:run
+./mvnw -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
+./mvnw -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
 ```
 
 Needs the corresponding agent installed and authenticated: `goose` or `opencode` on the PATH, or
@@ -103,7 +121,7 @@ A fourth run needs nothing installed at all, because the agent is fetched from t
 verified against its published SHA-256 and launched:
 
 ```bash
-mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=gemini
+./mvnw -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=gemini
 ```
 
 ## A caveat worth reading before you rely on it
@@ -212,7 +230,7 @@ method, rather than failing on the wire with a code the caller has to interpret.
 ## An agent nobody wrote an adapter for
 
 Set `spring.acp.runtime` to any of the 41 agents the ACP registry publishes, add
-`acp-spring-boot-starter-registry`, and the agent is resolved from a cached catalogue snapshot,
+`spring-ai-acp-boot-starter-registry`, and the agent is resolved from a cached catalogue snapshot,
 downloaded, checked against its published SHA-256 and launched:
 
 ```
@@ -237,7 +255,7 @@ ChatResponse response = chatModel.call(new Prompt("Review the pending changes",
         AcpChatOptions.builder().session("review-123").mode("plan").build()));
 ```
 
-Add `acp-spring-ai` and the agent appears wherever a Spring AI application already looks for
+Add `spring-ai-acp-ai` and the agent appears wherever a Spring AI application already looks for
 a model. It is an adapter rather than a wrapper, because the two models disagree about who owns the
 conversation: a chat completion is stateless and resends the history every call, while an ACP session
 holds it — along with a file tree, a plan and tool results no message list can carry. So a named
@@ -246,7 +264,7 @@ memory or the other, not both.
 
 ## MCP servers that need each user's own sign-in
 
-Add `acp-spring-mcp-oauth`, mark the server, and add one line to your `SecurityFilterChain`:
+Add `spring-ai-acp-mcp-oauth`, mark the server, and add one line to your `SecurityFilterChain`:
 
 ```yaml
 spring:
@@ -266,11 +284,11 @@ after that their token is refreshed as needed. A terminal application sets
 `spring.acp.mcp.oauth.mode: local` instead and needs no filter chain: the first run opens a browser
 for each server, and the sign-ins are kept in `~/.config/<spring.application.name>/`. The agent never sees it: HTTP MCP servers with
 credentials are reached through a loopback proxy, one unguessable route per session. See "MCP
-credentials" in `docs/design.md`.
+credentials" in `docs/user-guide.html`.
 
 ## A terminal chat, for prototyping the agent
 
-Add `acp-spring-console` and run the application from a terminal: it becomes a chat with its agent.
+Add `spring-ai-acp-console` and run the application from a terminal: it becomes a chat with its agent.
 There is no code to write. Turns stream as they happen, with tool calls, plans and failures shown as
 they occur. It has line editing and history, and Ctrl-C cancels a turn without ending the
 conversation. `/new`, `/sessions` and `/resume` manage conversations, where the agent supports them.
@@ -312,4 +330,4 @@ it.
 
 ## License
 
-MIT.
+Spring AI ACP is available under the [Apache License 2.0](LICENSE).

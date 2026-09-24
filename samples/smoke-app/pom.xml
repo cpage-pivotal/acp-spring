@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springaicommunity.acp</groupId>
-        <artifactId>acp-spring</artifactId>
-        <version>0.2.1-SNAPSHOT</version>
+        <groupId>org.springaicommunity</groupId>
+        <artifactId>spring-ai-acp</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>acp-spring-smoke-app</artifactId>
+    <artifactId>spring-ai-acp-smoke-app</artifactId>
     <name>ACP Spring Smoke App</name>
     <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
@@ -28,20 +28,20 @@
           spring.acp.runtime accept an agent none of the three adapters claims.
         -->
         <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-boot-starter-goose</artifactId>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-boot-starter-codex</artifactId>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-boot-starter-codex</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-boot-starter-opencode</artifactId>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-boot-starter-opencode</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-boot-starter-registry</artifactId>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-boot-starter-registry</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -53,8 +53,8 @@
           ObservationRegistry that turns every turn into a timer and a span.
         -->
         <dependency>
-            <groupId>org.springaicommunity.acp</groupId>
-            <artifactId>acp-spring-ai</artifactId>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-ai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

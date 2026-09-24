@@ -641,7 +641,7 @@ conversation, ACP Spring configures the things that make an agent <em>yours</em>
 	<div class="stack">
 		<div class="layer app"><b>Your application</b><span>AgentClient · AgentSessions · AcpChatModel (Spring AI) · optional HTTP endpoint</span></div>
 		<div class="arrow">▼</div>
-		<div class="layer"><b>acp-spring-core</b><span>connection pool · session registry · config negotiation · permission policy · MCP credential proxy · skill installer · workspace jail · observations</span></div>
+		<div class="layer"><b>spring-ai-acp-core</b><span>connection pool · session registry · config negotiation · permission policy · MCP credential proxy · skill installer · workspace jail · observations</span></div>
 		<div class="arrow">▼ <code>AgentRuntime</code> SPI</div>
 		<div class="agents">
 			<div class="layer"><b>goose</b><span>stdio or WebSocket</span></div>
@@ -674,15 +674,15 @@ of three tiers, and the tier tells you how portable it is:</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Artifact</th><th>Contents</th></tr></thead>
 <tbody>
-<tr><td><code>acp-spring-boot-starter-goose</code></td><td>Starter plus the Goose adapter</td></tr>
-<tr><td><code>acp-spring-boot-starter-codex</code></td><td>Starter plus the Codex adapter (<code>@agentclientprotocol/codex-acp</code>)</td></tr>
-<tr><td><code>acp-spring-boot-starter-opencode</code></td><td>Starter plus the OpenCode adapter</td></tr>
-<tr><td><code>acp-spring-boot-starter-registry</code></td><td>Starter plus the registry runtime: any agent the ACP registry publishes</td></tr>
-<tr><td><code>acp-spring-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AgentRuntime</code>)</td></tr>
-<tr><td><code>acp-spring-ai</code></td><td><code>AcpChatModel</code>: the agent as a Spring AI <code>ChatModel</code></td></tr>
-<tr><td><code>acp-spring-mcp-oauth</code></td><td>Per-user OAuth sign-in to MCP servers (Spring Security)</td></tr>
-<tr><td><code>acp-spring-console</code></td><td>A terminal chat over the agent, for prototyping it (JLine); answers <code>policy: ask</code></td></tr>
-<tr><td><code>acp-spring-test</code></td><td><code>ScriptedAgent</code>, <code>AgentProbe</code>, and the <code>AgentRuntimeContract</code> conformance suite</td></tr>
+<tr><td><code>spring-ai-acp-boot-starter-goose</code></td><td>Starter plus the Goose adapter</td></tr>
+<tr><td><code>spring-ai-acp-boot-starter-codex</code></td><td>Starter plus the Codex adapter (<code>@agentclientprotocol/codex-acp</code>)</td></tr>
+<tr><td><code>spring-ai-acp-boot-starter-opencode</code></td><td>Starter plus the OpenCode adapter</td></tr>
+<tr><td><code>spring-ai-acp-boot-starter-registry</code></td><td>Starter plus the registry runtime: any agent the ACP registry publishes</td></tr>
+<tr><td><code>spring-ai-acp-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AgentRuntime</code>)</td></tr>
+<tr><td><code>spring-ai-acp-ai</code></td><td><code>AcpChatModel</code>: the agent as a Spring AI <code>ChatModel</code></td></tr>
+<tr><td><code>spring-ai-acp-mcp-oauth</code></td><td>Per-user OAuth sign-in to MCP servers (Spring Security)</td></tr>
+<tr><td><code>spring-ai-acp-console</code></td><td>A terminal chat over the agent, for prototyping it (JLine); answers <code>policy: ask</code></td></tr>
+<tr><td><code>spring-ai-acp-test</code></td><td><code>ScriptedAgent</code>, <code>AgentProbe</code>, and the <code>AgentRuntimeContract</code> conformance suite</td></tr>
 </tbody>
 </table></div>
 </section>
@@ -717,7 +717,7 @@ Add the repository and <strong>one runtime starter</strong>:</p>
 <div class="tabpanel is-active" data-tab="Maven" role="tabpanel">
 <div class="listing"><div class="content"><pre><code class="language-xml">&lt;repositories&gt;
     &lt;repository&gt;
-        &lt;id&gt;acp-spring&lt;/id&gt;
+        &lt;id&gt;spring-ai-acp&lt;/id&gt;
         &lt;url&gt;https://us-central1-maven.pkg.dev/cf-mcp/maven-public&lt;/url&gt;
     &lt;/repository&gt;
 &lt;/repositories&gt;
@@ -725,8 +725,8 @@ Add the repository and <strong>one runtime starter</strong>:</p>
 &lt;dependencies&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-boot-starter-goose&lt;/artifactId&gt;
-        &lt;version&gt;0.2.0&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-boot-starter-goose&lt;/artifactId&gt;
+        &lt;version&gt;0.1.0&lt;/version&gt;
     &lt;/dependency&gt;
 &lt;/dependencies&gt;</code></pre></div></div>
 </div>
@@ -737,7 +737,7 @@ Add the repository and <strong>one runtime starter</strong>:</p>
 }
 
 dependencies {
-    implementation("org.springaicommunity.acp:acp-spring-boot-starter-goose:0.2.0")
+    implementation("org.springaicommunity:spring-ai-acp-boot-starter-goose:0.1.0")
 }</code></pre></div></div>
 </div>
 </div>
@@ -952,10 +952,10 @@ code never names one; <code>spring.acp.runtime</code> does.</p>
 <div class="table-wrap"><table>
 <thead><tr><th><code>spring.acp.runtime</code></th><th>Starter</th><th>Launches</th><th>Transport</th></tr></thead>
 <tbody>
-<tr><td><code>goose</code></td><td><code>acp-spring-boot-starter-goose</code></td><td><code>goose acp</code>, or a supervised <code>goose serve</code></td><td>stdio, or WebSocket</td></tr>
-<tr><td><code>codex</code></td><td><code>acp-spring-boot-starter-codex</code></td><td><code>npx -y @agentclientprotocol/codex-acp@1.13.0</code></td><td>stdio</td></tr>
-<tr><td><code>opencode</code></td><td><code>acp-spring-boot-starter-opencode</code></td><td><code>opencode acp</code></td><td>stdio</td></tr>
-<tr><td>any registry id, e.g. <code>gemini</code></td><td><code>acp-spring-boot-starter-registry</code></td><td>whatever the <a href="https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json">ACP registry</a> publishes</td><td>stdio</td></tr>
+<tr><td><code>goose</code></td><td><code>spring-ai-acp-boot-starter-goose</code></td><td><code>goose acp</code>, or a supervised <code>goose serve</code></td><td>stdio, or WebSocket</td></tr>
+<tr><td><code>codex</code></td><td><code>spring-ai-acp-boot-starter-codex</code></td><td><code>npx -y @agentclientprotocol/codex-acp@1.13.0</code></td><td>stdio</td></tr>
+<tr><td><code>opencode</code></td><td><code>spring-ai-acp-boot-starter-opencode</code></td><td><code>opencode acp</code></td><td>stdio</td></tr>
+<tr><td>any registry id, e.g. <code>gemini</code></td><td><code>spring-ai-acp-boot-starter-registry</code></td><td>whatever the <a href="https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json">ACP registry</a> publishes</td><td>stdio</td></tr>
 </tbody>
 </table></div>
 
@@ -971,7 +971,7 @@ code never names one; <code>spring.acp.runtime</code> does.</p>
 <p>There are three ways to move an application from one agent to another. None involves changing Java code.</p>
 
 <h4>1. Replace the starter</h4>
-<p>Swap <code>acp-spring-boot-starter-goose</code> for <code>acp-spring-boot-starter-opencode</code> (say), and
+<p>Swap <code>spring-ai-acp-boot-starter-goose</code> for <code>spring-ai-acp-boot-starter-opencode</code> (say), and
 change or remove <code>spring.acp.runtime</code>. Best when a deployment only ever uses one agent: the other
 adapters stay off the classpath.</p>
 
@@ -1426,7 +1426,7 @@ providers yourself.</p>
 
 <!-- ------------------------------------------------------------ -->
 <h3 id="rt-registry">Registry agents</h3>
-<p>With <code>acp-spring-boot-starter-registry</code>, <code>spring.acp.runtime</code> can name any agent in the ACP
+<p>With <code>spring-ai-acp-boot-starter-registry</code>, <code>spring.acp.runtime</code> can name any agent in the ACP
 registry that no compiled adapter claims. The agent is resolved from a cached catalogue snapshot, downloaded, verified
 against its published SHA-256, unpacked and launched:</p>
 <div class="listing">
@@ -1435,7 +1435,7 @@ against its published SHA-256, unpacked and launched:</p>
     runtime: gemini
     registry:
       require-checksum: true        # default; refuse agents published without a sha256
-      cache: ${user.home}/.acp-spring/agents
+      cache: ${user.home}/.spring-ai-acp/agents
       refresh: 24h
       offline: false                # true: bundled snapshot and already-installed agents only
     runtimes:
@@ -1668,15 +1668,15 @@ every forwarded request (so a token refresh lands between two tool calls) and dr
 throws refuses the session before the agent hears of it.</p>
 
 <h3 id="mcp-oauth">Per-user OAuth</h3>
-<p>For MCP servers that implement the MCP authorization spec, add <code>acp-spring-mcp-oauth</code> and mark the
+<p>For MCP servers that implement the MCP authorization spec, add <code>spring-ai-acp-mcp-oauth</code> and mark the
 server <code>auth: oauth</code>. Authorization-server discovery, dynamic client registration, PKCE and the
 <code>resource</code> parameter are handled for you; each user signs in once per server, and tokens are refreshed as needed.</p>
 <div class="listing">
 <div class="title">pom.xml</div>
 <div class="content"><pre><code class="language-xml">&lt;dependency&gt;
     &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-    &lt;artifactId&gt;acp-spring-mcp-oauth&lt;/artifactId&gt;
-    &lt;version&gt;0.2.0&lt;/version&gt;
+    &lt;artifactId&gt;spring-ai-acp-mcp-oauth&lt;/artifactId&gt;
+    &lt;version&gt;0.1.0&lt;/version&gt;
 &lt;/dependency&gt;</code></pre></div>
 </div>
 <div class="listing">
@@ -1800,7 +1800,7 @@ are marked executable when copied out of a jar.</p>
 	workspace and skill list.</li>
 	<li><strong>Fails closed.</strong> A skill that cannot be fetched, has no <code>SKILL.md</code>, contains a symbolic link, or fails
 	its digest or pin check stops the agent from starting, rather than letting it start without a capability you rely on.</li>
-	<li><strong>Reconciled.</strong> Each installed skill carries a <code>.acp-spring-skill</code> marker. A skill removed from
+	<li><strong>Reconciled.</strong> Each installed skill carries a <code>.spring-ai-acp-skill</code> marker. A skill removed from
 	configuration is removed from the workspace at the next start.</li>
 	<li><strong>Your own skills are safe.</strong> A directory under <code>.agents/skills/</code> without the marker is never
 	overwritten or removed; a configured skill with the same name fails instead. You can still author skills by hand
@@ -1964,7 +1964,7 @@ The exception is <code>ask</code>, for an application someone <em>is</em> sittin
 <tr><td><code>deny</code></td><td>Rejects everything. The agent degrades to answering from context.</td></tr>
 <tr><td><code>allowlist</code></td><td>Approves exactly the named tools (case-insensitive) and rejects the rest, including any request whose tool name cannot be determined.</td></tr>
 <tr><td><code>auto-approve</code></td><td>Approves everything. Only in a sandbox, or when the gate that matters is elsewhere (see acp-meridian's <code>AGENTS.md</code>).</td></tr>
-<tr><td><code>ask</code></td><td>Puts each request to a person through the application's <code>PermissionPrompt</code> bean. <code>acp-spring-console</code> provides one (see <a href="#console-permissions">the console</a>); without one, the application fails to start rather than guess.</td></tr>
+<tr><td><code>ask</code></td><td>Puts each request to a person through the application's <code>PermissionPrompt</code> bean. <code>spring-ai-acp-console</code> provides one (see <a href="#console-permissions">the console</a>); without one, the application fails to start rather than guess.</td></tr>
 </tbody>
 </table></div>
 <p>To find the names an agent reports, run once with <code>logging.level.org.springaicommunity.acp: DEBUG</code> and read
@@ -2013,7 +2013,7 @@ directory named for the runtime. The only thing ACP Spring writes into the works
 <!-- ============================================================ -->
 <section id="spring-ai">
 <h2>Spring AI ChatModel</h2>
-<p>Add <code>acp-spring-ai</code> and an <code>AcpChatModel</code> bean appears wherever a Spring AI application looks for a
+<p>Add <code>spring-ai-acp-ai</code> and an <code>AcpChatModel</code> bean appears wherever a Spring AI application looks for a
 <code>ChatModel</code>:</p>
 <div class="listing">
 <div class="content"><pre><code class="language-java">ChatClient chat = ChatClient.create(chatModel);
@@ -2067,14 +2067,14 @@ String answer = chat.prompt()
 <!-- ============================================================ -->
 <section id="console">
 <h2>Terminal Console</h2>
-<p><code>acp-spring-console</code> turns the application into a terminal chat with its agent. It is for the stage
+<p><code>spring-ai-acp-console</code> turns the application into a terminal chat with its agent. It is for the stage
 where you are designing the agent itself — its <code>AGENTS.md</code>, its skills, its MCP servers — and want to talk to
 it before there is any other front end. Add the dependency and run the application; there is no code to write.</p>
 <div class="listing">
 <div class="content"><pre><code class="language-xml">&lt;dependency&gt;
     &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-    &lt;artifactId&gt;acp-spring-console&lt;/artifactId&gt;
-    &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+    &lt;artifactId&gt;spring-ai-acp-console&lt;/artifactId&gt;
+    &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
 &lt;/dependency&gt;</code></pre></div>
 </div>
 <p>It opens the session before the first prompt, so the model the negotiated tier actually applied is on screen before
@@ -2232,7 +2232,7 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <tr><td><code>spring.acp.mcp-servers[n].command</code>, <code>.args</code>, <code>.env</code></td><td>—</td><td>stdio transport.</td></tr>
 <tr><td><code>spring.acp.mcp.on-server-failure</code></td><td><code>warn</code></td><td><code>warn</code> or <code>fail</code> (Goose only).</td></tr>
 <tr><td><code>spring.acp.mcp.detect-timeout</code></td><td><code>2s</code></td><td>Wait for a load-failure report when <code>fail</code>.</td></tr>
-<tr><td><code>spring.acp.mcp.oauth.mode</code></td><td><code>web</code></td><td><code>web</code> or <code>local</code>. Needs <code>acp-spring-mcp-oauth</code>.</td></tr>
+<tr><td><code>spring.acp.mcp.oauth.mode</code></td><td><code>web</code></td><td><code>web</code> or <code>local</code>. Needs <code>spring-ai-acp-mcp-oauth</code>.</td></tr>
 <tr><td><code>spring.acp.mcp.oauth.client-name</code></td><td>app name</td><td>Shown on consent screens.</td></tr>
 <tr><td><code>spring.acp.mcp.oauth.base-url</code></td><td>from request</td><td>Public base URL for the redirect URI.</td></tr>
 <tr><td><code>spring.acp.mcp.oauth.redirect-uri</code></td><td><code>{baseUrl}/login/oauth2/code/{registrationId}</code></td><td>Registered callback.</td></tr>
@@ -2269,11 +2269,11 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <tr><td><code>spring.acp.pool.session-ttl</code></td><td><code>60m</code></td><td>Idle time before a named session is closed.</td></tr>
 <tr><td><code>spring.acp.pool.max-restarts</code></td><td><code>5</code></td><td>Replacements within five minutes before a connection is left down.</td></tr>
 <tr><td><code>spring.acp.controller.*</code></td><td>off</td><td>See <a href="#http">HTTP Endpoint</a>.</td></tr>
-<tr><td><code>spring.acp.console.*</code></td><td>when in a terminal</td><td>See <a href="#console">Terminal Console</a>; needs <code>acp-spring-console</code>.</td></tr>
+<tr><td><code>spring.acp.console.*</code></td><td>when in a terminal</td><td>See <a href="#console">Terminal Console</a>; needs <code>spring-ai-acp-console</code>.</td></tr>
 <tr><td><code>spring.acp.protocol.max-version</code></td><td><code>1</code></td><td>Highest ACP version offered. v2 is refused.</td></tr>
 <tr><td><code>spring.acp.protocol.strict</code></td><td><code>false</code></td><td>Fail, rather than clamp, when an agent answers a version it was not offered.</td></tr>
 <tr><td><code>spring.acp.observations.enabled</code></td><td><code>true</code></td><td>Micrometer observations, when Micrometer is present.</td></tr>
-<tr><td><code>spring.acp.chat-model.enabled</code></td><td><code>true</code></td><td>The <code>AcpChatModel</code> bean, when <code>acp-spring-ai</code> is present.</td></tr>
+<tr><td><code>spring.acp.chat-model.enabled</code></td><td><code>true</code></td><td>The <code>AcpChatModel</code> bean, when <code>spring-ai-acp-ai</code> is present.</td></tr>
 </tbody>
 </table></div>
 
@@ -2283,7 +2283,7 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <tbody>
 <tr><td><code>spring.acp.registry.enabled</code></td><td><code>true</code></td><td>Consult the registry for a runtime no adapter claims.</td></tr>
 <tr><td><code>spring.acp.registry.url</code></td><td>ACP CDN <code>registry.json</code></td><td>Catalogue location; <code>file:</code> pins a snapshot.</td></tr>
-<tr><td><code>spring.acp.registry.cache</code></td><td><code>~/.acp-spring/agents</code></td><td>Snapshot and downloaded agents.</td></tr>
+<tr><td><code>spring.acp.registry.cache</code></td><td><code>~/.spring-ai-acp/agents</code></td><td>Snapshot and downloaded agents.</td></tr>
 <tr><td><code>spring.acp.registry.refresh</code></td><td><code>24h</code></td><td>Catalogue refresh interval.</td></tr>
 <tr><td><code>spring.acp.registry.offline</code></td><td><code>false</code></td><td>No network: bundled snapshot and installed agents only.</td></tr>
 <tr><td><code>spring.acp.registry.require-checksum</code></td><td><code>true</code></td><td>Refuse agents published without a SHA-256.</td></tr>
@@ -2320,7 +2320,7 @@ guide working together. <strong>Everything that makes it this agent is configura
 <tr><td>Two MCP servers, with per-user OAuth</td><td><code>spring.acp.mcp-servers</code>, <code>spring.acp.mcp.oauth</code></td></tr>
 <tr><td>The system prompt</td><td><code>workspace/AGENTS.md</code></td></tr>
 <tr><td>A skill that sends email</td><td><code>spring.acp.skills</code>, fetched from Git into <code>workspace/.agents/skills/</code></td></tr>
-<tr><td>The terminal UI</td><td><code>acp-spring-console</code>, titled and greeted by <code>spring.acp.console.*</code></td></tr>
+<tr><td>The terminal UI</td><td><code>spring-ai-acp-console</code>, titled and greeted by <code>spring.acp.console.*</code></td></tr>
 </tbody>
 </table></div>
 
@@ -2339,40 +2339,40 @@ guide working together. <strong>Everything that makes it this agent is configura
 
 <h3 id="meridian-pom">Dependencies</h3>
 <p>All three runtime starters are on the classpath, so <code>spring.acp.runtime</code> must be set and is the only thing
-that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP servers, and
-<code>acp-spring-console</code> is the whole user interface.</p>
+that picks one. <code>spring-ai-acp-mcp-oauth</code> signs the user in to the MCP servers, and
+<code>spring-ai-acp-console</code> is the whole user interface.</p>
 <div class="listing">
 <div class="title">pom.xml</div>
 <div class="content"><pre><code class="language-xml">&lt;properties&gt;
     &lt;java.version&gt;21&lt;/java.version&gt;
-    &lt;acp-spring.version&gt;0.2.0-SNAPSHOT&lt;/acp-spring.version&gt;
+    &lt;spring-ai-acp.version&gt;0.2.0-SNAPSHOT&lt;/spring-ai-acp.version&gt;
 &lt;/properties&gt;
 
 &lt;dependencies&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-boot-starter-goose&lt;/artifactId&gt;
-        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-boot-starter-goose&lt;/artifactId&gt;
+        &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-boot-starter-opencode&lt;/artifactId&gt;
-        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-boot-starter-opencode&lt;/artifactId&gt;
+        &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-boot-starter-codex&lt;/artifactId&gt;
-        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-boot-starter-codex&lt;/artifactId&gt;
+        &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-mcp-oauth&lt;/artifactId&gt;
-        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-mcp-oauth&lt;/artifactId&gt;
+        &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
-        &lt;artifactId&gt;acp-spring-console&lt;/artifactId&gt;
-        &lt;version&gt;${acp-spring.version}&lt;/version&gt;
+        &lt;artifactId&gt;spring-ai-acp-console&lt;/artifactId&gt;
+        &lt;version&gt;${spring-ai-acp.version}&lt;/version&gt;
     &lt;/dependency&gt;
     &lt;dependency&gt;
         &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
@@ -2422,7 +2422,7 @@ that picks one. <code>acp-spring-mcp-oauth</code> signs the user in to the MCP s
 
     permissions:
       policy: auto-approve          # the real gate is in AGENTS.md: confirm before createTicket
-    console:                        # acp-spring-console
+    console:                        # spring-ai-acp-console
       title: Meridian Logistics — Capacity &amp; Cost Agent
       greeting: Ask about your capacity and cost findings, or what they are costing you.
       session: meridian-console
@@ -2476,7 +2476,7 @@ public class MeridianApplication {
 }</code></pre></div>
 </div>
 <p>The read-prompt-stream loop, the rendering of tool calls and plans, Ctrl-C cancellation and the session commands all
-come from <a href="#console">acp-spring-console</a>. Before that module existed, this application carried two classes
+come from <a href="#console">spring-ai-acp-console</a>. Before that module existed, this application carried two classes
 of its own for it, which is what prompted the module.</p>
 
 <h3 id="meridian-profiles">Running it on each runtime</h3>
@@ -2538,10 +2538,10 @@ class ReviewControllerTests {
 so a developer's local agent config cannot change the outcome.</p>
 
 <h3 id="testing-adapters">Testing a runtime adapter</h3>
-<p><code>acp-spring-test</code> is for adapter authors. <code>AgentRuntimeContract</code> is the conformance suite every
+<p><code>spring-ai-acp-test</code> is for adapter authors. <code>AgentRuntimeContract</code> is the conformance suite every
 compiled adapter extends; it asserts only what ACP standardizes. <code>ScriptedAgent</code> is a fake agent speaking raw
 JSON-RPC over an in-memory transport, and <code>AgentProbe</code> skips live suites when an agent is absent or has no
-credentials. Live suites cost real tokens, so they only run with <code>-Dacp-spring.test.live=true</code>.</p>
+credentials. Live suites cost real tokens, so they only run with <code>-Dspring-ai-acp.test.live=true</code>.</p>
 </section>
 
 <!-- ============================================================ -->
@@ -2551,7 +2551,7 @@ credentials. Live suites cost real tokens, so they only run with <code>-Dacp-spr
 <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
 <tbody>
 <tr><td>Startup fails: <em>spring.acp.runtime is not set and more than one runtime adapter is on the classpath</em></td><td>Set <code>spring.acp.runtime</code> to one of the listed ids.</td></tr>
-<tr><td>Startup fails: <em>No AgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>acp-spring-boot-starter-registry</code> for a registry id.</td></tr>
+<tr><td>Startup fails: <em>No AgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>spring-ai-acp-boot-starter-registry</code> for a registry id.</td></tr>
 <tr><td>Startup fails: <em>spring.acp.runtimes has options for unregistered runtime(s)</em></td><td>A tier-3 block names a runtime nothing supplies; usually a typo.</td></tr>
 <tr><td><em>workspace '…' is not an existing directory</em></td><td>Create it first; ACP Spring will not. A relative path is resolved against the JVM's working directory.</td></tr>
 <tr><td>The first prompt fails with <em>Could not install skill …</em></td><td>A skill failed to fetch or check. Pin a <code>ref</code> that exists, check <code>path</code>, make sure <code>git</code> is installed, and remove any symlinks from the skill.</td></tr>
@@ -2567,7 +2567,7 @@ credentials. Live suites cost real tokens, so they only run with <code>-Dacp-spr
 </table></div>
 
 <footer class="page-footer">
-ACP Spring 0.2.0 · MIT License ·
+Spring AI ACP 0.1.0 · Apache-2.0 License ·
 Protocol reference at <a href="https://agentclientprotocol.com">agentclientprotocol.com</a>
 </footer>
 </section>

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Spring AI Community
+    url: https://github.com/spring-ai-community
+    about: General Spring AI questions and community resources.
+  - name: SECURITY.md
+    url: https://github.com/cpage-pivotal/acp-spring/blob/main/SECURITY.md
+    about: Report a vulnerability privately; do not file a public issue.

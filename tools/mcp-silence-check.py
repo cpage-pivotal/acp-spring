@@ -4,12 +4,12 @@
 An MCP server an agent fails to connect to is invisible to an ACP client: the session opens
 normally, no session/update arrives, and the only symptom is the model later saying it has no
 tools. This script measures exactly where that silence holds, across the two axes that differ
-between acp-spring and the goose-buildpack java-wrapper:
+between spring-ai-acp and the goose-buildpack java-wrapper:
 
-  transport  stdio       `goose acp` on a pipe          -- acp-spring's default
+  transport  stdio       `goose acp` on a pipe          -- spring-ai-acp's default
              serve       `goose serve` over WebSocket   -- the wrapper's only mode, and
-                                                           acp-spring's tier-3 serve.transport
-  declared   session-new MCP servers in session/new     -- acp-spring's portable mcp-servers
+                                                           spring-ai-acp's tier-3 serve.transport
+  declared   session-new MCP servers in session/new     -- spring-ai-acp's portable mcp-servers
              config-yaml extensions in config.yaml      -- the wrapper's route (it always sends
                                                            an empty mcpServers array on purpose)
 
@@ -556,7 +556,7 @@ def main() -> int:
 			"agent's own output, not even its log files -- said the MCP server was unreachable.\n"
 			"LOG FILE ONLY means goose recorded it somewhere no ACP client and no supervisor reads,\n"
 			"which is the same outcome for an application and a different fix. Both are the failure\n"
-			"mode documented under 'MCP servers fail silently' in docs/design.md.")
+			"mode documented under the 'MCP Servers' section of docs/user-guide.html.")
 
 	if any(r["verdict"] == "NOT MEASURED" for r in results):
 		return 2
