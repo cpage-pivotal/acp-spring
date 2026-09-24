@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -146,6 +147,26 @@ class ConsoleChatTests {
 		loop.start();
 		assertThat(subscribed.await(30, TimeUnit.SECONDS)).isTrue();
 		chat.cancel();
+		loop.join(5000);
+
+		assertThat(loop.isAlive()).isFalse();
+		assertThat(cancelled).isTrue();
+		assertThat(terminal.written()).contains("[cancelled]", "bye");
+	}
+
+	@Test
+	void cancellingAsTheTurnStartsIsNotLost() throws Exception {
+		// Cancels from inside subscribe(), before it has returned the subscription: the
+		// narrowest window a Ctrl-C can land in, and one a slow machine widens.
+		AtomicReference<ConsoleChat> chat = new AtomicReference<>();
+		AtomicBoolean cancelled = new AtomicBoolean();
+		when(stream.events()).thenReturn(
+				Flux.<AgentEvent>never().doOnSubscribe(s -> chat.get().cancel()).doOnCancel(() -> cancelled.set(true)));
+		TestTerminals.Scripted terminal = TestTerminals.typing("take your time\n");
+		chat.set(chat(terminal));
+
+		Thread loop = new Thread(chat.get()::run);
+		loop.start();
 		loop.join(5000);
 
 		assertThat(loop.isAlive()).isFalse();

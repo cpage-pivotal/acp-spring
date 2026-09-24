@@ -32,6 +32,7 @@ import org.springaicommunity.acp.session.AgentSessions;
 import org.springaicommunity.acp.session.StoredSession;
 
 import reactor.core.Disposable;
+import reactor.core.Disposables;
 
 /**
  * The read-prompt-stream loop.
@@ -209,18 +210,22 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	private void ask(String question) {
 		CountDownLatch done = new CountDownLatch(1);
 		// Ctrl-C is ours only while a turn runs: at the prompt JLine turns it into an
-		// interrupt of the
-		// line, and before the first prompt it should still stop the application.
+		// interrupt of the line, and before the first prompt it should still stop the
+		// application.
 		Terminal.SignalHandler previous = terminal.handle(Terminal.Signal.INT, signal -> cancel());
+		// Published before subscribing, because the turn starts inside subscribe(): a
+		// cancel that lands before subscribe() returns disposes the holder, and update()
+		// then disposes the subscription it is handed.
+		Disposable.Swap subscription = Disposables.swap();
+		turn.set(subscription);
 		try {
-			Disposable subscription = agent.prompt()
+			subscription.update(agent.prompt()
 				.session(session)
 				.user(question)
 				.stream()
 				.events()
 				.doFinally(signal -> done.countDown())
-				.subscribe(out::render, error -> out.error(ConsoleRenderer.messageOf(error)));
-			turn.set(subscription);
+				.subscribe(out::render, error -> out.error(ConsoleRenderer.messageOf(error))));
 			try {
 				done.await();
 			}
