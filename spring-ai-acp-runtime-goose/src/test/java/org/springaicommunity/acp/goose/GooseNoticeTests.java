@@ -76,7 +76,11 @@ class GooseNoticeTests {
 	void theLogDirectoryFollowsTheStateHomeGooseItselfUses() {
 		Path directory = runtime.logDirectory(settings(Map.of())).orElseThrow();
 
-		assertThat(directory).isAbsolute().endsWith(Paths.get("goose", "logs"));
+		// Compared as strings: AssertJ's PathAssert.endsWith resolves the real path,
+		// which requires the directory to exist — true on a machine with goose installed,
+		// false on a fresh build machine where no goose has ever run.
+		assertThat(directory).isAbsolute();
+		assertThat(directory.normalize().toString()).endsWith(Paths.get("goose", "logs").toString());
 	}
 
 	@Test
