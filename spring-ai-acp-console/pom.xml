@@ -8,11 +8,11 @@
     <parent>
         <groupId>org.springaicommunity</groupId>
         <artifactId>spring-ai-acp</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.3.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>spring-ai-acp-console</artifactId>
-    <name>ACP Spring Console</name>
+    <name>Spring AI ACP Console</name>
     <description>A terminal chat over the application's ACP agent: add the dependency, run the application, talk to it</description>
 
     <dependencies>

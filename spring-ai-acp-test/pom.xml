@@ -8,11 +8,11 @@
     <parent>
         <groupId>org.springaicommunity</groupId>
         <artifactId>spring-ai-acp</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.3.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>spring-ai-acp-test</artifactId>
-    <name>ACP Spring Test</name>
+    <name>Spring AI ACP Test</name>
     <description>Runtime conformance TCK and a scripted in-memory agent</description>
 
     <dependencies>

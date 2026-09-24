@@ -8,12 +8,12 @@
     <parent>
         <groupId>org.springaicommunity</groupId>
         <artifactId>spring-ai-acp</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.3.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>spring-ai-acp-smoke-app</artifactId>
-    <name>ACP Spring Smoke App</name>
+    <name>Spring AI ACP Smoke App</name>
     <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
     <properties>

@@ -31,7 +31,7 @@ body:
   - type: input
     attributes:
       label: Version
-      description: spring-ai-acp version (e.g., 0.1.0) and, if relevant, the agent version (goose, codex, opencode).
+      description: spring-ai-acp version (e.g., 0.3.0) and, if relevant, the agent version (goose, codex, opencode).
     validations:
       required: true
   - type: textarea

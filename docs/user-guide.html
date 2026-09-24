@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ACP Spring Reference</title>
-<meta name="description" content="User guide for ACP Spring 0.2.0: drive Goose, Codex, OpenCode or any ACP registry agent from a Spring Boot application.">
+<title>Spring AI ACP Reference</title>
+<meta name="description" content="User guide for Spring AI ACP 0.3.0: drive Goose, Codex, OpenCode or any ACP registry agent from a Spring Boot application.">
 <script>
 /* Apply the saved theme before first paint so the page never flashes the wrong one. */
 (function () {
@@ -552,8 +552,8 @@ a:hover { color: var(--link-hover-color); text-decoration: underline; }
 
 <aside class="nav" aria-label="Guide contents">
 	<div class="nav-header">
-		<div class="component">ACP Spring</div>
-		<span class="version-badge">0.2.0</span>
+		<div class="component">Spring AI ACP</div>
+		<span class="version-badge">0.3.0</span>
 	</div>
 	<ul class="nav-list">
 		<li class="nav-caption">Overview</li>
@@ -582,7 +582,7 @@ a:hover { color: var(--link-hover-color); text-decoration: underline; }
 
 <main class="article" id="top">
 <ol class="breadcrumbs">
-	<li>ACP Spring</li>
+	<li>Spring AI ACP</li>
 	<li>Reference</li>
 	<li id="crumb">Introduction</li>
 </ol>
@@ -591,12 +591,12 @@ a:hover { color: var(--link-hover-color); text-decoration: underline; }
 
 <!-- ============================================================ -->
 <section id="overview">
-<h1>ACP Spring Reference</h1>
-<p class="lead">ACP Spring drives any <a href="https://agentclientprotocol.com">Agent Client Protocol</a> coding
+<h1>Spring AI ACP Reference</h1>
+<p class="lead">Spring AI ACP drives any <a href="https://agentclientprotocol.com">Agent Client Protocol</a> coding
 agent (Goose, Codex, OpenCode, or any of the agents in the ACP registry) from a Spring Boot application,
 behind one API and one configuration model.</p>
 
-<p>ACP Spring relates to coding agents the way Spring Data relates to databases:</p>
+<p>Spring AI ACP relates to coding agents the way Spring Data relates to databases:</p>
 <ul>
 	<li>application code talks to one abstraction, <code>AgentClient</code>;</li>
 	<li>configuration carries options that work on <strong>every</strong> agent, plus a per-agent escape hatch;</li>
@@ -619,9 +619,9 @@ behind one API and one configuration model.</p>
         .content();</code></pre></div>
 </div>
 
-<p>The agent itself is a separate process: ACP Spring launches it (or attaches to it), speaks ACP to it over
+<p>The agent itself is a separate process: Spring AI ACP launches it (or attaches to it), speaks ACP to it over
 stdio or WebSocket, supervises it, and turns what it streams back into typed Java events. Around that
-conversation, ACP Spring configures the things that make an agent <em>yours</em>:</p>
+conversation, Spring AI ACP configures the things that make an agent <em>yours</em>:</p>
 
 <div class="table-wrap"><table>
 <thead><tr><th>Concern</th><th>What it gives the agent</th><th>Configured by</th></tr></thead>
@@ -694,7 +694,7 @@ of three tiers, and the tier tells you how portable it is:</p>
 <h3 id="gs-prereq">Prerequisites</h3>
 <ul>
 	<li><strong>Java 21</strong> and <strong>Spring Boot 4.1</strong>.</li>
-	<li><strong>An agent you can run.</strong> ACP Spring does not package agent binaries. For the compiled adapters:
+	<li><strong>An agent you can run.</strong> Spring AI ACP does not package agent binaries. For the compiled adapters:
 		<ul>
 			<li><strong>Goose</strong>: the <code>goose</code> CLI on the <code>PATH</code>, or <code>GOOSE_CLI_PATH</code> pointing at it. Verified against goose 1.51.</li>
 			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.0</code>, so the first start downloads it.</li>
@@ -702,7 +702,7 @@ of three tiers, and the tier tells you how portable it is:</p>
 			<li><strong>Registry agents</strong>: nothing pre-installed; the agent is downloaded and checksum-verified. Agents distributed through npm or PyPI need <code>npx</code> or <code>uvx</code>.</li>
 		</ul>
 	</li>
-	<li><strong>Model credentials</strong>, either already configured in the agent itself (for example <code>goose configure</code> or <code>codex login</code>) or given to ACP Spring through <code>spring.acp.provider</code> (see <a href="#models">Models and Providers</a>).</li>
+	<li><strong>Model credentials</strong>, either already configured in the agent itself (for example <code>goose configure</code> or <code>codex login</code>) or given to Spring AI ACP through <code>spring.acp.provider</code> (see <a href="#models">Models and Providers</a>).</li>
 </ul>
 
 <h3 id="gs-deps">Add the dependency</h3>
@@ -726,7 +726,7 @@ Add the repository and <strong>one runtime starter</strong>:</p>
     &lt;dependency&gt;
         &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
         &lt;artifactId&gt;spring-ai-acp-boot-starter-goose&lt;/artifactId&gt;
-        &lt;version&gt;0.1.0&lt;/version&gt;
+        &lt;version&gt;0.3.0&lt;/version&gt;
     &lt;/dependency&gt;
 &lt;/dependencies&gt;</code></pre></div></div>
 </div>
@@ -737,7 +737,7 @@ Add the repository and <strong>one runtime starter</strong>:</p>
 }
 
 dependencies {
-    implementation("org.springaicommunity:spring-ai-acp-boot-starter-goose:0.1.0")
+    implementation("org.springaicommunity:spring-ai-acp-boot-starter-goose:0.3.0")
 }</code></pre></div></div>
 </div>
 </div>
@@ -783,7 +783,7 @@ the problem the first time it is used. The process is stopped when the context c
 
 <div class="admonition tip"><span class="label">Tip</span>
 <p>The repository's <code>samples/smoke-app</code> has all three adapters and the registry on its classpath.
-After <code>mvn install</code> in the ACP Spring checkout, run it against each agent in turn:</p>
+After <code>mvn install</code> in the Spring AI ACP checkout, run it against each agent in turn:</p>
 <div class="listing"><div class="content"><pre><code class="language-bash">mvn -pl samples/smoke-app spring-boot:run
 mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex
 mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=opencode
@@ -1153,7 +1153,7 @@ the application relies on. For example, <code>developer</code> and <code>skills<
 Otherwise an application that works on your laptop quietly loses its tools in production.</p>
 <div class="admonition note"><span class="label">Note</span>
 <p>A misspelled name does not stop goose. It writes <code>Failed to load extension &lt;name&gt;: … Unknown extension</code>
-to its log and carries on. ACP Spring reads that log for agents it started, so the mistake appears as a WARN line and in
+to its log and carries on. Spring AI ACP reads that log for agents it started, so the mistake appears as a WARN line and in
 <code>AgentClient.notices()</code>, worded as a server that could not be loaded.</p>
 </div>
 <p>For tools that are not built in, declare an MCP server under <code>spring.acp.mcp-servers</code> rather than a goose
@@ -1199,7 +1199,7 @@ supports. Keep <code>host</code> on loopback unless you mean to expose the serve
 
 <h4 id="goose-logs">Log directory and MCP gateways</h4>
 <ul>
-	<li><code>log-dir</code> tells ACP Spring where goose writes its log, which is the only place goose reports an MCP server
+	<li><code>log-dir</code> tells Spring AI ACP where goose writes its log, which is the only place goose reports an MCP server
 	or extension it could not load. Defaults to <code>$XDG_STATE_HOME/goose/logs</code>, else
 	<code>~/.local/state/goose/logs</code>. Set it only if your deployment moves goose's state.</li>
 	<li><code>mcp.answer-discover: true</code> answers goose's <code>server/discover</code> probe on behalf of MCP gateways
@@ -1268,7 +1268,7 @@ run it where the machine or container is itself the sandbox: a disposable contai
 it needs, and nothing mounted that you would mind losing.</p>
 </div>
 <p><code>spring.acp.mode</code> takes one value. codex-acp offers both a <code>mode</code> and a
-<code>collaboration_mode</code> option, and ACP Spring applies the value to whichever option offers it.</p>
+<code>collaboration_mode</code> option, and Spring AI ACP applies the value to whichever option offers it.</p>
 
 <h4 id="codex-config-toml">config.toml</h4>
 <p><code>config-toml</code> is written as Codex's <code>config.toml</code>. YAML maps become TOML tables, and lists of
@@ -1467,7 +1467,7 @@ environment. Several binary agents publish no checksum; running one requires
     model: gpt-5.6-terra
     on-unsupported: fail       # fail | warn (default) | ignore</code></pre></div>
 </div>
-<p><code>spring.acp.model</code> is a <strong>request</strong>. When a session opens, ACP Spring reads the options the
+<p><code>spring.acp.model</code> is a <strong>request</strong>. When a session opens, Spring AI ACP reads the options the
 agent advertises and matches the request against them, in order: exact id, display name,
 <code>&lt;provider&gt;/&lt;model&gt;</code>, then a suffix match that must be unique. Only then does it send
 <code>session/set_config_option</code>. It never sends a value the agent did not advertise, because some agents (goose)
@@ -1622,7 +1622,7 @@ Both, or neither, fails at startup.</p>
 </tbody>
 </table></div>
 
-<p>A Spring AI MCP server of your own is just another HTTP entry. At <code>INFO</code>, ACP Spring logs the host and
+<p>A Spring AI MCP server of your own is just another HTTP entry. At <code>INFO</code>, Spring AI ACP logs the host and
 path of each server it offers when a session opens, never its headers.</p>
 
 <div class="admonition important"><span class="label">Important</span>
@@ -1633,7 +1633,7 @@ grant them in <a href="#permissions">Permissions</a>.</p>
 
 <h3 id="mcp-failures">When a server fails to load</h3>
 <p>An MCP server the agent cannot reach is reported nowhere in ACP: the session opens normally, the model answers,
-and it simply has no tools. Goose writes the failure only to its own log file, and ACP Spring watches that log for
+and it simply has no tools. Goose writes the failure only to its own log file, and Spring AI ACP watches that log for
 agents it started:</p>
 <div class="listing">
 <div class="content"><pre><code class="language-yaml">spring:
@@ -1676,7 +1676,7 @@ server <code>auth: oauth</code>. Authorization-server discovery, dynamic client 
 <div class="content"><pre><code class="language-xml">&lt;dependency&gt;
     &lt;groupId&gt;org.springaicommunity.acp&lt;/groupId&gt;
     &lt;artifactId&gt;spring-ai-acp-mcp-oauth&lt;/artifactId&gt;
-    &lt;version&gt;0.1.0&lt;/version&gt;
+    &lt;version&gt;0.3.0&lt;/version&gt;
 &lt;/dependency&gt;</code></pre></div>
 </div>
 <div class="listing">
@@ -1736,7 +1736,7 @@ matches its description, optionally with scripts and reference files beside it. 
 prompt.</p>
 
 <p>ACP says nothing about skills, but Goose, Codex and OpenCode all read them from
-<code>&lt;workspace&gt;/.agents/skills/&lt;name&gt;/</code>. ACP Spring installs the skills you configure into that
+<code>&lt;workspace&gt;/.agents/skills/&lt;name&gt;/</code>. Spring AI ACP installs the skills you configure into that
 directory <strong>before the agent starts</strong>, so they are portable across runtimes.</p>
 
 <h3 id="skills-bundled">Skills bundled with the application</h3>
@@ -1849,7 +1849,7 @@ rebuilt from configuration on every start.</p>
 is, its conventions, what it must never do. It is effectively the agent's system prompt. Unlike a skill, which
 loads on demand, <code>AGENTS.md</code> is in context on <strong>every</strong> turn.</p>
 
-<p>Agents read it from their working directory. ACP Spring does not push instructions over the protocol; it sets the
+<p>Agents read it from their working directory. Spring AI ACP does not push instructions over the protocol; it sets the
 working directory with <code>spring.acp.workspace</code>. <strong>So installing instructions means putting
 <code>AGENTS.md</code> at the workspace root.</strong> Goose, Codex and OpenCode all read it there.</p>
 
@@ -1857,7 +1857,7 @@ working directory with <code>spring.acp.workspace</code>. <strong>So installing 
 <div class="content"><pre><code class="language-plaintext">workspace/                      ← spring.acp.workspace
 ├── AGENTS.md                   ← always in context
 └── .agents/
-    └── skills/                 ← installed by ACP Spring; loaded on demand
+    └── skills/                 ← installed by Spring AI ACP; loaded on demand
         └── release-checks/
             └── SKILL.md</code></pre></div>
 </div>
@@ -1946,7 +1946,7 @@ checkout may pick up that project's instructions too.</p>
 <h2>Permissions and the Workspace</h2>
 
 <h3 id="perm-policy">Permission policy</h3>
-<p>When an agent asks permission to run a tool (<code>session/request_permission</code>), ACP Spring answers on your
+<p>When an agent asks permission to run a tool (<code>session/request_permission</code>), Spring AI ACP answers on your
 behalf, since a server-side application has no human at the keyboard. Every request gets an answer, so no turn stalls.
 The exception is <code>ask</code>, for an application someone <em>is</em> sitting at.</p>
 <div class="listing">
@@ -2007,7 +2007,7 @@ only what it should.</p>
 <h3 id="perm-runtime-home">Where adapters write</h3>
 <p>Adapters write agent config files (<code>config.toml</code>, <code>opencode.json</code>) to
 <code>spring.acp.runtime-home</code>, never to the workspace. It defaults to a directory under the JVM's temp
-directory named for the runtime. The only thing ACP Spring writes into the workspace is <code>.agents/skills/</code>.</p>
+directory named for the runtime. The only thing Spring AI ACP writes into the workspace is <code>.agents/skills/</code>.</p>
 </section>
 
 <!-- ============================================================ -->
@@ -2309,7 +2309,7 @@ keys keep their spelling because they end up verbatim in the agent's own config 
 <!-- ============================================================ -->
 <section id="meridian">
 <h2>Example: acp-meridian</h2>
-<p><code>acp-meridian</code> is a complete client built on ACP Spring: a terminal chat application that helps business
+<p><code>acp-meridian</code> is a complete client built on Spring AI ACP: a terminal chat application that helps business
 staff investigate cloud capacity and cost findings, and files service desk tickets for them. It shows every piece of this
 guide working together. <strong>Everything that makes it this agent is configuration:</strong></p>
 <div class="table-wrap"><table>
@@ -2345,7 +2345,7 @@ that picks one. <code>spring-ai-acp-mcp-oauth</code> signs the user in to the MC
 <div class="title">pom.xml</div>
 <div class="content"><pre><code class="language-xml">&lt;properties&gt;
     &lt;java.version&gt;21&lt;/java.version&gt;
-    &lt;spring-ai-acp.version&gt;0.2.0-SNAPSHOT&lt;/spring-ai-acp.version&gt;
+    &lt;spring-ai-acp.version&gt;0.3.0&lt;/spring-ai-acp.version&gt;
 &lt;/properties&gt;
 
 &lt;dependencies&gt;
@@ -2553,7 +2553,7 @@ credentials. Live suites cost real tokens, so they only run with <code>-Dspring-
 <tr><td>Startup fails: <em>spring.acp.runtime is not set and more than one runtime adapter is on the classpath</em></td><td>Set <code>spring.acp.runtime</code> to one of the listed ids.</td></tr>
 <tr><td>Startup fails: <em>No AgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>spring-ai-acp-boot-starter-registry</code> for a registry id.</td></tr>
 <tr><td>Startup fails: <em>spring.acp.runtimes has options for unregistered runtime(s)</em></td><td>A tier-3 block names a runtime nothing supplies; usually a typo.</td></tr>
-<tr><td><em>workspace '…' is not an existing directory</em></td><td>Create it first; ACP Spring will not. A relative path is resolved against the JVM's working directory.</td></tr>
+<tr><td><em>workspace '…' is not an existing directory</em></td><td>Create it first; Spring AI ACP will not. A relative path is resolved against the JVM's working directory.</td></tr>
 <tr><td>The first prompt fails with <em>Could not install skill …</em></td><td>A skill failed to fetch or check. Pin a <code>ref</code> that exists, check <code>path</code>, make sure <code>git</code> is installed, and remove any symlinks from the skill.</td></tr>
 <tr><td>The agent ignores <code>AGENTS.md</code></td><td>It is not at the root of the workspace actually used; check the <code>workspace</code> in the startup <code>INFO</code> line.</td></tr>
 <tr><td>A skill is never used</td><td>Check <code>&lt;workspace&gt;/.agents/skills/&lt;name&gt;/SKILL.md</code> exists, the description says <em>when</em> to use it, and the agent has the tools it needs (goose: <code>builtins: developer</code>).</td></tr>
@@ -2567,7 +2567,7 @@ credentials. Live suites cost real tokens, so they only run with <code>-Dspring-
 </table></div>
 
 <footer class="page-footer">
-Spring AI ACP 0.1.0 · Apache-2.0 License ·
+Spring AI ACP 0.3.0 · Apache-2.0 License ·
 Protocol reference at <a href="https://agentclientprotocol.com">agentclientprotocol.com</a>
 </footer>
 </section>

@@ -49,7 +49,7 @@ Releases are published to a public Artifact Registry repository; no credentials 
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
-    <version>0.1.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -91,8 +91,8 @@ a Micrometer observation per turn and per tool call, `AgentEvent.UsageUpdated`, 
 negotiation behind a feature flag.
 
 The reference is in **[docs/user-guide.html](docs/user-guide.html)** — the configuration model,
-the runtime SPI, and the protocol handling; the feasibility analysis and what each milestone
-measured are in this README and the [changelog](CHANGELOG.md).
+the runtime SPI, and the protocol handling. What each release contains is in the
+[changelog](CHANGELOG.md).
 
 ## Requirements
 

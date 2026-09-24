@@ -8,11 +8,11 @@
     <parent>
         <groupId>org.springaicommunity</groupId>
         <artifactId>spring-ai-acp</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.3.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>spring-ai-acp-mcp-oauth</artifactId>
-    <name>ACP Spring MCP OAuth</name>
+    <name>Spring AI ACP MCP OAuth</name>
     <description>MCP authorization-spec OAuth for the servers an ACP agent calls: per-user tokens via Spring Security</description>
 
     <dependencies>
