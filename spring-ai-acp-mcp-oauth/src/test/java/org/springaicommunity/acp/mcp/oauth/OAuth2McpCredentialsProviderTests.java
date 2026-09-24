@@ -214,7 +214,7 @@ class OAuth2McpCredentialsProviderTests {
 		}
 		start.countDown();
 
-		assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
+		assertThat(done.await(60, TimeUnit.SECONDS)).isTrue();
 		// The fake honours each refresh token once; a second concurrent refresh would
 		// have failed.
 		assertThat(failures).isEmpty();

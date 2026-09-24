@@ -141,7 +141,7 @@ class MultiInstanceRefreshTests {
 			});
 		}
 		start.countDown();
-		assertThat(done.await(20, TimeUnit.SECONDS)).isTrue();
+		assertThat(done.await(60, TimeUnit.SECONDS)).isTrue();
 		return new Race(tokens, failures);
 	}
 

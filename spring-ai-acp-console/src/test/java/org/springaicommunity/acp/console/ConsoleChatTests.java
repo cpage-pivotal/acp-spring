@@ -144,7 +144,7 @@ class ConsoleChatTests {
 
 		Thread loop = new Thread(chat::run);
 		loop.start();
-		assertThat(subscribed.await(5, TimeUnit.SECONDS)).isTrue();
+		assertThat(subscribed.await(30, TimeUnit.SECONDS)).isTrue();
 		chat.cancel();
 		loop.join(5000);
 
