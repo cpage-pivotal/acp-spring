@@ -199,7 +199,11 @@ class OAuth2McpCredentialsProviderTests {
 		CountDownLatch done = new CountDownLatch(8);
 
 		for (int i = 0; i < 8; i++) {
-			Thread.ofVirtual().start(() -> {
+			// Platform threads, not virtual: the refresh path holds H2's synchronized
+			// internals while doing HTTP and row locks, which pins a virtual thread to a
+			// carrier; on a two-core build machine that starves the carriers and the race
+			// never finishes.
+			new Thread(() -> {
 				try {
 					start.await();
 					seen.add(token(credentials));
@@ -210,7 +214,7 @@ class OAuth2McpCredentialsProviderTests {
 				finally {
 					done.countDown();
 				}
-			});
+			}).start();
 		}
 		start.countDown();
 

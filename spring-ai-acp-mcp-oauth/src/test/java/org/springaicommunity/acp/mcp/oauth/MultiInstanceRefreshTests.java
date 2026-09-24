@@ -127,7 +127,11 @@ class MultiInstanceRefreshTests {
 		CountDownLatch done = new CountDownLatch(8);
 		for (int i = 0; i < 8; i++) {
 			McpCredentials credentials = i % 2 == 0 ? a : b;
-			Thread.ofVirtual().start(() -> {
+			// Platform threads, not virtual: the refresh path holds H2's synchronized
+			// internals while doing HTTP and row locks, which pins a virtual thread to a
+			// carrier; on a two-core build machine that starves the carriers and the race
+			// never finishes. A real client would use a bounded pool of platform threads.
+			new Thread(() -> {
 				try {
 					start.await();
 					tokens.add(credentials.headers().get("Authorization"));
@@ -138,7 +142,7 @@ class MultiInstanceRefreshTests {
 				finally {
 					done.countDown();
 				}
-			});
+			}).start();
 		}
 		start.countDown();
 		assertThat(done.await(60, TimeUnit.SECONDS)).isTrue();
