@@ -6,11 +6,11 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.x-6DB33F.svg)](https://docs.spring.io/spring-boot/)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-2.x-6DB33F.svg)](https://docs.spring.io/spring-ai/reference/)
 
+**Documentation:** https://spring-ai-acp-docs.web.app/
+
 A Spring library that talks to **any** [Agent Client Protocol](https://agentclientprotocol.com)
 coding agent — Goose, Codex, OpenCode, and others — behind one programming model and one
 configuration surface.
-
-The relationship to ACP runtimes is the one Spring Data has to databases:
 
 - configuration carries options that work across **all** runtimes, plus a per-runtime escape hatch;
 - application code always uses the same abstracted interface;
