@@ -17,9 +17,10 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * and gives up rather than guessing.
  *
  * <p>
- * Giving up is the important part: {@link PermissionPolicy#allowlist} rejects a request
- * whose tool it cannot name, so a wrong answer here would be a security hole and an empty
- * one is merely a denied tool call.
+ * Giving up is the important part:
+ * {@link org.springaicommunity.acp.permission.PermissionPolicy#allowlist} rejects a
+ * request whose tool it cannot name, so a wrong answer here would be a security hole and
+ * an empty one is merely a denied tool call.
  */
 public final class ToolNames {
 

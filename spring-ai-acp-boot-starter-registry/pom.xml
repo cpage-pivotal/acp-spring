@@ -15,6 +15,11 @@
     <name>Spring AI ACP Boot Starter (Registry)</name>
     <description>Starter: spring-ai-acp-boot-starter plus the registry runtime: any agent the ACP registry publishes, selected by spring.acp.runtime</description>
 
+    <properties>
+        <!-- No Java sources: attach empty -sources and -javadoc jars for Maven Central. -->
+        <placeholder-jars.phase>package</placeholder-jars.phase>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springaicommunity</groupId>

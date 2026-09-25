@@ -15,6 +15,11 @@
     <name>Spring AI ACP Boot Starter</name>
     <description>Starter: core and auto-configuration, with no agent. Add a runtime starter to choose one.</description>
 
+    <properties>
+        <!-- No Java sources: attach empty -sources and -javadoc jars for Maven Central. -->
+        <placeholder-jars.phase>package</placeholder-jars.phase>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springaicommunity</groupId>

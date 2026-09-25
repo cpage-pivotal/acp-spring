@@ -50,6 +50,21 @@
         </license>
     </licenses>
 
+    <developers>
+        <developer>
+            <id>cpage-pivotal</id>
+            <name>Corby Page</name>
+            <email>corby.page@broadcom.com</email>
+            <url>https://github.com/cpage-pivotal</url>
+        </developer>
+        <developer>
+            <id>dashaun</id>
+            <name>DaShaun Carter</name>
+            <email>dashaun.carter@broadcom.com</email>
+            <url>https://github.com/dashaun</url>
+        </developer>
+    </developers>
+
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
@@ -64,6 +79,8 @@
         <jacoco.version>0.8.15</jacoco.version>
         <!-- The 3.x line, as Spring Shell 4 uses; only spring-ai-acp-console depends on it. -->
         <jline.version>3.30.17</jline.version>
+        <!-- A module with no Java sources sets this to "package"; see maven-jar-plugin below. -->
+        <placeholder-jars.phase>none</placeholder-jars.phase>
     </properties>
 
     <modules>
@@ -250,6 +267,19 @@
                     <artifactId>maven-deploy-plugin</artifactId>
                     <version>3.1.4</version>
                 </plugin>
+                <!--
+                    The parent's release profile publishes with this plugin, which bundles every
+                    module and ignores maven.deploy.skip, so the sample is excluded by name.
+                -->
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <configuration>
+                        <excludeArtifacts>
+                            <excludeArtifact>spring-ai-acp-smoke-app</excludeArtifact>
+                        </excludeArtifacts>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
@@ -282,6 +312,37 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                Maven Central rejects a jar artifact without -sources and -javadoc jars, and the
+                source and javadoc plugins create neither for a module with no Java sources (the
+                starters). These attach empty ones there, and nowhere else.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>placeholder-sources-jar</id>
+                        <phase>${placeholder-jars.phase}</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>sources</classifier>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>placeholder-javadoc-jar</id>
+                        <phase>${placeholder-jars.phase}</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>javadoc</classifier>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
