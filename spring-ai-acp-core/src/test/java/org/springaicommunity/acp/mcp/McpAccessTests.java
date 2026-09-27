@@ -160,6 +160,75 @@ class McpAccessTests {
 			.containsExactly("Bearer token-1", "Bearer token-2");
 	}
 
+	// --- servers whose url the provider supplies
+	// -------------------------------------------------
+
+	@Test
+	void aServerWithNoUrlOfItsOwnIsLeftOutWhenTheProviderDoesNotRouteIt() {
+		McpAccess access = access(McpCredentialsProvider.none());
+		McpServerSpec brokered = McpServerSpec.Http.provided("brokered", Map.of());
+
+		McpAccess.Grant grant = access.grant(SessionPrincipal.of("alice"), List.of(tools(), brokered));
+
+		assertThat(grant.servers()).containsExactly(tools());
+		assertThat(access.activeGrants()).isZero();
+	}
+
+	@Test
+	void aServerWithNoUrlOfItsOwnIsForwardedToTheUpstreamTheProviderNames() throws Exception {
+		McpServerSpec brokered = McpServerSpec.Http.provided("brokered", Map.of());
+		McpAccess.Grant grant = access((server, principal) -> Optional
+			.of(McpCredentials.routed(upstream.url(), McpCredentials.bearer(() -> "token-" + principal.name()))))
+			.grant(SessionPrincipal.of("alice"), List.of(brokered));
+
+		HttpResponse<String> response = post(urlOf(grant, "brokered"), Map.of(), "{}");
+
+		assertThat(urlOf(grant, "brokered").getHost()).isEqualTo("127.0.0.1");
+		assertThat(response.statusCode()).isEqualTo(200);
+		assertThat(upstream.requests).extracting(seen -> seen.headers().get("Authorization").get(0))
+			.containsExactly("Bearer token-alice");
+	}
+
+	@Test
+	void theProvidersUpstreamTakesPrecedenceOverTheConfiguredUrl() throws Exception {
+		McpServerSpec.Http configured = new McpServerSpec.Http("tools", URI.create("https://stale.example.com/mcp"),
+				Map.of());
+		McpAccess.Grant grant = access(
+				(server, principal) -> Optional.of(McpCredentials.routed(upstream.url(), McpCredentials.NONE)))
+			.grant(null, List.of(configured));
+
+		post(urlOf(grant, "tools"), Map.of(), "{}");
+
+		assertThat(upstream.requests).hasSize(1);
+	}
+
+	@Test
+	void anUpstreamThatIsNotHttpsIsRefused() {
+		assertThatThrownBy(() -> McpCredentials.routed(URI.create("http://mcp.example.com/mcp"), McpCredentials.NONE))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("https");
+
+		McpCredentials sloppy = new McpCredentials() {
+
+			@Override
+			public Map<String, String> headers() {
+				return Map.of();
+			}
+
+			@Override
+			public Optional<URI> upstream() {
+				return Optional.of(URI.create("http://mcp.example.com/mcp"));
+			}
+
+		};
+		McpAccess access = access((server, principal) -> Optional.of(sloppy));
+
+		assertThatThrownBy(() -> access.grant(null, List.of(McpServerSpec.Http.provided("brokered", Map.of()))))
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("brokered");
+		assertThat(access.activeGrants()).isZero();
+	}
+
 	@Test
 	void twoUsersSessionsNeverCarryEachOthersToken() throws Exception {
 		McpAccess access = access(perUser());

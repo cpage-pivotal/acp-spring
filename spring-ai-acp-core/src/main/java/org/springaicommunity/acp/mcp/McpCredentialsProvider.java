@@ -16,6 +16,9 @@ import org.springaicommunity.acp.session.SessionPrincipal;
  * token, and the proxy asks the returned {@link McpCredentials} for headers on every
  * request. Returning empty leaves the server exactly as configured, handed to the agent
  * verbatim — which is what happens to every server when no provider is configured at all.
+ * The exception is a server declared without a URL: returning empty leaves it out of that
+ * session, and returning credentials whose {@link McpCredentials#upstream()} names the
+ * URL is the only way it is offered.
  *
  * <p>
  * Throwing refuses the session. That is the right answer for a user who has not yet

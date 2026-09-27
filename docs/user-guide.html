@@ -1615,7 +1615,7 @@ Both, or neither, fails at startup.</p>
 <tr><td><code>name</code></td><td>both</td><td>Required, unique. Tools usually surface prefixed with it.</td></tr>
 <tr><td><code>url</code></td><td>HTTP</td><td>HTTPS, or HTTP for <code>localhost</code>/loopback and <code>*.apps.internal</code>. No credentials in the URL.</td></tr>
 <tr><td><code>headers</code></td><td>HTTP</td><td>Static headers such as a service token. Validated; never logged.</td></tr>
-<tr><td><code>auth</code></td><td>HTTP</td><td><code>none</code> (default) or <code>oauth</code> for per-user sign-in (<a href="#mcp-oauth">below</a>).</td></tr>
+<tr><td><code>auth</code></td><td>HTTP</td><td><code>none</code> (default), <code>oauth</code> for per-user sign-in (<a href="#mcp-oauth">below</a>), or <code>provided</code> for your own <code>McpCredentialsProvider</code>, which may also supply the URL (<code>url</code> then omitted).</td></tr>
 <tr><td><code>command</code></td><td>stdio</td><td>The executable the agent launches.</td></tr>
 <tr><td><code>args</code></td><td>stdio</td><td>Arguments, in order.</td></tr>
 <tr><td><code>env</code></td><td>stdio</td><td>Environment for the server process.</td></tr>
@@ -1666,6 +1666,25 @@ given <code>http://127.0.0.1:&lt;port&gt;/&lt;random-token&gt;/&lt;server&gt;</c
 every forwarded request (so a token refresh lands between two tool calls) and drops the agent's own
 <code>Authorization</code>. Each session gets its own unguessable route, released when the session ends. A provider that
 throws refuses the session before the agent hears of it.</p>
+<h4>URL from the provider</h4>
+<p>Some servers are only located when their credential is issued: a credential broker answers with a token
+<em>and</em> the endpoint it is good for. Declare such a server with <code>auth: provided</code> and no
+<code>url</code>, and return the endpoint with the credential:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    mcp-servers:
+      - name: github
+        auth: provided             # credentials, and here the url, come from your McpCredentialsProvider</code></pre></div>
+</div>
+<div class="listing">
+<div class="content"><pre><code class="language-java">return (server, principal) -&gt; broker.accessFor(server.name(), principal)       // your own lookup
+        .map(grant -&gt; McpCredentials.routed(grant.url(), McpCredentials.bearer(grant::token)));</code></pre></div>
+</div>
+<p>The upstream is read once, when the session opens, and must be HTTPS (plain HTTP only for loopback and
+<code>*.apps.internal</code>). A server with no URL of its own that the provider does not route for a session,
+because the user has not granted access yet, is left out of that session rather than refusing it; the next
+session asks again. <code>McpCredentials.upstream()</code> also overrides a configured <code>url</code>.</p>
 
 <h3 id="mcp-oauth">Per-user OAuth</h3>
 <p>For MCP servers that implement the MCP authorization spec, add <code>spring-ai-acp-mcp-oauth</code> and mark the
@@ -2228,7 +2247,7 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><code>spring.acp.mcp-servers[n].name</code></td><td>—</td><td>Required, unique.</td></tr>
-<tr><td><code>spring.acp.mcp-servers[n].url</code>, <code>.headers</code>, <code>.auth</code></td><td>—, —, <code>none</code></td><td>HTTP transport.</td></tr>
+<tr><td><code>spring.acp.mcp-servers[n].url</code>, <code>.headers</code>, <code>.auth</code></td><td>—, —, <code>none</code></td><td>HTTP transport. <code>.auth</code> is <code>none</code>, <code>oauth</code> or <code>provided</code>; only <code>provided</code> may omit <code>.url</code>.</td></tr>
 <tr><td><code>spring.acp.mcp-servers[n].command</code>, <code>.args</code>, <code>.env</code></td><td>—</td><td>stdio transport.</td></tr>
 <tr><td><code>spring.acp.mcp.on-server-failure</code></td><td><code>warn</code></td><td><code>warn</code> or <code>fail</code> (Goose only).</td></tr>
 <tr><td><code>spring.acp.mcp.detect-timeout</code></td><td><code>2s</code></td><td>Wait for a load-failure report when <code>fail</code>.</td></tr>

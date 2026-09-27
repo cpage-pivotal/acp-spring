@@ -122,7 +122,7 @@ public class AcpAutoConfiguration {
 			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.permission.PermissionPrompt> prompts) {
 		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
 				: properties.getWorkspace().toAbsolutePath();
-		warnAboutUnprotectedOAuthServers(properties, credentials);
+		warnAboutUncredentialedServers(properties, credentials);
 		String runtime = selected.runtime().id();
 
 		return AgentSettings.builder(runtime, workspace)
@@ -148,11 +148,11 @@ public class AcpAutoConfiguration {
 	}
 
 	/**
-	 * Says so when a server asks for OAuth and nothing will provide it. Left alone, it
-	 * would be handed to the agent without a token and fail in the silent way MCP servers
-	 * fail: no tools, no error.
+	 * Says so when a server asks for OAuth, or for the application's own credentials, and
+	 * nothing will provide them. Left alone, it would be handed to the agent without a
+	 * token and fail in the silent way MCP servers fail: no tools, no error.
 	 */
-	private static void warnAboutUnprotectedOAuthServers(AcpProperties properties,
+	private static void warnAboutUncredentialedServers(AcpProperties properties,
 			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.mcp.McpCredentialsProvider> credentials) {
 		List<String> oauth = properties.getMcpServers()
 			.stream()
@@ -162,6 +162,16 @@ public class AcpAutoConfiguration {
 		if (!oauth.isEmpty() && credentials.getIfAvailable() == null) {
 			logger.warn("MCP server(s) {} are configured with auth: oauth, but nothing provides OAuth credentials; "
 					+ "add spring-ai-acp-mcp-oauth, or they will be called without a token", oauth);
+		}
+		List<String> provided = properties.getMcpServers()
+			.stream()
+			.filter(server -> server.getAuth() == AcpProperties.McpAuth.PROVIDED)
+			.map(AcpProperties.McpServer::getName)
+			.toList();
+		if (!provided.isEmpty() && credentials.getIfAvailable() == null) {
+			logger.warn("MCP server(s) {} are configured with auth: provided, but there is no McpCredentialsProvider "
+					+ "bean; those without a url will be left out of every session, and the rest called without "
+					+ "credentials", provided);
 		}
 	}
 

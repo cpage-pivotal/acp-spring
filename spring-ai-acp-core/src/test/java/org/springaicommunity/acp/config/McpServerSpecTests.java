@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The log line that stands in for a failure report the agent never sends: an MCP server
@@ -31,6 +32,15 @@ class McpServerSpecTests {
 
 		assertThat(server.describe()).isEqualTo("tools (http: https://tools.example.com/mcp)")
 			.doesNotContain("super-secret");
+	}
+
+	@Test
+	void aServerWhoseUrlIsProvidedSaysSoAndCannotBeHandedToTheAgentDirectly() {
+		McpServerSpec.Http server = McpServerSpec.Http.provided("github", Map.of());
+
+		assertThat(server.isProvided()).isTrue();
+		assertThat(server.describe()).isEqualTo("github (http: url from credentials provider)");
+		assertThatThrownBy(server::toAcp).isInstanceOf(IllegalStateException.class).hasMessageContaining("github");
 	}
 
 	@Test

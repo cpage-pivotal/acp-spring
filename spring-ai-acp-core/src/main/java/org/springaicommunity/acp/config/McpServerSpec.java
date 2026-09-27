@@ -55,22 +55,59 @@ public sealed interface McpServerSpec {
 		}
 	}
 
+	/**
+	 * A server reached over streamable HTTP.
+	 *
+	 * @param url where it lives, or {@code null} when the application's
+	 * {@code McpCredentialsProvider} supplies it per session (see {@link #provided})
+	 */
 	record Http(String name, URI url, Map<String, String> headers) implements McpServerSpec {
 		public Http {
 			Validation.requireName(name, "mcp server name");
-			Validation.requireSecureUrl(url, "mcp server url");
+			if (url != null) {
+				Validation.requireSecureUrl(url, "mcp server url");
+			}
 			headers = headers == null ? Map.of() : sanitizedHeaders(headers);
 		}
 
+		/**
+		 * A server whose URL is not known until a session is opened: the credentials
+		 * provider supplies it with the credential, through
+		 * {@code McpCredentials.upstream()}.
+		 *
+		 * <p>
+		 * Such a server only ever reaches the agent through the loopback proxy. A session
+		 * the provider does not route it for is opened without it, rather than refused,
+		 * since there is nothing to hand the agent in its place.
+		 */
+		public static Http provided(String name, Map<String, String> headers) {
+			return new Http(name, null, headers);
+		}
+
+		/**
+		 * Whether the URL comes from the credentials provider rather than configuration.
+		 */
+		public boolean isProvided() {
+			return url == null;
+		}
+
+		/**
+		 * @throws IllegalStateException for a {@linkplain #provided provided} server,
+		 * which has no URL of its own to give the agent
+		 */
 		@Override
 		public AcpSchema.McpServer toAcp() {
+			if (url == null) {
+				throw new IllegalStateException(
+						"mcp server '" + name + "' has no url of its own and can only be offered through the proxy");
+			}
 			return new AcpSchema.McpServerHttp(name, url.toString(),
 					headers.entrySet().stream().map(e -> new AcpSchema.HttpHeader(e.getKey(), e.getValue())).toList());
 		}
 
 		@Override
 		public String describe() {
-			return name + " (http: " + withoutCredentials(url) + ")";
+			return name + " (http: " + (url == null ? "url from credentials provider" : withoutCredentials(url)) + ")";
 		}
 
 		/**

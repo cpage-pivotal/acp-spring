@@ -2,6 +2,7 @@ package org.springaicommunity.acp.boot;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -132,6 +133,29 @@ class AcpAutoConfigurationTests {
 				assertThat(servers.get(0)).isInstanceOf(McpServerSpec.Http.class);
 				assertThat(servers.get(1)).isInstanceOf(McpServerSpec.Stdio.class);
 			});
+	}
+
+	@Test
+	void aServerWhoseUrlTheApplicationProvidesMayLeaveItOut() {
+		runner.withPropertyValues("spring.acp.mcp-servers[0].name=github", "spring.acp.mcp-servers[0].auth=provided")
+			.run(context -> assertThat(context.getBean(AgentSettings.class).mcpServers())
+				.containsExactly(McpServerSpec.Http.provided("github", Map.of())));
+	}
+
+	@Test
+	void aServerWithoutAUrlOrCommandIsStillAMistakeUnlessItsUrlIsProvided() {
+		runner.withPropertyValues("spring.acp.mcp-servers[0].name=github")
+			.run(context -> assertThat(context).hasFailed());
+		runner.withPropertyValues("spring.acp.mcp-servers[0].name=github", "spring.acp.mcp-servers[0].auth=oauth")
+			.run(context -> assertThat(context).hasFailed());
+	}
+
+	@Test
+	void providedAppliesOnlyToHttpServers() {
+		runner
+			.withPropertyValues("spring.acp.mcp-servers[0].name=local", "spring.acp.mcp-servers[0].command=/usr/bin/x",
+					"spring.acp.mcp-servers[0].auth=provided")
+			.run(context -> assertThat(context).hasFailed());
 	}
 
 	@Test

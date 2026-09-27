@@ -771,7 +771,14 @@ public class AcpProperties {
 		 * The MCP authorization spec's OAuth, per user; provided by
 		 * {@code spring-ai-acp-mcp-oauth}.
 		 */
-		OAUTH
+		OAUTH,
+
+		/**
+		 * The application's own {@code McpCredentialsProvider} supplies the credentials
+		 * and, when {@code url} is left unset, the URL too; a session it does not supply
+		 * one for is opened without the server.
+		 */
+		PROVIDED
 
 	}
 
@@ -795,7 +802,9 @@ public class AcpProperties {
 		/**
 		 * How this server is authorized. {@code oauth} means the MCP authorization spec's
 		 * OAuth flow, with each user's own token, and needs
-		 * {@code spring-ai-acp-mcp-oauth} on the classpath.
+		 * {@code spring-ai-acp-mcp-oauth} on the classpath. {@code provided} means the
+		 * application's own {@code McpCredentialsProvider} bean, which may also supply
+		 * the url, in which case {@code url} is left unset.
 		 */
 		private McpAuth auth = McpAuth.NONE;
 
@@ -808,9 +817,17 @@ public class AcpProperties {
 				return new McpServerSpec.Http(name, url, headers);
 			}
 			if (command != null) {
+				if (auth == McpAuth.PROVIDED) {
+					throw new IllegalArgumentException("mcp server '" + name
+							+ "' sets auth: provided, which applies only to a server reached over http");
+				}
 				return new McpServerSpec.Stdio(name, command, args, env);
 			}
-			throw new IllegalArgumentException("mcp server '" + name + "' must set either url or command");
+			if (auth == McpAuth.PROVIDED) {
+				return McpServerSpec.Http.provided(name, headers);
+			}
+			throw new IllegalArgumentException("mcp server '" + name + "' must set either url or command, or "
+					+ "auth: provided for a server whose url the application supplies");
 		}
 
 		public String getName() {

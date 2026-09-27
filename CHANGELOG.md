@@ -5,6 +5,14 @@ All notable changes to Spring AI ACP are documented here. The project follows
 
 ## [0.3.1] - Unreleased
 
+### Added
+
+- `auth: provided` for an MCP server whose credentials come from the application's own
+  `McpCredentialsProvider`. Such a server may omit `url`: the provider supplies the upstream
+  with `McpCredentials.routed(url, credentials)` when the session opens, as a credential broker
+  that issues a token together with its endpoint does. A URL-less server the provider does not
+  route is left out of that session instead of refusing it.
+
 ## [0.3.0] - 2026-09-24
 
 Initial release as Spring AI ACP, under the `org.springaicommunity` groupId and the Apache

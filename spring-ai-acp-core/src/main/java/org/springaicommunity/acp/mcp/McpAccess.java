@@ -1,5 +1,6 @@
 package org.springaicommunity.acp.mcp;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -11,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.acp.config.McpServerSpec;
+import org.springaicommunity.acp.config.Validation;
 import org.springaicommunity.acp.session.SessionPrincipal;
 
 /**
@@ -70,28 +72,43 @@ public final class McpAccess implements AutoCloseable {
 	 * Every server's credentials are asked for before any route is published, so a
 	 * provider that refuses one server — a user not yet signed in to it — leaves nothing
 	 * behind.
+	 * <p>
+	 * A server declared without a URL of its own reaches the session only if the provider
+	 * routes it, with {@link McpCredentials#upstream()}; otherwise it is left out, and
+	 * the session opens without it.
 	 * @param principal who the session is for, or null
 	 * @throws RuntimeException whatever the provider threw, which refuses the session
 	 */
 	public Grant grant(SessionPrincipal principal, List<McpServerSpec> servers) {
 		Map<String, McpProxy.Upstream> upstreams = new LinkedHashMap<>();
+		List<String> omitted = new ArrayList<>();
 		for (McpServerSpec server : servers) {
 			if (server instanceof McpServerSpec.Http http) {
 				Optional<McpCredentials> credentials = provider.credentialsFor(http, principal);
-				if (credentials.isPresent() || !filters.isEmpty()) {
-					upstreams.put(http.name(), new McpProxy.Upstream(http.name(), http.url(), http.headers(),
+				URI url = credentials.flatMap(McpCredentials::upstream).orElse(http.url());
+				if (url == null) {
+					omitted.add(http.name());
+				}
+				else if (credentials.isPresent() || !filters.isEmpty()) {
+					Validation.requireSecureUrl(url, "mcp server '" + http.name() + "' upstream url");
+					upstreams.put(http.name(), new McpProxy.Upstream(http.name(), url, http.headers(),
 							credentials.orElse(McpCredentials.NONE)));
 				}
 			}
 		}
+		if (!omitted.isEmpty()) {
+			logger.info("Opening this session without MCP server(s) {}: they have no url of their own, and the "
+					+ "credentials provider did not supply one", omitted);
+		}
+		List<McpServerSpec> offered = servers.stream().filter(server -> !omitted.contains(server.name())).toList();
 		if (upstreams.isEmpty()) {
-			return new Grant(servers, null, null);
+			return new Grant(offered, null, null);
 		}
 
 		McpProxy running = proxy();
 		String token = running.register(upstreams);
-		List<McpServerSpec> handed = new ArrayList<>(servers.size());
-		for (McpServerSpec server : servers) {
+		List<McpServerSpec> handed = new ArrayList<>(offered.size());
+		for (McpServerSpec server : offered) {
 			handed.add(upstreams.containsKey(server.name())
 					? new McpServerSpec.Http(server.name(), running.url(token, server.name()), Map.of()) : server);
 		}
