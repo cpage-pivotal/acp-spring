@@ -12,6 +12,12 @@ All notable changes to Spring AI ACP are documented here. The project follows
   with `McpCredentials.routed(url, credentials)` when the session opens, as a credential broker
   that issues a token together with its endpoint does. A URL-less server the provider does not
   route is left out of that session instead of refusing it.
+- A Tanzu AI Models (GenAI) service bound on Cloud Foundry becomes the provider with no
+  configuration. Its OpenAI-compatible endpoint is used as `spring.acp.provider.base-url` and
+  `api-key`, and when no `spring.acp.model` is set, the first `TOOLS`-capable model in its
+  catalog is chosen.
+  - An explicitly configured provider wins.
+  - `spring.acp.tanzu-ai.enabled` and `service-name` control it.
 
 ## [0.3.0] - 2026-09-24
 

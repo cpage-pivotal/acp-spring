@@ -1565,6 +1565,40 @@ with either. When one runtime needs a different endpoint, give it its own profil
 To pin goose to one dialect, set <code>OPENAI_BASE_PATH</code> in <code>spring.acp.runtimes.goose.env</code>.</p>
 </div>
 
+<h3 id="models-tanzu-ai">Tanzu AI Models on Cloud Foundry</h3>
+<p>On Cloud Foundry, binding a Tanzu AI Models (GenAI) service is the whole provider configuration. At startup,
+Spring AI ACP finds the binding in <code>VCAP_SERVICES</code> and uses its OpenAI-compatible endpoint as a
+<a href="#models-byo">bring-your-own endpoint</a>, so every runtime reaches it with no runtime-specific settings.</p>
+<div class="listing">
+<div class="content"><pre><code class="language-bash">cf create-service genai tanzu-all-models my-models
+cf bind-service my-app my-models</code></pre></div>
+</div>
+<ul>
+<li>The binding sets <code>spring.acp.provider.base-url</code> and <code>api-key</code> from its endpoint, and
+<code>provider.id</code> and <code>api-type</code> to <code>openai</code> if they are unset.</li>
+<li>A binding is recognised by a label starting <code>genai</code> or <code>ai-models</code>, or a <code>genai</code>
+tag, and needs a <code>credentials.endpoint</code> with <code>api_base</code> and <code>api_key</code>.</li>
+<li>Without a configured <code>spring.acp.model</code>, the first model the service's catalog
+(<code>config_url</code>) marks <code>TOOLS</code>-capable is chosen. If the catalog cannot be read, no model is chosen,
+and a warning says to set one.</li>
+<li><strong>Your own configuration wins, as a whole.</strong> If <code>spring.acp.provider</code> sets a
+<code>base-url</code> or <code>api-key</code>, the binding is not used, so a key is never paired with another service's
+endpoint. A blank value (<code>${OPENAI_API_KEY:}</code> with the variable unset) counts as unset, so one
+<code>application.yaml</code> can serve both a laptop and the platform.</li>
+<li>A provider <code>id</code> or <code>api-type</code> other than <code>openai</code> also leaves the binding unused.</li>
+</ul>
+<table>
+<thead><tr><th>Property</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>spring.acp.tanzu-ai.enabled</code></td><td><code>true</code></td><td>Use a bound Tanzu AI Models service as the provider.</td></tr>
+<tr><td><code>spring.acp.tanzu-ai.service-name</code></td><td>—</td><td>Which bound service to use when there are several; the first by default.</td></tr>
+</tbody>
+</table>
+<div class="admonition note"><span class="label">Note</span>
+<p>With goose-buildpack still supplying the goose binary, set <code>GOOSE_TANZU_GENAI_AUTO_CONFIG=false</code> so the
+buildpack's own binding logic stays out of the agent's environment.</p>
+</div>
+
 <h3 id="models-mode">Mode</h3>
 <p><code>spring.acp.mode</code> selects the agent's session mode, and is negotiated exactly like <code>model</code>.
 Its values are the agent's own:</p>
@@ -2239,6 +2273,8 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <tr><td><code>spring.acp.provider.base-url</code></td><td>—</td><td>Your own endpoint; makes its <code>/models</code> authoritative.</td></tr>
 <tr><td><code>spring.acp.provider.api-key</code></td><td>—</td><td>Provider key. Never logged.</td></tr>
 <tr><td><code>spring.acp.provider.headers</code></td><td>—</td><td>Extra provider headers.</td></tr>
+<tr><td><code>spring.acp.tanzu-ai.enabled</code></td><td><code>true</code></td><td>Use a bound Tanzu AI Models service as the provider; see <a href="#models-tanzu-ai">Tanzu AI Models</a>.</td></tr>
+<tr><td><code>spring.acp.tanzu-ai.service-name</code></td><td>—</td><td>Which bound service to use when there are several.</td></tr>
 </tbody>
 </table></div>
 

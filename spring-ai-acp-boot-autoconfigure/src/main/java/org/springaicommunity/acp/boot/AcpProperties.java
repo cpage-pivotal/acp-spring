@@ -97,6 +97,8 @@ public class AcpProperties {
 
 	private final Registry registry = new Registry();
 
+	private final TanzuAi tanzuAi = new TanzuAi();
+
 	/**
 	 * Runtime-specific options, keyed by runtime id. Ignored by every other runtime.
 	 *
@@ -454,6 +456,40 @@ public class AcpProperties {
 
 		public void setStrict(boolean strict) {
 			this.strict = strict;
+		}
+
+	}
+
+	/**
+	 * A Tanzu AI Models service bound on Cloud Foundry. Read by
+	 * {@code TanzuAiEnvironmentPostProcessor} before this class is bound; declared here
+	 * so the properties are documented and validated with the rest.
+	 */
+	public static class TanzuAi {
+
+		/**
+		 * Use a bound Tanzu AI Models service as the provider when
+		 * {@code spring.acp.provider} sets no base-url or api-key of its own.
+		 */
+		private boolean enabled = true;
+
+		/** Which bound service to use when there are several; the first by default. */
+		private String serviceName;
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public String getServiceName() {
+			return serviceName;
+		}
+
+		public void setServiceName(String serviceName) {
+			this.serviceName = serviceName;
 		}
 
 	}
@@ -1100,6 +1136,10 @@ public class AcpProperties {
 
 	public Registry getRegistry() {
 		return registry;
+	}
+
+	public TanzuAi getTanzuAi() {
+		return tanzuAi;
 	}
 
 	public Map<String, Map<String, Object>> getRuntimes() {
