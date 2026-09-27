@@ -210,15 +210,10 @@ public final class DefaultAgentSessions implements AgentSessions {
 	 * reader nothing about what was asked for.
 	 */
 	private List<AcpSchema.McpServer> mcpServers(McpAccess.Grant grant) {
-		if (!settings.mcpServers().isEmpty() && logger.isInfoEnabled()) {
-			logger.info(
-					"Handing {} MCP server(s) to the agent on re-attach: {}. The agent does not report "
-							+ "back whether it connected to them.",
-					settings.mcpServers().size(),
-					settings.mcpServers()
-						.stream()
-						.map(org.springaicommunity.acp.config.McpServerSpec::describe)
-						.toList());
+		List<String> handed = McpAccess.describeHanded(settings.mcpServers(), grant);
+		if (!handed.isEmpty() && logger.isInfoEnabled()) {
+			logger.info("Handing {} MCP server(s) to the agent on re-attach: {}. The agent does not report "
+					+ "back whether it connected to them.", handed.size(), handed);
 		}
 		return grant.servers().stream().map(m -> m.toAcp()).toList();
 	}

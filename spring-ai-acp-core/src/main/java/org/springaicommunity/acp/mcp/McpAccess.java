@@ -116,6 +116,20 @@ public final class McpAccess implements AutoCloseable {
 		return new Grant(handed, running, token);
 	}
 
+	/**
+	 * The configured servers a grant actually hands over, described as configured: a
+	 * proxy URL would tell a reader of the log nothing about what was asked for, and a
+	 * server the grant left out was not asked for at all.
+	 */
+	public static List<String> describeHanded(List<McpServerSpec> configured, Grant grant) {
+		java.util.Set<String> handed = new java.util.HashSet<>();
+		grant.servers().forEach(server -> handed.add(server.name()));
+		return configured.stream()
+			.filter(server -> handed.contains(server.name()))
+			.map(McpServerSpec::describe)
+			.toList();
+	}
+
 	private McpProxy proxy() {
 		synchronized (lock) {
 			if (closed) {

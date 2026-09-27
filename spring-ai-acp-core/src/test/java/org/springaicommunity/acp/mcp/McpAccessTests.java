@@ -175,6 +175,16 @@ class McpAccessTests {
 	}
 
 	@Test
+	void theLogNamesOnlyTheServersASessionIsActuallyHanded() {
+		McpServerSpec brokered = McpServerSpec.Http.provided("brokered", Map.of());
+		List<McpServerSpec> configured = List.of(tools(), brokered);
+
+		McpAccess.Grant grant = access(McpCredentialsProvider.none()).grant(null, configured);
+
+		assertThat(McpAccess.describeHanded(configured, grant)).containsExactly(tools().describe());
+	}
+
+	@Test
 	void aServerWithNoUrlOfItsOwnIsForwardedToTheUpstreamTheProviderNames() throws Exception {
 		McpServerSpec brokered = McpServerSpec.Http.provided("brokered", Map.of());
 		McpAccess.Grant grant = access((server, principal) -> Optional

@@ -259,7 +259,7 @@ public final class DefaultAgentClient implements AgentClient {
 			opened.set(true);
 			McpAccess.Grant grant = mcpAccess.grant(principal, effective.mcpServers());
 			try {
-				logMcpServers(effective, "session/new");
+				logMcpServers(effective, grant, "session/new");
 				AcpSchema.NewSessionResponse response = acp
 					.newSession(new AcpSchema.NewSessionRequest(effective.workspace().toString(),
 							grant.servers().stream().map(m -> m.toAcp()).toList()))
@@ -340,15 +340,13 @@ public final class DefaultAgentClient implements AgentClient {
 	 * distance to the diagnosis. See the "MCP Servers" section of
 	 * {@code docs/user-guide.html}.
 	 */
-	private static void logMcpServers(AgentSettings effective, String method) {
-		if (effective.mcpServers().isEmpty() || !logger.isInfoEnabled()) {
+	private static void logMcpServers(AgentSettings effective, McpAccess.Grant grant, String method) {
+		List<String> handed = McpAccess.describeHanded(effective.mcpServers(), grant);
+		if (handed.isEmpty() || !logger.isInfoEnabled()) {
 			return;
 		}
-		logger.info(
-				"Handing {} MCP server(s) to the agent on {}: {}. The agent does not report back "
-						+ "whether it connected to them.",
-				effective.mcpServers().size(), method,
-				effective.mcpServers().stream().map(McpServerSpec::describe).toList());
+		logger.info("Handing {} MCP server(s) to the agent on {}: {}. The agent does not report back "
+				+ "whether it connected to them.", handed.size(), method, handed);
 	}
 
 	/**
