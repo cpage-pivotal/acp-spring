@@ -1574,8 +1574,10 @@ Spring AI ACP finds the binding in <code>VCAP_SERVICES</code> and uses its OpenA
 cf bind-service my-app my-models</code></pre></div>
 </div>
 <ul>
-<li>The binding sets <code>spring.acp.provider.base-url</code> and <code>api-key</code> from its endpoint, and
-<code>provider.id</code> and <code>api-type</code> to <code>openai</code> if they are unset.</li>
+<li>The binding sets <code>spring.acp.provider.base-url</code> to its <code>api_base</code> plus the wire format its
+catalog names (<code>&lt;api_base&gt;/openai</code>, as java-cfenv builds it), and <code>api-key</code> to its key.
+It sets <code>provider.id</code> and <code>api-type</code> to <code>openai</code> if they are unset. A service whose
+catalog names another wire format is not used.</li>
 <li>A binding is recognised by a label starting <code>genai</code> or <code>ai-models</code>, or a <code>genai</code>
 tag, and needs a <code>credentials.endpoint</code> with <code>api_base</code> and <code>api_key</code>.</li>
 <li>Without a configured <code>spring.acp.model</code>, the first model the service's catalog

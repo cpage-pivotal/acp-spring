@@ -15,14 +15,18 @@ import org.springframework.boot.json.JsonParserFactory;
  * {@code VCAP_SERVICES} describes it.
  *
  * <p>
- * The binding carries an OpenAI-compatible endpoint rather than a model: {@code api_base}
- * and {@code api_key} reach every model the service plan offers, and {@code config_url}
- * lists them with their capabilities. Recognised the way the goose buildpack and
- * java-cfenv recognise it — a label starting {@code genai} or {@code ai-models}, or a
- * {@code genai} tag — and only with a complete {@code credentials.endpoint}.
+ * The binding carries an endpoint rather than a model: {@code api_base} and
+ * {@code api_key} reach every model the service plan offers, and {@code config_url}
+ * describes them — each model's capabilities, and the wire format they are served in. The
+ * API itself lives one segment below {@code api_base}, named by that wire format:
+ * {@code <api_base>/openai} for the OpenAI API, as java-cfenv's {@code GenaiLocator}
+ * builds it. Recognised the way the goose buildpack and java-cfenv recognise it — a label
+ * starting {@code genai} or {@code ai-models}, or a {@code genai} tag — and only with a
+ * complete {@code credentials.endpoint}.
  *
  * @param name the service instance name, for logs and for choosing between bindings
- * @param apiBase the OpenAI-compatible base URL, e.g. {@code https://host/plan/openai}
+ * @param apiBase the service's base URL, e.g. {@code https://host/plan}, one segment
+ * above the API itself
  * @param apiKey the key for it; never logged
  * @param configUrl where the service lists its models, or null
  */
@@ -66,22 +70,42 @@ record TanzuAiBinding(String name, URI apiBase, String apiKey, URI configUrl) {
 	}
 
 	/**
-	 * The first model the service offers that can call tools, according to its catalog
-	 * document ({@code {"advertisedModels":[{"name":…,"capabilities":[…]}]}}).
+	 * The URL a client of {@code wireFormat} uses: {@code api_base} plus the wire format
+	 * as a path segment, unless the binding's {@code api_base} already ends with it.
 	 */
-	static Optional<String> firstToolCapableModel(String catalog) {
-		Object models = JsonParserFactory.getJsonParser().parseMap(catalog).get("advertisedModels");
-		if (!(models instanceof List<?> list)) {
-			return Optional.empty();
-		}
-		for (Object entry : list) {
-			if (entry instanceof Map<?, ?> model && model.get("name") instanceof String name && !name.isBlank()
-					&& model.get("capabilities") instanceof List<?> capabilities && capabilities.stream()
-						.anyMatch(capability -> TOOLS.equalsIgnoreCase(String.valueOf(capability)))) {
-				return Optional.of(name);
+	URI apiFor(String wireFormat) {
+		String segment = "/" + wireFormat.toLowerCase(Locale.ROOT);
+		String base = apiBase.toString();
+		return URI.create(base.toLowerCase(Locale.ROOT).endsWith(segment) ? base : base + segment);
+	}
+
+	/**
+	 * What a service's catalog document says:
+	 * {@code {"wireFormat":"OPENAI","advertisedModels":[{"name":…,"capabilities":[…]}]}}.
+	 *
+	 * @param wireFormat the API the models are served in, or null when it does not say
+	 * @param toolCapableModel the first model that can call tools, if any
+	 */
+	record Catalog(String wireFormat, Optional<String> toolCapableModel) {
+
+		static Catalog parse(String json) {
+			Map<String, Object> document = JsonParserFactory.getJsonParser().parseMap(json);
+			String wireFormat = text(document.get("wireFormat"));
+			Optional<String> model = Optional.empty();
+			if (document.get("advertisedModels") instanceof List<?> models) {
+				for (Object entry : models) {
+					if (entry instanceof Map<?, ?> advertised && advertised.get("name") instanceof String name
+							&& !name.isBlank() && advertised.get("capabilities") instanceof List<?> capabilities
+							&& capabilities.stream()
+								.anyMatch(capability -> TOOLS.equalsIgnoreCase(String.valueOf(capability)))) {
+						model = Optional.of(name);
+						break;
+					}
+				}
 			}
+			return new Catalog(wireFormat, model);
 		}
-		return Optional.empty();
+
 	}
 
 	private static boolean isAiModels(String label, Map<?, ?> service) {

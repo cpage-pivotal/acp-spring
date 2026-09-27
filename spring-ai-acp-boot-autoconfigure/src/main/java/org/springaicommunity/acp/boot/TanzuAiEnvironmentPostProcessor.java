@@ -28,12 +28,13 @@ import org.springframework.util.StringUtils;
  *
  * <p>
  * The binding becomes the portable bring-your-own-endpoint configuration:
- * {@code spring.acp.provider.base-url} and {@code api-key} from the binding's
- * OpenAI-compatible endpoint, with {@code id} and {@code api-type} {@code openai}. Every
- * runtime reaches it the way it reaches any other endpoint, and the endpoint's own
- * {@code /models} listing then decides which models are valid. When no
- * {@code spring.acp.model} is configured, the first model the service's catalog marks
- * {@code TOOLS}-capable is chosen, since an agent that cannot call tools is not one.
+ * {@code spring.acp.provider.base-url} is the binding's {@code api_base} plus the wire
+ * format its catalog names ({@code /openai}), {@code api-key} is its key, and {@code id}
+ * and {@code api-type} are {@code openai}. Every runtime reaches it the way it reaches
+ * any other endpoint, and the endpoint's own {@code /models} listing then decides which
+ * models are valid. When no {@code spring.acp.model} is configured, the first model the
+ * service's catalog marks {@code TOOLS}-capable is chosen, since an agent that cannot
+ * call tools is not one.
  *
  * <p>
  * Explicit configuration wins, as a whole: a provider with its own {@code base-url} or
@@ -67,7 +68,7 @@ public class TanzuAiEnvironmentPostProcessor implements EnvironmentPostProcessor
 
 	private final Log logger;
 
-	private final Catalog catalog;
+	private final Catalog catalogReader;
 
 	public TanzuAiEnvironmentPostProcessor(DeferredLogFactory logs) {
 		this(logs.getLog(TanzuAiEnvironmentPostProcessor.class), TanzuAiEnvironmentPostProcessor::fetch);
@@ -75,7 +76,7 @@ public class TanzuAiEnvironmentPostProcessor implements EnvironmentPostProcessor
 
 	TanzuAiEnvironmentPostProcessor(Log logger, Catalog catalog) {
 		this.logger = logger;
-		this.catalog = catalog;
+		this.catalogReader = catalog;
 	}
 
 	@Override
@@ -115,8 +116,20 @@ public class TanzuAiEnvironmentPostProcessor implements EnvironmentPostProcessor
 		}
 		TanzuAiBinding binding = found.get();
 
+		Optional<TanzuAiBinding.Catalog> catalog = readCatalog(binding);
+		String wireFormat = catalog.map(TanzuAiBinding.Catalog::wireFormat).orElse(null);
+		if (wireFormat == null) {
+			wireFormat = "openai";
+		}
+		else if (!"openai".equalsIgnoreCase(wireFormat)) {
+			logger.warn("Tanzu AI Models service '" + binding.name() + "' serves the " + wireFormat
+					+ " wire format rather than the OpenAI API, so it is not used");
+			return;
+		}
+
 		Map<String, Object> properties = new LinkedHashMap<>();
-		properties.put("spring.acp.provider.base-url", binding.apiBase().toString());
+		URI baseUrl = binding.apiFor(wireFormat);
+		properties.put("spring.acp.provider.base-url", baseUrl.toString());
 		properties.put("spring.acp.provider.api-key", binding.apiKey());
 		if (!hasText(environment, "spring.acp.provider.id")) {
 			properties.put("spring.acp.provider.id", "openai");
@@ -126,43 +139,43 @@ public class TanzuAiEnvironmentPostProcessor implements EnvironmentPostProcessor
 		}
 		String model = environment.getProperty("spring.acp.model");
 		if (!StringUtils.hasText(model)) {
-			Optional<String> chosen = toolCapableModel(binding);
+			Optional<String> chosen = catalog.flatMap(TanzuAiBinding.Catalog::toolCapableModel);
+			if (catalog.isPresent() && chosen.isEmpty()) {
+				logger.warn("Tanzu AI Models service '" + binding.name() + "' advertises no TOOLS-capable model; "
+						+ "set spring.acp.model");
+			}
 			chosen.ifPresent(name -> properties.put("spring.acp.model", name));
 			model = chosen.orElse(null);
 		}
 		environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE_NAME, properties));
-		logger.info("Using Tanzu AI Models service '" + binding.name() + "' at " + binding.apiBase().getHost()
-				+ " as the provider" + (model == null ? "" : ", model '" + model + "'")
+		logger.info("Using Tanzu AI Models service '" + binding.name() + "' at " + baseUrl.getHost()
+				+ baseUrl.getRawPath() + " as the provider" + (model == null ? "" : ", model '" + model + "'")
 				+ (bindings.size() > 1 ? " (one of " + bindings.size() + " bound)" : ""));
 	}
 
 	/**
-	 * The first TOOLS-capable model in the service's catalog; empty, with a warning, if
-	 * the catalog cannot be read, and the agent then uses its own default.
+	 * The service's catalog: which wire format its models speak, and which of them can
+	 * call tools. Empty, with a warning, if it cannot be read; the OpenAI API is then
+	 * assumed and no model is chosen.
 	 */
-	private Optional<String> toolCapableModel(TanzuAiBinding binding) {
+	private Optional<TanzuAiBinding.Catalog> readCatalog(TanzuAiBinding binding) {
 		if (binding.configUrl() == null) {
-			logger.warn("Tanzu AI Models service '" + binding.name() + "' publishes no config_url, so no model "
-					+ "can be chosen from it; set spring.acp.model");
+			logger.warn("Tanzu AI Models service '" + binding.name() + "' publishes no config_url; assuming the "
+					+ "OpenAI API, and set spring.acp.model");
 			return Optional.empty();
 		}
 		try {
 			Validation.requireSecureUrl(binding.configUrl(), "Tanzu AI Models config_url");
-			Optional<String> model = TanzuAiBinding
-				.firstToolCapableModel(catalog.fetch(binding.configUrl(), binding.apiKey()));
-			if (model.isEmpty()) {
-				logger.warn("Tanzu AI Models service '" + binding.name() + "' advertises no TOOLS-capable model; "
-						+ "set spring.acp.model");
-			}
-			return model;
+			return Optional
+				.of(TanzuAiBinding.Catalog.parse(catalogReader.fetch(binding.configUrl(), binding.apiKey())));
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
 			return Optional.empty();
 		}
 		catch (IOException | RuntimeException ex) {
-			logger.warn("Could not read the model catalog of Tanzu AI Models service '" + binding.name() + "' ("
-					+ ex.getMessage() + "); set spring.acp.model");
+			logger.warn("Could not read the catalog of Tanzu AI Models service '" + binding.name() + "' ("
+					+ ex.getMessage() + "); assuming the OpenAI API, and set spring.acp.model");
 			return Optional.empty();
 		}
 	}

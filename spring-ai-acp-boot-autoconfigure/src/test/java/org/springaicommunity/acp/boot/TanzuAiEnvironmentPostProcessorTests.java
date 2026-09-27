@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TanzuAiEnvironmentPostProcessorTests {
 
 	private static final String CATALOG = """
-			{"advertisedModels":[
+			{"name":"tanzu-models","wireFormat":"OPENAI","advertisedModels":[
 			  {"name":"nomic-embed","capabilities":["EMBEDDING"]},
 			  {"name":"gemma-4-31b","capabilities":["CHAT","TOOLS"]},
 			  {"name":"deepseek-v4","capabilities":["CHAT","TOOLS"]}]}""";
@@ -61,10 +61,12 @@ class TanzuAiEnvironmentPostProcessorTests {
 
 	@Test
 	void aBoundServiceBecomesAnOpenAiCompatibleEndpointWithAToolCapableModel() {
-		bind(binding("genai", "tanzu-models", "https://genai.example.com/tanzu-models/openai/"));
+		bind(binding("genai", "tanzu-models", "https://genai.example.com/tanzu-models/"));
 
 		process();
 
+		// One segment below api_base, named by the catalog's wire format, as java-cfenv
+		// builds it.
 		assertThat(environment.getProperty("spring.acp.provider.base-url"))
 			.isEqualTo("https://genai.example.com/tanzu-models/openai");
 		assertThat(environment.getProperty("spring.acp.provider.api-key")).isEqualTo("key-for-tanzu-models");
@@ -76,14 +78,36 @@ class TanzuAiEnvironmentPostProcessorTests {
 	}
 
 	@Test
-	void aConfiguredModelIsKeptAndTheCatalogIsNotRead() {
-		bind(binding("genai", "tanzu-models", "https://genai.example.com/openai"));
+	void aConfiguredModelIsKept() {
+		bind(binding("genai", "tanzu-models", "https://genai.example.com/tanzu-models"));
 		environment.setProperty("spring.acp.model", "deepseek-v4");
 
 		process();
 
 		assertThat(environment.getProperty("spring.acp.model")).isEqualTo("deepseek-v4");
-		assertThat(catalogRequests).isEmpty();
+		assertThat(environment.getProperty("spring.acp.provider.base-url"))
+			.isEqualTo("https://genai.example.com/tanzu-models/openai");
+	}
+
+	@Test
+	void anApiBaseThatAlreadyEndsWithTheWireFormatIsNotExtendedTwice() {
+		bind(binding("genai", "tanzu-models", "https://genai.example.com/tanzu-models/openai"));
+
+		process();
+
+		assertThat(environment.getProperty("spring.acp.provider.base-url"))
+			.isEqualTo("https://genai.example.com/tanzu-models/openai");
+	}
+
+	@Test
+	void aServiceThatDoesNotServeTheOpenAiApiIsNotUsed() {
+		bind(binding("genai", "tanzu-models", "https://genai.example.com/tanzu-models"));
+
+		new TanzuAiEnvironmentPostProcessor(new NoOpLog(), (url, key) -> """
+				{"wireFormat":"ANTHROPIC","advertisedModels":[{"name":"m","capabilities":["TOOLS"]}]}""")
+			.postProcessEnvironment(environment, new SpringApplication());
+
+		assertThat(environment.getProperty("spring.acp.provider.base-url")).isNull();
 	}
 
 	@Test
@@ -154,6 +178,7 @@ class TanzuAiEnvironmentPostProcessorTests {
 		process();
 
 		assertThat(environment.getProperty("spring.acp.provider.base-url")).isEqualTo("https://m.example.com/openai");
+		assertThat(catalogRequests).containsExactly("https://m.example.com/config k");
 	}
 
 	@Test
@@ -206,7 +231,8 @@ class TanzuAiEnvironmentPostProcessorTests {
 			String catalog = TanzuAiEnvironmentPostProcessor
 				.fetch(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/config"), "secret");
 
-			assertThat(TanzuAiBinding.firstToolCapableModel(catalog)).contains("gemma-4-31b");
+			assertThat(TanzuAiBinding.Catalog.parse(catalog))
+				.isEqualTo(new TanzuAiBinding.Catalog("OPENAI", java.util.Optional.of("gemma-4-31b")));
 			assertThat(authorizations).containsExactly("Bearer secret");
 		}
 		finally {
