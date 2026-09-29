@@ -147,6 +147,11 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `spring-ai-
 - **`permissions.policy: deny` does not stop an agent writing files.** Combine with an agent
   mode that asks first (`mode: plan`). Workspace jail confines fs/terminal requests by real
   path (symlinks followed), not just `normalize()`.
+- **A plan kept in a tool is reported as the plan.** Goose sends no ACP `plan`; its `todo`
+  extension's `todo__todo_write` tool call carries the whole list as markdown. `AgentRuntime.planOf`
+  recognises such a call (by `_meta`, never the title) and `AgentTurn` emits `PlanUpdated` in its
+  place, dropping the call's updates. Goose's parser is `TodoPlan`, pinned by a captured 1.52.0
+  `tool_call`.
 - Optional session operations throw `UnsupportedAgentOperationException` naming the ACP method
   rather than failing on the wire.
 - ACP v2 is gated behind a flag and refused; target v1.

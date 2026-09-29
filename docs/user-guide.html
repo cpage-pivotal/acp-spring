@@ -866,7 +866,7 @@ process starts, so a per-request override would silently do nothing.</p>
 <tr><td><code>Thought</code></td><td>Reasoning the agent chose to surface. Not part of the answer.</td></tr>
 <tr><td><code>ToolCallStarted</code></td><td>A tool call began: id, human-readable title, kind.</td></tr>
 <tr><td><code>ToolCallUpdated</code></td><td>Progress or completion of a call, keyed by the same id.</td></tr>
-<tr><td><code>PlanUpdated</code></td><td>The agent's current plan. <strong>Replaces</strong> any earlier plan in the turn.</td></tr>
+<tr><td><code>PlanUpdated</code></td><td>The agent's current plan. <strong>Replaces</strong> any earlier plan in the turn. Also sent for an agent that keeps its plan in a tool, such as goose's <a href="#goose-builtins"><code>todo</code></a>: that tool's calls arrive as <code>PlanUpdated</code>, not as tool calls.</td></tr>
 <tr><td><code>ConfigChanged</code>, <code>ModeChanged</code></td><td>The agent reconfigured itself mid-turn.</td></tr>
 <tr><td><code>UsageUpdated</code></td><td>Context window used of its size, cumulative for the session, with cost when the agent reports one.</td></tr>
 <tr><td><code>Completed</code> <em>(terminal)</em></td><td>The turn reached the agent's own stop condition.</td></tr>
@@ -1111,7 +1111,7 @@ report what was applied. Use tier 3 for what is genuinely agent-specific.</p>
 <h3 id="rt-goose">Goose</h3>
 <p>The adapter launches <code>goose acp</code> over stdio and sets <code>GOOSE_DISABLE_KEYRING=1</code> and
 <code>GOOSE_TELEMETRY_ENABLED=false</code>. Goose still reads its own <code>~/.config/goose/config.yaml</code> for anything
-not set here.</p>
+not set here, including which of its <a href="#goose-builtins">built-in extensions</a> are on.</p>
 
 <div class="listing">
 <div class="title">application.yaml: every Goose key</div>
@@ -1134,23 +1134,99 @@ not set here.</p>
 </div>
 
 <h4 id="goose-builtins">Built-in extensions</h4>
-<p>Goose's own tools come from extensions bundled in the binary. <code>builtins</code> enables them by name, each passed
-as <code>--with-builtin</code>:</p>
+<p>Goose's own tools come from extensions bundled in the binary. A session gets two sets of them:</p>
+<ol>
+	<li><strong>Goose's defaults</strong>, as its <code>config.yaml</code> enables them. With no <code>config.yaml</code>,
+	which is usual on a server or in a container, goose enables the defaults listed below. They load alongside the
+	servers in <code>spring.acp.mcp-servers</code>, not instead of them.</li>
+	<li><strong>Whatever <code>builtins</code> names</strong>, each passed as <code>--with-builtin</code>. These are added to
+	the first set.</li>
+</ol>
+<p>So <code>builtins</code> can only add extensions. Leaving <code>developer</code> out of it does not take the shell away
+from the agent; see <a href="#goose-builtins-off">Turning a goose default off</a>.</p>
+
+<p>Goose 1.52's extensions, by the name <code>builtins</code> takes:</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Name</th><th>Provides</th></tr></thead>
+<thead><tr><th>Name</th><th>On by default</th><th>Provides</th></tr></thead>
 <tbody>
-<tr><td><code>developer</code></td><td>Code editing and shell access. Needed for the agent to change files or run commands, including a skill's scripts.</td></tr>
-<tr><td><code>computercontroller</code></td><td>Web scraping, file caching and automation.</td></tr>
-<tr><td><code>memory</code></td><td>Tools to save and retrieve durable memories.</td></tr>
-<tr><td><code>autovisualiser</code></td><td>Data visualisation and UI generation (charts, diagrams).</td></tr>
-<tr><td><code>tutorial</code></td><td>Interactive goose tutorials. Rarely useful in an application.</td></tr>
-<tr><td><code>todo</code>, <code>skills</code></td><td>Goose platform extensions: a task list the agent keeps for multi-step work, and support for Agent Skills.</td></tr>
+<tr><td><code>developer</code></td><td>Yes</td><td><code>shell</code>, <code>write</code>, <code>edit</code>, <code>tree</code> and <code>read_image</code>: commands and file changes in the workspace. Needed to run a skill's scripts.</td></tr>
+<tr><td><code>analyze</code></td><td>Yes</td><td>Code structure through tree-sitter: directory overviews, file details, call graphs.</td></tr>
+<tr><td><code>apps</code></td><td>Yes</td><td>Tools to create and manage goose "apps" (HTML/CSS/JavaScript run in a sandboxed window).</td></tr>
+<tr><td><code>extensionmanager</code></td><td>Yes</td><td>Tools to search for, enable and disable further extensions during a session.</td></tr>
+<tr><td><code>summon</code></td><td>Yes</td><td><code>load</code> and <code>delegate</code>: load knowledge, and hand tasks to subagents.</td></tr>
+<tr><td><code>skills</code></td><td>Yes</td><td><code>load_skill</code>: Agent Skills from the workspace's <code>.agents/skills</code>.</td></tr>
+<tr><td><code>tom</code></td><td>Yes</td><td>"Top of mind": adds the text in <code>GOOSE_MOIM_MESSAGE_TEXT</code> or <code>GOOSE_MOIM_MESSAGE_FILE</code> to every turn. No tools.</td></tr>
+<tr><td><code>scheduler</code></td><td>Yes, but not loaded</td><td>Scheduled recipe runs. Goose loads it only under <code>goose acp --enable-scheduler</code>, which the adapter does not pass.</td></tr>
+<tr><td><code>todo</code></td><td>No</td><td>A task list the agent keeps for multi-step work. Reported as the agent's plan (<code>PlanUpdated</code>); see below.</td></tr>
+<tr><td><code>chatrecall</code></td><td>No</td><td>Searching past conversations and loading their summaries.</td></tr>
+<tr><td><code>summarize</code></td><td>No</td><td>Loading files or directories and returning an LLM summary in one call.</td></tr>
+<tr><td><code>code_execution</code></td><td>No</td><td>"Code mode": the agent calls other extensions by writing code, to save tokens.</td></tr>
+<tr><td><code>orchestrator</code></td><td>No</td><td>Managing other goose sessions: list, start, message, interrupt and stop them.</td></tr>
+<tr><td><code>computercontroller</code></td><td>No</td><td>Web scraping, file caching and automation. Runs as a bundled MCP server.</td></tr>
+<tr><td><code>memory</code></td><td>No</td><td>Tools to save and retrieve durable memories. Runs as a bundled MCP server.</td></tr>
+<tr><td><code>autovisualiser</code></td><td>No</td><td>Data visualisation and UI generation (charts, diagrams). Runs as a bundled MCP server.</td></tr>
+<tr><td><code>tutorial</code></td><td>No</td><td>Interactive goose tutorials. Rarely useful in an application.</td></tr>
 </tbody>
 </table></div>
-<p><code>builtins</code> <em>adds to</em> the extensions enabled in goose's own <code>config.yaml</code>. A developer machine
-usually has several enabled there. A server or container usually has no goose config at all, so name every extension
-the application relies on. For example, <code>developer</code> and <code>skills</code> if it uses skills with scripts.
-Otherwise an application that works on your laptop quietly loses its tools in production.</p>
+<p>The list and the defaults change between goose releases. <code>todo</code> was on by default in goose 1.45 and is off in
+1.52, for example. To see what your goose enables, run <code>goose info -v</code> with the same environment the application gives
+it: it prints the effective <code>extensions</code> section, defaults included.</p>
+
+<div class="listing">
+<div class="title">application.yaml: add the task list to goose's defaults</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtimes:
+      goose:
+        builtins: todo                 # or a list: [ todo, memory ]</code></pre></div>
+</div>
+
+<div class="admonition warning"><span class="label">Warning</span>
+<p>Because of the defaults, an agent on goose has a shell and file tools unless something turns them off. Under
+<code>spring.acp.mode: auto</code> or an <code>auto-approve</code> permission policy it uses them without asking, and the
+shell inherits your application's environment, secrets included. <code>spring.acp.filesystem</code> and
+<code>spring.acp.terminal</code> do not govern it: those lend the <em>client's</em> disk and terminal, and this shell is the
+agent's own.</p>
+</div>
+
+<h4 id="goose-todo">The todo list as the agent's plan</h4>
+<p>Goose sends no ACP <code>plan</code> updates. Its task list is the <code>todo</code> extension, and each change to it is
+an ordinary tool call, <code>todo__todo_write</code>, carrying the whole list as markdown. The adapter reads that call as
+the plan: it arrives as <code>AgentEvent.PlanUpdated</code>, and neither the call nor its update is reported as a tool
+call. A UI that renders the plan for Codex or OpenCode renders goose's task list the same way.</p>
+<ul>
+	<li><code>- [x]</code> is completed, <code>- [ ]</code> is pending, and <code>- [-]</code>, <code>- [~]</code>,
+	<code>- [/]</code> or <code>- [&gt;]</code> is in progress. Goose's own template uses only the first two, so a list
+	usually shows items done and not yet done, rarely one in progress.</li>
+	<li>A status word is read wherever a model tends to put it: trailing ("Draft report — in progress",
+	"… (done)", "… [DONE]") or leading ("[DONE] Draft report"). It is dropped from the entry's text. A ✅,
+	✔ or ☑ in front of an item, or strikethrough, means completed. Anything else is pending. Models do not always follow
+	goose's template.</li>
+	<li>Sub-items become entries of their own, since ACP's plan is flat. Headings and prose lines are skipped.</li>
+	<li>A write with no list items in it is reported as the tool call it is. An empty write clears the plan.</li>
+</ul>
+<p>The agent writes a list only when it decides to, so name the tool in <code>AGENTS.md</code> or the prompt when you want
+one: "Keep a todo list with one item per request you draft."</p>
+
+<h4 id="goose-builtins-off">Turning a goose default off</h4>
+<p>Goose reads which defaults to enable from its <code>config.yaml</code>, and an entry with <code>enabled: false</code>
+takes one away. Nothing else needs to be in the file:</p>
+<div class="listing">
+<div class="title">config.yaml: no shell, no extension manager</div>
+<div class="content"><pre><code class="language-yaml">extensions:
+  developer:
+    enabled: false
+  extensionmanager:
+    enabled: false</code></pre></div>
+</div>
+<p>The adapter does not move goose's configuration, so goose looks for this file in its usual place:
+<code>~/.config/goose/config.yaml</code> for the user the application runs as. On a developer machine that is your own
+goose configuration. To give the application a file of its own, point <code>GOOSE_PATH_ROOT</code> at a directory
+through the <code>env</code> block. Goose then reads <code>&lt;root&gt;/config/config.yaml</code>, and keeps its sessions
+and logs under that root too, so set <code>log-dir</code> to <code>&lt;root&gt;/state/logs</code> as well
+(<a href="#goose-logs">see below</a>). A name disabled in the file and also listed in <code>builtins</code> is loaded:
+<code>builtins</code> wins.</p>
+
 <div class="admonition note"><span class="label">Note</span>
 <p>A misspelled name does not stop goose. It writes <code>Failed to load extension &lt;name&gt;: … Unknown extension</code>
 to its log and carries on. Spring AI ACP reads that log for agents it started, so the mistake appears as a WARN line and in
@@ -1884,8 +1960,9 @@ the skill in the prompt ("…using the release-checks skill") when you need dete
 
 <div class="admonition warning"><span class="label">Warning</span>
 <p>A skill that runs scripts needs the agent to have a shell tool, and runs that script with the agent's environment,
-which it inherits from your JVM. Goose needs its <code>developer</code> builtin
-(<code>spring.acp.runtimes.goose.builtins: developer</code>) unless its own config already enables it. A secret the
+which it inherits from your JVM. On goose that is the <code>developer</code> extension, which goose enables by default;
+name it in <code>spring.acp.runtimes.goose.builtins</code> to keep it on whatever goose's own config says
+(<a href="#goose-builtins">Built-in extensions</a>). A secret the
 script reads (say <code>MAILGUN_API_KEY</code>) must be in your application's environment. The
 <code>spring.acp.terminal</code> settings do not govern the agent's own shell.</p>
 </div>

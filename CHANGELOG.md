@@ -18,6 +18,10 @@ All notable changes to Spring AI ACP are documented here. The project follows
   catalog is chosen.
   - An explicitly configured provider wins.
   - `spring.acp.tanzu-ai.enabled` and `service-name` control it.
+- Goose's `todo` list arrives as `AgentEvent.PlanUpdated`. Goose keeps its task list in a tool
+  and sends no ACP `plan` update, so each `todo__todo_write` call is read as the agent's plan
+  instead of being reported as a tool call. `AgentRuntime.planOf` is the hook any adapter can use
+  for an agent that does the same.
 
 ## [0.3.0] - 2026-09-24
 

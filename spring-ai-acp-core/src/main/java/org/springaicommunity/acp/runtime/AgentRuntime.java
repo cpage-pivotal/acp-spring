@@ -81,6 +81,28 @@ public interface AgentRuntime {
 	}
 
 	/**
+	 * The plan a tool call carries, when the agent keeps its plan in a tool of its own
+	 * rather than sending ACP {@code plan} updates.
+	 *
+	 * <p>
+	 * ACP has a portable plan, and a caller renders it as a task list. An agent whose
+	 * task list is a tool instead — goose's {@code todo} extension — reports each change
+	 * to it as an ordinary tool call, so without this the list is never seen as one.
+	 * Answering turns that call into
+	 * {@link org.springaicommunity.acp.event.AgentEvent.PlanUpdated PlanUpdated}, and the
+	 * call and its updates are not reported as tool activity.
+	 *
+	 * <p>
+	 * Answer only for a call recognised by a stable identifier, never by its title, and
+	 * with the <em>whole</em> plan: each answer replaces the last, as an ACP plan update
+	 * does. Return empty for a call whose content cannot be read as a plan, and it is
+	 * reported as the tool call it is.
+	 */
+	default Optional<List<AcpSchema.PlanEntry>> planOf(AcpSchema.ToolCall toolCall) {
+		return Optional.empty();
+	}
+
+	/**
 	 * Where this agent writes its own log, if it writes one this client can find.
 	 *
 	 * <p>

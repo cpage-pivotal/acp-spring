@@ -2,6 +2,9 @@ package org.springaicommunity.acp.turn;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -44,19 +47,50 @@ public final class AgentTurn {
 
 	private final AgentObservations observations;
 
-	private AgentTurn(AcpAsyncClient client, SessionUpdateRouter router, AgentObservations observations) {
+	private final PlanTool planTool;
+
+	private AgentTurn(AcpAsyncClient client, SessionUpdateRouter router, AgentObservations observations,
+			PlanTool planTool) {
 		this.client = client;
 		this.router = router;
 		this.observations = observations == null ? AgentObservations.NONE : observations;
+		this.planTool = planTool == null ? PlanTool.NONE : planTool;
 	}
 
 	public static AgentTurn on(AcpAsyncClient client, SessionUpdateRouter router) {
-		return new AgentTurn(client, router, AgentObservations.NONE);
+		return new AgentTurn(client, router, AgentObservations.NONE, PlanTool.NONE);
 	}
 
 	/** Same, reporting what the turn does to {@code observations}. */
 	public static AgentTurn on(AcpAsyncClient client, SessionUpdateRouter router, AgentObservations observations) {
-		return new AgentTurn(client, router, observations);
+		return new AgentTurn(client, router, observations, PlanTool.NONE);
+	}
+
+	/**
+	 * Same, reporting the tool calls {@code planTool} recognises as the agent's plan.
+	 */
+	public static AgentTurn on(AcpAsyncClient client, SessionUpdateRouter router, AgentObservations observations,
+			PlanTool planTool) {
+		return new AgentTurn(client, router, observations, planTool);
+	}
+
+	/**
+	 * Reads the plan out of a tool call, for an agent that keeps its plan in a tool
+	 * rather than sending ACP {@code plan} updates.
+	 *
+	 * @see org.springaicommunity.acp.runtime.AgentRuntime#planOf
+	 */
+	@FunctionalInterface
+	public interface PlanTool {
+
+		/** Recognises nothing: every tool call is reported as one. */
+		PlanTool NONE = toolCall -> Optional.empty();
+
+		/**
+		 * @return the whole plan the call carries, or empty when it is not a plan
+		 */
+		Optional<List<AcpSchema.PlanEntry>> planOf(AcpSchema.ToolCall toolCall);
+
 	}
 
 	/**
@@ -98,9 +132,11 @@ public final class AgentTurn {
 		// we only
 		// send session/cancel in the former case.
 		AtomicBoolean cancelledByConsumer = new AtomicBoolean();
+		// The tool calls this turn reported as its plan, whose updates are then dropped.
+		Set<String> planCalls = ConcurrentHashMap.newKeySet();
 
 		try {
-			router.register(sessionId, update -> AgentEventMapper.map(update).ifPresent(event -> {
+			router.register(sessionId, update -> map(update, planCalls).ifPresent(event -> {
 				record(recording, event);
 				sink.next(event);
 			}));
@@ -175,6 +211,49 @@ public final class AgentTurn {
 		}
 		sink.next(terminal);
 		sink.complete();
+	}
+
+	/**
+	 * Maps one update, reporting a tool call {@link #planTool} recognises as a plan.
+	 *
+	 * <p>
+	 * The call becomes {@link AgentEvent.PlanUpdated} in place of
+	 * {@link AgentEvent.ToolCallStarted}, and the updates that follow it — "completed",
+	 * with the tool's acknowledgement as content — are dropped, so a caller sees the plan
+	 * change and not the bookkeeping behind it. Anything the mapper drops, a replayed
+	 * call included, stays dropped. A recogniser that throws is treated as one that did
+	 * not recognise the call: this runs on the transport's inbound thread, and a plan
+	 * that cannot be read is still a tool call worth reporting.
+	 */
+	private Optional<AgentEvent> map(AcpSchema.SessionUpdate update, Set<String> planCalls) {
+		Optional<AgentEvent> event = AgentEventMapper.map(update);
+		if (event.isEmpty()) {
+			return event;
+		}
+		if (update instanceof AcpSchema.ToolCall call) {
+			Optional<List<AcpSchema.PlanEntry>> plan = planOf(call);
+			if (plan.isPresent()) {
+				if (call.toolCallId() != null) {
+					planCalls.add(call.toolCallId());
+				}
+				return Optional.of(new AgentEvent.PlanUpdated(List.copyOf(plan.get())));
+			}
+		}
+		else if (update instanceof AcpSchema.ToolCallUpdateNotification updated
+				&& planCalls.contains(updated.toolCallId())) {
+			return Optional.empty();
+		}
+		return event;
+	}
+
+	private Optional<List<AcpSchema.PlanEntry>> planOf(AcpSchema.ToolCall call) {
+		try {
+			return planTool.planOf(call);
+		}
+		catch (RuntimeException ex) {
+			logger.debug("Could not read a plan from tool call {}", call.toolCallId(), ex);
+			return Optional.empty();
+		}
 	}
 
 	/**

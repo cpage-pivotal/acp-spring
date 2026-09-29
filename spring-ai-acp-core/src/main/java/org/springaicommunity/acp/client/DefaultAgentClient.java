@@ -480,7 +480,7 @@ public final class DefaultAgentClient implements AgentClient {
 					}
 					throw ex;
 				}
-				return AgentTurn.on(acp, router, observations)
+				return AgentTurn.on(acp, router, observations, runtime::planOf)
 					.prompt(session, prompt, effective.timeout(), turnContext(session, effective, ephemeral))
 					.doFinally(signal -> {
 						session.endTurn();

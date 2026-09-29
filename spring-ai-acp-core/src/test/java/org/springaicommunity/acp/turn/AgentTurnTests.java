@@ -2,6 +2,8 @@ package org.springaicommunity.acp.turn;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -253,6 +255,65 @@ class AgentTurnTests {
 			};
 		}
 
+	}
+
+	/**
+	 * A plan kept in a tool reads as the plan, and only as the plan: its call becomes
+	 * {@code PlanUpdated} and its "completed" update is not reported, while every other
+	 * tool call is untouched.
+	 */
+	@Test
+	void aToolCallTheRuntimeRecognisesAsAPlanIsReportedAsThePlan() {
+		List<AcpSchema.PlanEntry> plan = List.of(new AcpSchema.PlanEntry("Draft report",
+				AcpSchema.PlanEntryPriority.MEDIUM, AcpSchema.PlanEntryStatus.IN_PROGRESS));
+		agentStreams(List.of(toolCall("plan-1", "todo"), toolCallUpdate("plan-1"), toolCall("call-2", "shell"),
+				toolCallUpdate("call-2")), AcpSchema.StopReason.END_TURN);
+
+		List<AgentEvent> events = AgentTurn
+			.on(client, router, null, call -> "todo".equals(call.title()) ? Optional.of(plan) : Optional.empty())
+			.prompt(session, PROMPT, Duration.ofSeconds(5))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(events).containsExactly(new AgentEvent.PlanUpdated(plan),
+				new AgentEvent.ToolCallStarted("call-2", "shell", null),
+				new AgentEvent.ToolCallUpdated("call-2", AcpSchema.ToolCallStatus.COMPLETED, null),
+				new AgentEvent.Completed(AcpSchema.StopReason.END_TURN));
+	}
+
+	@Test
+	void aPlanToolThatThrowsLeavesTheToolCallAsItWas() {
+		agentStreams(List.of(toolCall("call-1", "todo")), AcpSchema.StopReason.END_TURN);
+
+		List<AgentEvent> events = AgentTurn.on(client, router, null, call -> {
+			throw new IllegalStateException("unreadable");
+		}).prompt(session, PROMPT, Duration.ofSeconds(5)).collectList().block(Duration.ofSeconds(5));
+
+		assertThat(events).containsExactly(new AgentEvent.ToolCallStarted("call-1", "todo", null),
+				new AgentEvent.Completed(AcpSchema.StopReason.END_TURN));
+	}
+
+	@Test
+	void aReplayedPlanToolCallStaysDropped() {
+		AcpSchema.SessionUpdate replayed = new AcpSchema.ToolCall("tool_call", "plan-1", "todo", null, null, null, null,
+				null, null, Map.of("replay", true));
+		agentStreams(List.of(replayed), AcpSchema.StopReason.END_TURN);
+
+		List<AgentEvent> events = AgentTurn.on(client, router, null, call -> Optional.of(List.of()))
+			.prompt(session, PROMPT, Duration.ofSeconds(5))
+			.collectList()
+			.block(Duration.ofSeconds(5));
+
+		assertThat(events).containsExactly(new AgentEvent.Completed(AcpSchema.StopReason.END_TURN));
+	}
+
+	private static AcpSchema.SessionUpdate toolCall(String id, String title) {
+		return new AcpSchema.ToolCall("tool_call", id, title, null, null, null, null, null, null, null);
+	}
+
+	private static AcpSchema.SessionUpdate toolCallUpdate(String id) {
+		return new AcpSchema.ToolCallUpdateNotification("tool_call_update", id, null, null,
+				AcpSchema.ToolCallStatus.COMPLETED, null, null, null, null, null);
 	}
 
 	private static AcpSchema.SessionUpdate chunk(String text) {

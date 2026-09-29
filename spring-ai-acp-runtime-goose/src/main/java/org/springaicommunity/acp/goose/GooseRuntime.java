@@ -231,6 +231,16 @@ public class GooseRuntime implements AgentRuntime {
 	}
 
 	/**
+	 * Goose's {@code todo} extension is its plan, kept as a tool: each write arrives as a
+	 * tool call carrying the whole list, and never as an ACP {@code plan} update. See
+	 * {@link TodoPlan}.
+	 */
+	@Override
+	public Optional<List<AcpSchema.PlanEntry>> planOf(AcpSchema.ToolCall toolCall) {
+		return TodoPlan.of(toolCall);
+	}
+
+	/**
 	 * Where goose writes its own log.
 	 *
 	 * <p>
