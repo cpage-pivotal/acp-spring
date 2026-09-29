@@ -3,6 +3,7 @@ package org.springaicommunity.acp.mcp;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.config.Validation;
+import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
 import org.springaicommunity.acp.session.SessionPrincipal;
 
 /**
@@ -29,6 +31,14 @@ import org.springaicommunity.acp.session.SessionPrincipal;
  * A {@link Grant} lives exactly as long as its session. Closing it removes the session's
  * routes, so an agent that kept a proxy URL from a closed session gets a 404 rather than
  * a token.
+ *
+ * <p>
+ * Unless the agent shares MCP servers across its sessions ({@link McpScope#PROCESS}). Its
+ * sessions then all call through the route declared last, so a route per session would
+ * send one user's calls out as another's, and strand every session on a 404 once the
+ * newest closes. Under that scope the access serves one principal at a time and gives
+ * them a single route, re-pointed at their current servers by each grant and removed when
+ * their last grant closes.
  */
 public final class McpAccess implements AutoCloseable {
 
@@ -41,6 +51,14 @@ public final class McpAccess implements AutoCloseable {
 	private final List<McpRequestFilter> filters;
 
 	private final Object lock = new Object();
+
+	private final McpScope scope;
+
+	/**
+	 * Under {@link McpScope#PROCESS}, the principal whose sessions hold grants: at most
+	 * one entry. Keyed by an optional so an application without principals is one.
+	 */
+	private final Map<Optional<SessionPrincipal>, Shared> shared = new HashMap<>();
 
 	private McpProxy proxy;
 
@@ -59,9 +77,19 @@ public final class McpAccess implements AutoCloseable {
 	 * does nothing for a server the agent reaches directly
 	 */
 	public McpAccess(McpCredentialsProvider provider, Duration requestTimeout, List<McpRequestFilter> filters) {
+		this(provider, requestTimeout, filters, McpScope.SESSION);
+	}
+
+	/**
+	 * @param scope where the agent keeps a session's MCP servers; see
+	 * {@link org.springaicommunity.acp.runtime.AgentRuntime#mcpScope()}
+	 */
+	public McpAccess(McpCredentialsProvider provider, Duration requestTimeout, List<McpRequestFilter> filters,
+			McpScope scope) {
 		this.provider = provider == null ? McpCredentialsProvider.none() : provider;
 		this.requestTimeout = requestTimeout;
 		this.filters = filters == null ? List.of() : List.copyOf(filters);
+		this.scope = scope == null ? McpScope.SESSION : scope;
 	}
 
 	/**
@@ -78,6 +106,8 @@ public final class McpAccess implements AutoCloseable {
 	 * the session opens without it.
 	 * @param principal who the session is for, or null
 	 * @throws RuntimeException whatever the provider threw, which refuses the session
+	 * @throws IllegalStateException under {@link McpScope#PROCESS}, when another
+	 * principal's sessions still hold grants
 	 */
 	public Grant grant(SessionPrincipal principal, List<McpServerSpec> servers) {
 		Map<String, McpProxy.Upstream> upstreams = new LinkedHashMap<>();
@@ -101,19 +131,79 @@ public final class McpAccess implements AutoCloseable {
 					+ "credentials provider did not supply one", omitted);
 		}
 		List<McpServerSpec> offered = servers.stream().filter(server -> !omitted.contains(server.name())).toList();
+		if (scope == McpScope.PROCESS) {
+			return sharedGrant(Optional.ofNullable(principal), offered, upstreams);
+		}
 		if (upstreams.isEmpty()) {
-			return new Grant(offered, null, null);
+			return new Grant(offered, null);
 		}
 
 		McpProxy running = proxy();
 		String token = running.register(upstreams);
+		logger.debug("Routing MCP server(s) {} through the loopback proxy for this session", upstreams.keySet());
+		return new Grant(routed(offered, upstreams, running, token), () -> running.unregister(token));
+	}
+
+	/**
+	 * A grant on the principal's one route, counted so the route outlives every session
+	 * but their last.
+	 *
+	 * <p>
+	 * Counted even when nothing is routed. A session handed no route still makes the
+	 * agent re-declare the servers it is given, and it can call the ones it is not given
+	 * through whatever route the agent already holds — so a second principal is refused
+	 * whenever the first holds any grant at all, not just a routed one.
+	 */
+	private Grant sharedGrant(Optional<SessionPrincipal> principal, List<McpServerSpec> offered,
+			Map<String, McpProxy.Upstream> upstreams) {
+		synchronized (lock) {
+			if (closed) {
+				throw new IllegalStateException("MCP access is closed");
+			}
+			if (!shared.isEmpty() && !shared.containsKey(principal)) {
+				throw new IllegalStateException("This agent shares MCP servers across its sessions, so its "
+						+ "process serves one principal at a time, and another principal's sessions are open");
+			}
+			Shared current = shared.computeIfAbsent(principal, key -> new Shared());
+			List<McpServerSpec> handed = offered;
+			if (!upstreams.isEmpty()) {
+				McpProxy running = proxy();
+				if (current.token == null) {
+					current.token = running.register(upstreams);
+				}
+				else {
+					running.update(current.token, upstreams);
+				}
+				handed = routed(offered, upstreams, running, current.token);
+				logger.debug("Routing MCP server(s) {} through the loopback proxy for this principal",
+						upstreams.keySet());
+			}
+			current.refs++;
+			return new Grant(handed, () -> release(principal));
+		}
+	}
+
+	private void release(Optional<SessionPrincipal> principal) {
+		synchronized (lock) {
+			Shared current = shared.get(principal);
+			if (current == null || --current.refs > 0) {
+				return;
+			}
+			shared.remove(principal);
+			if (current.token != null && proxy != null) {
+				proxy.unregister(current.token);
+			}
+		}
+	}
+
+	private static List<McpServerSpec> routed(List<McpServerSpec> offered, Map<String, McpProxy.Upstream> upstreams,
+			McpProxy running, String token) {
 		List<McpServerSpec> handed = new ArrayList<>(offered.size());
 		for (McpServerSpec server : offered) {
 			handed.add(upstreams.containsKey(server.name())
 					? new McpServerSpec.Http(server.name(), running.url(token, server.name()), Map.of()) : server);
 		}
-		logger.debug("Routing MCP server(s) {} through the loopback proxy for this session", upstreams.keySet());
-		return new Grant(handed, running, token);
+		return handed;
 	}
 
 	/**
@@ -143,8 +233,8 @@ public final class McpAccess implements AutoCloseable {
 	}
 
 	/**
-	 * Open proxy routes, one per session holding a grant. Exposed for tests and
-	 * diagnostics.
+	 * Open proxy routes: one per session holding a grant, or under
+	 * {@link McpScope#PROCESS} one per principal. Exposed for tests and diagnostics.
 	 */
 	public int activeGrants() {
 		synchronized (lock) {
@@ -160,6 +250,7 @@ public final class McpAccess implements AutoCloseable {
 			closed = true;
 			running = proxy;
 			proxy = null;
+			shared.clear();
 		}
 		if (running != null) {
 			running.close();
@@ -179,20 +270,17 @@ public final class McpAccess implements AutoCloseable {
 		 * A grant that routes nothing: what a session gets when there is nothing to
 		 * protect.
 		 */
-		public static final Grant NONE = new Grant(List.of(), null, null);
+		public static final Grant NONE = new Grant(List.of(), null);
 
 		private final List<McpServerSpec> servers;
 
-		private final McpProxy proxy;
-
-		private final String token;
+		private final Runnable release;
 
 		private final AtomicBoolean closed = new AtomicBoolean();
 
-		private Grant(List<McpServerSpec> servers, McpProxy proxy, String token) {
+		private Grant(List<McpServerSpec> servers, Runnable release) {
 			this.servers = List.copyOf(servers);
-			this.proxy = proxy;
-			this.token = token;
+			this.release = release;
 		}
 
 		/**
@@ -205,10 +293,21 @@ public final class McpAccess implements AutoCloseable {
 
 		@Override
 		public void close() {
-			if (proxy != null && closed.compareAndSet(false, true)) {
-				proxy.unregister(token);
+			if (release != null && closed.compareAndSet(false, true)) {
+				release.run();
 			}
 		}
+
+	}
+
+	/**
+	 * One principal's route under {@link McpScope#PROCESS}, and how many grants hold it.
+	 */
+	private static final class Shared {
+
+		private String token;
+
+		private int refs;
 
 	}
 

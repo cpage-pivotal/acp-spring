@@ -1481,6 +1481,57 @@ could be set:</p>
 <p><code>default_agent</code> in <code>config</code> sets the mode new sessions start in. Prefer
 <code>spring.acp.mode</code>, which reports whether it was applied.</p>
 
+<h4 id="opencode-processes">Processes, users and memory</h4>
+<p>OpenCode keeps MCP clients per process rather than per session. It holds one client per server name, and every
+<code>session/new</code> replaces it, so all the sessions in a process call MCP through whichever session declared the
+servers last (see <a href="#mcp-credentials">Credentials the agent never sees</a>). To keep one user's tools from
+running with another user's credentials, the pool gives each OpenCode process to <strong>one principal at a
+time</strong>:</p>
+<ul>
+	<li>A user's sessions all share one process, up to <code>spring.acp.pool.max-sessions-per-process</code>.</li>
+	<li>A user who needs a process gets an idle one. An idle process that last served someone else is restarted
+	first, which takes a second or two and does not count against <code>max-restarts</code>.</li>
+	<li>When every process is serving other users, a new user's session is refused with an error that names
+	<code>spring.acp.pool.max-processes</code>. A process becomes free when its user's last session closes, either
+	explicitly or after <code>spring.acp.pool.session-ttl</code> of inactivity.</li>
+</ul>
+<p>So <code>max-processes</code> is the number of users who can hold OpenCode sessions at the same time, and each of
+them costs a whole OpenCode process. Processes start lazily, so memory grows with concurrent users rather than
+being allocated at startup. The goose and Codex adapters keep MCP servers per session, so for them
+<code>max-processes</code> is only about parallelism.</p>
+<p>Measured resident memory of one <code>opencode acp</code> process:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Point</th><th>Linux x86_64, 1.18.33</th><th>macOS arm64, 1.18.32</th></tr></thead>
+<tbody>
+<tr><td>After <code>initialize</code></td><td>490 MB</td><td>420 MB</td></tr>
+<tr><td>After the first <code>session/new</code></td><td>430 MB</td><td>550 MB</td></tr>
+<tr><td>After a first short turn</td><td>not measured</td><td>660 MB</td></tr>
+<tr><td>Each further session in the same process</td><td>not measured</td><td>about 1 MB</td></tr>
+</tbody>
+</table></div>
+<p>Budget about <strong>650 MB per OpenCode process</strong>, plus your application's own JVM. Size the host or
+container for the worst case:</p>
+<div class="listing">
+<div class="content"><pre><code class="language-plaintext">memory ≥ JVM + max-processes × 650 MB</code></pre></div>
+</div>
+<div class="listing">
+<div class="title">application.yaml: up to three concurrent users</div>
+<div class="content"><pre><code class="language-yaml">spring:
+  acp:
+    runtime: opencode
+    pool:
+      max-processes: 3             # 3 users, ~2 GB of OpenCode
+      max-sessions-per-process: 8  # chats per user
+      session-ttl: 30m             # free idle users sooner</code></pre></div>
+</div>
+<div class="admonition note"><span class="label">Note</span>
+<p>The agent processes are children of the JVM and share its memory limit. On Cloud Foundry, the Java buildpack's
+memory calculator gives the JVM nearly the whole container by default, so leave room for OpenCode with
+<code>memory_calculator: { headroom: … }</code> in <code>JBP_CONFIG_OPEN_JDK_JRE</code> (a percentage of the
+container), or cap the heap with <code>-Xmx</code> in <code>JAVA_OPTS</code>. Otherwise the container can be killed
+for exceeding its limit while the JVM still believes it has headroom.</p>
+</div>
+
 <h4 id="opencode-other">Other useful settings</h4>
 <div class="table-wrap"><table>
 <thead><tr><th>Key under <code>config</code></th><th>Effect</th></tr></thead>
@@ -1778,6 +1829,14 @@ given <code>http://127.0.0.1:&lt;port&gt;/&lt;random-token&gt;/&lt;server&gt;</c
 every forwarded request (so a token refresh lands between two tool calls) and drops the agent's own
 <code>Authorization</code>. Each session gets its own unguessable route, released when the session ends. A provider that
 throws refuses the session before the agent hears of it.</p>
+<p>An agent that shares MCP servers across its sessions changes that (<code>AgentRuntime.mcpScope()</code> returns
+<code>PROCESS</code>; OpenCode does). Such an agent keeps one client per server name for the whole process, and every
+<code>session/new</code> replaces it, so all of its sessions call through the route declared last. The client
+therefore keeps each agent process to one principal at a time and gives that principal a single route, shared by all
+of their sessions and released when the last of them ends. A process that last served another principal is
+restarted before it is handed over. <code>spring.acp.pool.max-processes</code> is then the number of users who can
+hold sessions at once; beyond it a new user's session is refused with a message that says so. See
+<a href="#opencode-processes">Processes, users and memory</a> for what that costs.</p>
 <h4>URL from the provider</h4>
 <p>Some servers are only located when their credential is issued: a credential broker answers with a token
 <em>and</em> the endpoint it is good for. Declare such a server with <code>auth: provided</code> and no
@@ -2398,8 +2457,8 @@ Disable with <code>spring.acp.observations.enabled=false</code>.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Property</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>spring.acp.pool.max-processes</code></td><td><code>1</code></td><td>Agent processes to run. Raise for unrelated conversations in parallel.</td></tr>
-<tr><td><code>spring.acp.pool.max-sessions-per-process</code></td><td><code>32</code></td><td>Named sessions per process before another is preferred.</td></tr>
+<tr><td><code>spring.acp.pool.max-processes</code></td><td><code>1</code></td><td>Agent processes to run. Raise for unrelated conversations in parallel. For OpenCode, also the number of users who can hold sessions at once, at about 650 MB each; see <a href="#opencode-processes">Processes, users and memory</a>.</td></tr>
+<tr><td><code>spring.acp.pool.max-sessions-per-process</code></td><td><code>32</code></td><td>Named sessions per process before another is preferred. For OpenCode, sessions per user.</td></tr>
 <tr><td><code>spring.acp.pool.session-ttl</code></td><td><code>60m</code></td><td>Idle time before a named session is closed.</td></tr>
 <tr><td><code>spring.acp.pool.max-restarts</code></td><td><code>5</code></td><td>Replacements within five minutes before a connection is left down.</td></tr>
 <tr><td><code>spring.acp.controller.*</code></td><td>off</td><td>See <a href="#http">HTTP Endpoint</a>.</td></tr>

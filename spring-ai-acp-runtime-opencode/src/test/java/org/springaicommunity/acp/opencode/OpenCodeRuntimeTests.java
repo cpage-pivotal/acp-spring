@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.runtime.AgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
 import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,11 @@ class OpenCodeRuntimeTests {
 
 	private AgentSettings.Builder settings() {
 		return AgentSettings.builder(OpenCodeRuntime.ID, workspace).runtimeHome(home);
+	}
+
+	@Test
+	void sharesMcpServersAcrossTheSessionsOfAProcess() {
+		assertThat(runtime.mcpScope()).isEqualTo(McpScope.PROCESS);
 	}
 
 	@Test

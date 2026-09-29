@@ -162,6 +162,14 @@ final class McpProxy implements AutoCloseable {
 		return token;
 	}
 
+	/**
+	 * Points an existing token at a fresh set of servers, so whatever already holds its
+	 * URLs reaches them. A token that is no longer registered stays that way.
+	 */
+	void update(String token, Map<String, Upstream> upstreams) {
+		routes.replace(token, Map.copyOf(upstreams));
+	}
+
 	void unregister(String token) {
 		routes.remove(token);
 	}
