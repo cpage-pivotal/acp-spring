@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.acp.config.McpServerSpec;
+import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
 import org.springaicommunity.acp.session.SessionPrincipal;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -64,6 +65,14 @@ class McpAccessTests {
 
 	private McpAccess access(McpCredentialsProvider provider) {
 		access = new McpAccess(provider, LIMIT);
+		return access;
+	}
+
+	/**
+	 * Access for an agent that shares MCP servers across every session in its process.
+	 */
+	private McpAccess processScoped(McpCredentialsProvider provider) {
+		access = new McpAccess(provider, LIMIT, List.of(), McpScope.PROCESS);
 		return access;
 	}
 
@@ -251,6 +260,90 @@ class McpAccessTests {
 		assertThat(urlOf(alice, "tools")).isNotEqualTo(urlOf(bob, "tools"));
 		assertThat(upstream.requests).extracting(seen -> seen.headers().get("Authorization").get(0))
 			.containsExactly("Bearer token-bob", "Bearer token-alice");
+	}
+
+	// --- an agent that shares servers across its sessions
+	// ------------------------------------------
+
+	@Test
+	void underProcessScopeOnePrincipalsSessionsAreHandedOneRoute() {
+		McpAccess access = processScoped(perUser());
+
+		McpAccess.Grant first = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+		McpAccess.Grant second = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+
+		assertThat(urlOf(second, "tools")).isEqualTo(urlOf(first, "tools"));
+		assertThat(access.activeGrants()).isOne();
+	}
+
+	@Test
+	void underProcessScopeClosingTheNewestSessionLeavesTheRouteToTheOthers() throws Exception {
+		McpAccess access = processScoped(perUser());
+		McpAccess.Grant older = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+		McpAccess.Grant newest = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+
+		newest.close();
+		newest.close();
+
+		assertThat(post(urlOf(older, "tools"), Map.of(), "{}").statusCode()).isEqualTo(200);
+		assertThat(upstream.requests).extracting(seen -> seen.headers().get("Authorization").get(0))
+			.containsExactly("Bearer token-alice");
+
+		older.close();
+
+		assertThat(post(urlOf(older, "tools"), Map.of(), "{}").statusCode()).isEqualTo(404);
+		assertThat(access.activeGrants()).isZero();
+	}
+
+	@Test
+	void underProcessScopeASecondPrincipalIsRefusedWhileTheFirstHoldsAGrant() {
+		McpAccess access = processScoped(perUser());
+		McpAccess.Grant alice = access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+
+		assertThatThrownBy(() -> access.grant(SessionPrincipal.of("bob"), List.of(tools())))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("one principal at a time");
+
+		alice.close();
+
+		McpAccess.Grant bob = access.grant(SessionPrincipal.of("bob"), List.of(tools()));
+		assertThat(bob.servers()).hasSize(1);
+	}
+
+	@Test
+	void underProcessScopeASecondPrincipalIsRefusedEvenWhenTheFirstHasNothingRouted() {
+		McpAccess access = processScoped((server, principal) -> "alice".equals(principal.name()) ? Optional.empty()
+				: Optional.of(McpCredentials.bearer(() -> "t")));
+		access.grant(SessionPrincipal.of("alice"), List.of(tools()));
+
+		assertThatThrownBy(() -> access.grant(SessionPrincipal.of("bob"), List.of(tools())))
+			.isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
+	void underProcessScopeEachGrantRepointsTheRouteAtTheServersItWasGiven() throws Exception {
+		McpServerSpec.Http more = new McpServerSpec.Http("more", upstream.url(), Map.of());
+		AtomicInteger asked = new AtomicInteger();
+		McpAccess access = processScoped((server, principal) -> {
+			// "more" is granted only from the second session on, as a broker grant
+			// would arrive.
+			if (server.name().equals("more") && asked.get() < 2) {
+				asked.incrementAndGet();
+				return Optional.empty();
+			}
+			asked.incrementAndGet();
+			return Optional.of(McpCredentials.bearer(() -> "token-" + server.name()));
+		});
+		McpAccess.Grant older = access.grant(SessionPrincipal.of("alice"), List.of(tools(), more));
+		URI moreThroughOlder = urlOf(older, "tools")
+			.resolve(urlOf(older, "tools").getPath().replace("/tools", "/more"));
+		assertThat(post(moreThroughOlder, Map.of(), "{}").statusCode()).isEqualTo(404);
+
+		McpAccess.Grant newer = access.grant(SessionPrincipal.of("alice"), List.of(tools(), more));
+
+		assertThat(urlOf(newer, "more")).isEqualTo(moreThroughOlder);
+		assertThat(post(moreThroughOlder, Map.of(), "{}").statusCode()).isEqualTo(200);
+		assertThat(access.activeGrants()).isOne();
 	}
 
 	@Test

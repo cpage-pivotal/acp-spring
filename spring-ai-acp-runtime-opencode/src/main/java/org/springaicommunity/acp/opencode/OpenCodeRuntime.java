@@ -239,6 +239,18 @@ public class OpenCodeRuntime implements AgentRuntime {
 		};
 	}
 
+	/**
+	 * OpenCode keeps MCP clients in per-directory instance state, one per server name,
+	 * and {@code session/new} registers each declared server with {@code mcp.add}, which
+	 * replaces the client of that name for every session in the directory. Every session
+	 * here shares the workspace, so they would all call through the route of whichever
+	 * session was opened last (measured against 1.18.33).
+	 */
+	@Override
+	public McpScope mcpScope() {
+		return McpScope.PROCESS;
+	}
+
 	@Override
 	public Optional<String> toolNameOf(AcpSchema.ToolCallUpdate toolCall) {
 		return ToolNames.fromRawInput(toolCall);

@@ -160,6 +160,22 @@ public interface AgentRuntime {
 	}
 
 	/**
+	 * How far the MCP servers declared on one session reach inside the agent process.
+	 *
+	 * <p>
+	 * The client hands every session its own loopback route, carrying that session's
+	 * principal's credentials. That is only sound if the agent keeps each session's
+	 * servers to that session. An agent that keeps one client per server name for the
+	 * whole process instead has every session call through whichever route was declared
+	 * last: another user's, or a closed session's. For such a runtime the client keeps a
+	 * process to one principal at a time and gives that principal one route, shared by
+	 * all of their sessions and held until the last of them closes.
+	 */
+	default McpScope mcpScope() {
+		return McpScope.SESSION;
+	}
+
+	/**
 	 * The {@code session/set_config_option} ids this runtime uses for a portable option,
 	 * most specific first, or empty if it has none.
 	 *
@@ -200,6 +216,19 @@ public interface AgentRuntime {
 	 */
 	default boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
 		return false;
+	}
+
+	/**
+	 * Where an agent keeps the MCP servers a session declares. See {@link #mcpScope()}.
+	 */
+	enum McpScope {
+
+		/** Each session's servers are its own. */
+		SESSION,
+
+		/** One client per server name, shared by every session in the process. */
+		PROCESS
+
 	}
 
 	/**

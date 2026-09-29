@@ -140,6 +140,12 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `spring-ai-
   `McpRequestFilter`s its adapter returns from `mcpRequestFilters` (goose: opt-in
   `mcp.answer-discover`), never code in core. See "Credentials the agent never sees" in
   `docs/user-guide.html`.
+- **Some agents share MCP servers across their sessions.** OpenCode keeps one MCP client per
+  server name for the process and each `session/new` replaces it, so every session would call
+  through the newest session's route: another user's, or a closed one's.
+  `AgentRuntime.mcpScope()` = `PROCESS` makes `AgentClientPool` keep a process to one principal
+  (restarting an idle one before handing it to another) and `McpAccess` give that principal one
+  reference-counted route. `max-processes` is then the concurrent-user cap.
 - **`permissions.policy: ask` blocks on a person.** `PermissionPolicy.decide(request, toolName)`
   is what the client calls (the 2-arg form is the rule-only default), on `boundedElastic` so
   the transport's inbound thread keeps delivering the turn. `ask` without a `PermissionPrompt`

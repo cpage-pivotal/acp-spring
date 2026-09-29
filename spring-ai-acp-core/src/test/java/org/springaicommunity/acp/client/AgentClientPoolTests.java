@@ -14,13 +14,16 @@ import org.springaicommunity.acp.config.AgentOptions;
 import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.PoolSettings;
 import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
 import org.springaicommunity.acp.session.AgentSession;
 import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.session.SessionPrincipal;
 import org.springaicommunity.acp.session.SessionRegistry;
 import org.springaicommunity.acp.session.StoredSession;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
+import reactor.core.publisher.BaseSubscriber;
 import reactor.core.publisher.Flux;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +54,17 @@ class AgentClientPoolTests {
 
 	private AgentClientPool pool(AgentSettings settings) {
 		return new AgentClientPool("fake", settings, this::newClient);
+	}
+
+	private static final SessionPrincipal ALICE = SessionPrincipal.of("alice");
+
+	private static final SessionPrincipal BOB = SessionPrincipal.of("bob");
+
+	/**
+	 * A pool over a runtime whose MCP servers are shared by every session in a process.
+	 */
+	private AgentClientPool processScoped(AgentSettings settings) {
+		return new AgentClientPool("fake", settings, this::newClient, McpScope.PROCESS);
 	}
 
 	private AgentClient newClient() {
@@ -212,6 +226,121 @@ class AgentClientPoolTests {
 		}
 	}
 
+	@Test
+	@DisplayName("process-scoped MCP: two principals never share a process")
+	void processScopedPrincipalsNeverShare() {
+		try (AgentClientPool pool = processScoped(settings(2, 32))) {
+			pool.openSession("a", ALICE);
+			pool.openSession("b", BOB);
+			pool.openSession("c", ALICE);
+
+			assertThat(created).hasSize(2);
+			assertThat(created.get(0).registry.knows("a")).isTrue();
+			assertThat(created.get(0).registry.knows("c")).isTrue();
+			assertThat(created.get(1).registry.knows("b")).isTrue();
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: one principal's sessions share a process")
+	void processScopedPrincipalShares() {
+		try (AgentClientPool pool = processScoped(settings(3, 32))) {
+			pool.openSession("a", ALICE);
+			pool.openSession("b", ALICE);
+			pool.openSession("c", ALICE);
+
+			assertThat(created).hasSize(1);
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: a principal with no process free is refused, naming max-processes")
+	void processScopedRefusesWhenEveryProcessServesSomeoneElse() {
+		try (AgentClientPool pool = processScoped(settings(1, 32))) {
+			pool.openSession("a", ALICE);
+
+			assertThatThrownBy(() -> pool.openSession("b", BOB)).isInstanceOf(AgentClientException.class)
+				.hasMessageContaining("spring.acp.pool.max-processes");
+			assertThat(created.get(0).registry.knows("b")).isFalse();
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: an idle process is restarted before it serves someone else")
+	void processScopedRecyclesOnHandover() {
+		try (AgentClientPool pool = processScoped(settings(1, 32))) {
+			pool.openSession("a", ALICE);
+			pool.sessions().close("a");
+
+			pool.openSession("b", BOB);
+
+			assertThat(created).hasSize(2);
+			assertThat(created.get(0).closed).isTrue();
+			assertThat(created.get(1).registry.knows("b")).isTrue();
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: an idle process goes back to the same principal without a restart")
+	void processScopedKeepsTheProcessForItsOwner() {
+		try (AgentClientPool pool = processScoped(settings(1, 32))) {
+			pool.openSession("a", ALICE);
+			pool.sessions().close("a");
+
+			pool.openSession("b", ALICE);
+
+			assertThat(created).hasSize(1);
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: handing a process over does not spend the restart budget")
+	void processScopedHandoverIsNotARestart() {
+		AgentSettings settings = AgentSettings.builder("fake", workspace).pool(new PoolSettings(1, 32, 1)).build();
+		try (AgentClientPool pool = processScoped(settings)) {
+			for (int i = 0; i < 4; i++) {
+				String name = "s" + i;
+				pool.openSession(name, i % 2 == 0 ? ALICE : BOB);
+				pool.sessions().close(name);
+			}
+
+			assertThat(created).hasSize(4);
+			assertThat(pool.isAlive()).isTrue();
+		}
+	}
+
+	@Test
+	@DisplayName("process-scoped MCP: an unnamed turn holds its process until it ends")
+	void processScopedEphemeralTurnHoldsItsProcess() {
+		try (AgentClientPool pool = processScoped(settings(1, 32))) {
+			BaseSubscriber<AgentEvent> firstEventOnly = new BaseSubscriber<>() {
+				@Override
+				protected void hookOnSubscribe(org.reactivestreams.Subscription subscription) {
+					request(1);
+				}
+			};
+			pool.prompt().principal(ALICE).user("hello").stream().events().subscribe(firstEventOnly);
+
+			assertThatThrownBy(() -> pool.openSession("b", BOB)).isInstanceOf(AgentClientException.class);
+
+			firstEventOnly.cancel();
+			pool.openSession("b", BOB);
+
+			assertThat(created).hasSize(2);
+		}
+	}
+
+	@Test
+	@DisplayName("session-scoped MCP: principals are placed by load alone, as before")
+	void sessionScopedIgnoresPrincipals() {
+		try (AgentClientPool pool = pool(settings(1, 32))) {
+			pool.openSession("a", ALICE);
+			pool.openSession("b", BOB);
+
+			assertThat(created).hasSize(1);
+		}
+	}
+
 	/** An {@link AgentClient} that records what was asked of it and nothing else. */
 	private static final class FakeClient implements AgentClient {
 
@@ -267,6 +396,12 @@ class AgentClientPoolTests {
 		}
 
 		@Override
+		public AgentSession openSession(String name, SessionPrincipal principal) {
+			return registry.resolve(name, principal, n -> new SessionRegistry.Opened("sid-" + index + "-" + n, () -> {
+			}));
+		}
+
+		@Override
 		public void close() {
 			closed = true;
 		}
@@ -278,6 +413,11 @@ class AgentClientPoolTests {
 			@Override
 			public PromptSpec session(String name) {
 				this.sessionName = name;
+				return this;
+			}
+
+			@Override
+			public PromptSpec principal(SessionPrincipal principal) {
 				return this;
 			}
 

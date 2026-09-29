@@ -23,6 +23,18 @@ All notable changes to Spring AI ACP are documented here. The project follows
   instead of being reported as a tool call. `AgentRuntime.planOf` is the hook any adapter can use
   for an agent that does the same.
 
+### Fixed
+
+- OpenCode sessions no longer call MCP servers as another user, or through a closed session's
+  route. OpenCode keeps one MCP client per server name for its whole process, replaced by each
+  `session/new`, so every session used the route of the one opened last. A runtime now declares
+  this with `AgentRuntime.mcpScope()` (`PROCESS` for OpenCode). The pool then keeps each such
+  process to one principal at a time, restarting an idle process before it serves someone else,
+  and `McpAccess` gives the principal one route shared by all of their sessions, held until the
+  last closes. `spring.acp.pool.max-processes` caps how many users hold OpenCode sessions at once,
+  and each costs a whole OpenCode process (about 650 MB); see "Processes, users and memory" in the
+  user guide.
+
 ## [0.3.0] - 2026-09-24
 
 Initial release as Spring AI ACP, under the `org.springaicommunity` groupId and the Apache
