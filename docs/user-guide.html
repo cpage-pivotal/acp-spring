@@ -697,7 +697,7 @@ of three tiers, and the tier tells you how portable it is:</p>
 	<li><strong>An agent you can run.</strong> Spring AI ACP does not package agent binaries. For the compiled adapters:
 		<ul>
 			<li><strong>Goose</strong>: the <code>goose</code> CLI on the <code>PATH</code>, or <code>GOOSE_CLI_PATH</code> pointing at it. Verified against goose 1.51.</li>
-			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.1</code>, so the first start downloads it.</li>
+			<li><strong>Codex</strong>: Node.js with <code>npx</code>. The adapter runs <code>npx -y @agentclientprotocol/codex-acp@1.13.1</code>, so the first start downloads it. <code>CODEX_ACP_CLI_PATH</code> names a local codex-acp to run instead.</li>
 			<li><strong>OpenCode</strong>: the <code>opencode</code> CLI on the <code>PATH</code>, or <code>OPENCODE_CLI_PATH</code>. Verified against opencode 1.18.</li>
 			<li><strong>Registry agents</strong>: nothing pre-installed; the agent is downloaded and checksum-verified. Agents distributed through npm or PyPI need <code>npx</code> or <code>uvx</code>.</li>
 		</ul>
@@ -1049,7 +1049,7 @@ runtimes:
 <thead><tr><th>Runtime</th><th>What must be on the machine</th><th>Pointing at a specific binary</th></tr></thead>
 <tbody>
 <tr><td><code>goose</code></td><td>The <a href="https://block.github.io/goose/">goose CLI</a></td><td><code>GOOSE_CLI_PATH</code> environment variable</td></tr>
-<tr><td><code>codex</code></td><td>Node.js with <code>npx</code> (codex-acp is downloaded on first start)</td><td><code>spring.acp.runtimes.codex.command</code></td></tr>
+<tr><td><code>codex</code></td><td>Node.js with <code>npx</code> (codex-acp is downloaded on first start)</td><td><code>CODEX_ACP_CLI_PATH</code>, or <code>spring.acp.runtimes.codex.command</code></td></tr>
 <tr><td><code>opencode</code></td><td>The <a href="https://opencode.ai">OpenCode CLI</a></td><td><code>OPENCODE_CLI_PATH</code>, or <code>spring.acp.runtimes.opencode.command</code></td></tr>
 <tr><td>registry</td><td>Nothing; <code>npx</code> or <code>uvx</code> for agents distributed through npm or PyPI</td><td>Downloaded into <code>spring.acp.registry.cache</code></td></tr>
 </tbody>

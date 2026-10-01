@@ -55,6 +55,32 @@ class CodexRuntimeTests {
 	}
 
 	@Test
+	void aNamedLocalAdapterReplacesNpx() {
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) new CodexRuntime("/opt/codex-acp")
+			.launch(settings().build());
+
+		assertThat(spec.command()).isEqualTo("/opt/codex-acp");
+		assertThat(spec.args()).isEmpty();
+	}
+
+	@Test
+	void theCommandOptionOutranksANamedLocalAdapter() {
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) new CodexRuntime("/opt/codex-acp")
+			.launch(settings().runtimeOptions(Map.of("command", "/usr/local/bin/codex-acp")).build());
+
+		assertThat(spec.command()).isEqualTo("/usr/local/bin/codex-acp");
+	}
+
+	@Test
+	void aPackageTheApplicationNamedOutranksANamedLocalAdapter() {
+		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) new CodexRuntime("/opt/codex-acp")
+			.launch(settings().runtimeOptions(Map.of("package", "@agentclientprotocol/codex-acp@1.11.0")).build());
+
+		assertThat(spec.command()).isEqualTo("npx");
+		assertThat(spec.args()).containsExactly("-y", "@agentclientprotocol/codex-acp@1.11.0");
+	}
+
+	@Test
 	void theAmbientCodexHomeIsLeftAloneWhenNothingAskedForCodexConfig() {
 		// Codex keeps auth.json beside config.toml, so relocating the home uninvited
 		// would cost a

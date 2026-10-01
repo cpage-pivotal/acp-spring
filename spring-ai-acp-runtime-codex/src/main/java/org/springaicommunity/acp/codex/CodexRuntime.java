@@ -31,7 +31,8 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * Unlike Goose and OpenCode, Codex ships no ACP mode in its own binary; the registry
  * entry distributes an npm package instead, so the default launch is {@code npx}. That is
  * a real cost — the first start pays a download — and an application that would rather
- * not can point {@code spring.acp.runtimes.codex.command} at a locally installed adapter.
+ * not can point {@code spring.acp.runtimes.codex.command} at a locally installed adapter,
+ * or have one named by {@value #CLI_PATH_ENV}, as the Codex supply buildpack does.
  *
  * <p>
  * It is the only one of the three that advertises the {@code providers} capability, so a
@@ -66,6 +67,12 @@ public class CodexRuntime implements AgentRuntime {
 	 */
 	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.13.1";
 
+	/**
+	 * The buildpack, or an operator, can name a local codex-acp without touching
+	 * application config.
+	 */
+	public static final String CLI_PATH_ENV = "CODEX_ACP_CLI_PATH";
+
 	/** Codex reads its configuration, and keeps its credentials, under this directory. */
 	public static final String HOME_ENV = "CODEX_HOME";
 
@@ -88,6 +95,21 @@ public class CodexRuntime implements AgentRuntime {
 
 	private static final Logger logger = LoggerFactory.getLogger(CodexRuntime.class);
 
+	/** A local codex-acp to run instead of fetching the package through npx. */
+	private final Optional<String> executable;
+
+	public CodexRuntime() {
+		this(defaultExecutable());
+	}
+
+	public CodexRuntime(String executable) {
+		this(Optional.of(executable));
+	}
+
+	private CodexRuntime(Optional<String> executable) {
+		this.executable = executable;
+	}
+
 	@Override
 	public String id() {
 		return ID;
@@ -96,7 +118,10 @@ public class CodexRuntime implements AgentRuntime {
 	@Override
 	public AgentLaunchSpec launch(AgentSettings settings) {
 		RuntimeOptions options = settings.runtimeOptions();
-		Optional<String> command = options.text("command");
+		// An application that names a package asked for npx; only the default gives way
+		// to a local adapter.
+		Optional<String> command = options.text("command")
+			.or(() -> options.text("package").isPresent() ? Optional.empty() : this.executable);
 
 		List<String> args = new ArrayList<>();
 		if (command.isEmpty()) {
@@ -297,6 +322,19 @@ public class CodexRuntime implements AgentRuntime {
 			Files.delete(link);
 			logger.debug("Removed {}: the configured key is the credential", link);
 		}
+	}
+
+	private static Optional<String> defaultExecutable() {
+		String configured = System.getenv(CLI_PATH_ENV);
+		if (configured == null || configured.isBlank()) {
+			return Optional.empty();
+		}
+		Path path = Path.of(configured);
+		if (!Files.isExecutable(path)) {
+			throw new IllegalStateException(
+					CLI_PATH_ENV + " points at '" + configured + "', which is not an executable file");
+		}
+		return Optional.of(path.toString());
 	}
 
 	/** Where Codex would look if this adapter did nothing. */

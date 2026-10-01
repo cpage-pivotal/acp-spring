@@ -18,6 +18,10 @@ All notable changes to Spring AI ACP are documented here. The project follows
   catalog is chosen.
   - An explicitly configured provider wins.
   - `spring.acp.tanzu-ai.enabled` and `service-name` control it.
+- `CODEX_ACP_CLI_PATH` names a local codex-acp for the Codex runtime to launch in place of
+  `npx`, as `GOOSE_CLI_PATH` and `OPENCODE_CLI_PATH` do for theirs. The Codex supply buildpack
+  exports it. `spring.acp.runtimes.codex.command` still wins, and so does an explicit
+  `package`, which asks for npx.
 - Goose's `todo` list arrives as `AgentEvent.PlanUpdated`. Goose keeps its task list in a tool
   and sends no ACP `plan` update, so each `todo__todo_write` call is read as the agent's plan
   instead of being reported as a tool call. `AgentRuntime.planOf` is the hook any adapter can use
