@@ -5,3 +5,6 @@ target/
 
 # Release notes for maintainers; not published yet
 RELEASING.md
+
+# Maintainer's local skill for bumping the pinned agent versions
+.claude/skills/update-agent-versions/
