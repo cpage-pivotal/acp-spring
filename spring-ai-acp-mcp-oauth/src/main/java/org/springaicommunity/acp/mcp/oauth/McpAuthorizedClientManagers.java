@@ -6,6 +6,7 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.endpoint.RestClientRefreshTokenTokenResponseClient;
+import org.springframework.util.LinkedMultiValueMap;
 
 /**
  * The {@link OAuth2AuthorizedClientManager} the proxy gets tokens from.
@@ -32,7 +33,7 @@ public final class McpAuthorizedClientManagers {
 			OAuth2AuthorizedClientService authorizedClients) {
 		RestClientRefreshTokenTokenResponseClient refresh = new RestClientRefreshTokenTokenResponseClient();
 		refresh.addParametersConverter(request -> {
-			var parameters = new org.springframework.util.LinkedMultiValueMap<String, String>();
+			var parameters = new LinkedMultiValueMap<String, String>();
 			String resource = registrations
 				.findResourceIdByRegistrationId(request.getClientRegistration().getRegistrationId());
 			if (resource != null) {

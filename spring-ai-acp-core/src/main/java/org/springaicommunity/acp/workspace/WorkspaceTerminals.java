@@ -4,10 +4,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -94,7 +96,7 @@ public final class WorkspaceTerminals implements AutoCloseable {
 		return Mono.fromFuture(terminal.process.onExit())
 			.timeout(access.commandTimeout())
 			.map(exited -> new AcpSchema.WaitForTerminalExitResponse(exited.exitValue(), null))
-			.onErrorResume(java.util.concurrent.TimeoutException.class, ex -> {
+			.onErrorResume(TimeoutException.class, ex -> {
 				logger.warn("Terminal {} exceeded {}; killing it", terminal.id, access.commandTimeout());
 				terminal.kill();
 				return Mono.just(new AcpSchema.WaitForTerminalExitResponse(null, "SIGKILL"));
@@ -157,7 +159,7 @@ public final class WorkspaceTerminals implements AutoCloseable {
 		}
 
 		private static Terminal start(String id, AcpSchema.CreateTerminalRequest request, Path cwd, long byteLimit) {
-			List<String> command = new java.util.ArrayList<>();
+			List<String> command = new ArrayList<>();
 			command.add(request.command());
 			if (request.args() != null) {
 				command.addAll(request.args());

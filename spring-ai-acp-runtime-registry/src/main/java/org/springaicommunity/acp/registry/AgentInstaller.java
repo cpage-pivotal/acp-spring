@@ -8,6 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -141,7 +142,7 @@ public class AgentInstaller {
 			// one.
 			deleteRecursively(home);
 			Files.createDirectories(home.getParent());
-			Files.move(unpacked, home, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+			Files.move(unpacked, home, StandardCopyOption.ATOMIC_MOVE);
 			return command.toAbsolutePath();
 		}
 		catch (IOException ex) {

@@ -1,5 +1,8 @@
 package org.springaicommunity.acp.mcp.oauth;
 
+import java.nio.file.Path;
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -44,10 +47,10 @@ public class McpOAuthProperties {
 	 * The file for {@code store: file}. Defaults to
 	 * {@code <config dir>/<spring.application.name>/acp-mcp-oauth.json}.
 	 */
-	private java.nio.file.Path file;
+	private Path file;
 
 	/** How long a {@code local} sign-in waits for the user to finish in the browser. */
-	private java.time.Duration signInTimeout = java.time.Duration.ofMinutes(5);
+	private Duration signInTimeout = Duration.ofMinutes(5);
 
 	/**
 	 * Allow plain http and loopback addresses for discovered OAuth endpoints. For local
@@ -97,19 +100,19 @@ public class McpOAuthProperties {
 		this.mode = mode;
 	}
 
-	public java.nio.file.Path getFile() {
+	public Path getFile() {
 		return file;
 	}
 
-	public void setFile(java.nio.file.Path file) {
+	public void setFile(Path file) {
 		this.file = file;
 	}
 
-	public java.time.Duration getSignInTimeout() {
+	public Duration getSignInTimeout() {
 		return signInTimeout;
 	}
 
-	public void setSignInTimeout(java.time.Duration signInTimeout) {
+	public void setSignInTimeout(Duration signInTimeout) {
 		this.signInTimeout = signInTimeout;
 	}
 

@@ -3,6 +3,7 @@ package org.springaicommunity.acp.observation;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationConvention;
@@ -88,7 +89,7 @@ public class MicrometerAgentObservations implements AgentObservations {
 
 		private final Map<String, ToolCallObservationContext> toolCallContexts = new ConcurrentHashMap<>();
 
-		private final java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean();
+		private final AtomicBoolean stopped = new AtomicBoolean();
 
 		private MicrometerTurnRecording(Observation turn, AgentTurnObservationContext context) {
 			this.turn = turn;

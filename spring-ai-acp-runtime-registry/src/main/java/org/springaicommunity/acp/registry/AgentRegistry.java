@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -183,7 +184,7 @@ public class AgentRegistry {
 			Files.createDirectories(file.getParent());
 			Path temporary = Files.createTempFile(file.getParent(), "registry", ".json");
 			Files.writeString(temporary, json, StandardCharsets.UTF_8);
-			Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
 		}
 		catch (IOException ex) {
 			// A cache that cannot be written costs a fetch per start, which is not worth

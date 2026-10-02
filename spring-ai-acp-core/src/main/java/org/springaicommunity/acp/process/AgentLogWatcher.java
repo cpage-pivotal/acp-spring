@@ -11,6 +11,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -66,7 +67,7 @@ public final class AgentLogWatcher implements AutoCloseable {
 
 	private final Path directory;
 
-	private final Function<String, java.util.Optional<AgentNotice>> interpret;
+	private final Function<String, Optional<AgentNotice>> interpret;
 
 	private final Consumer<AgentNotice> onNotice;
 
@@ -81,7 +82,7 @@ public final class AgentLogWatcher implements AutoCloseable {
 
 	private volatile Thread thread;
 
-	public AgentLogWatcher(Path directory, Function<String, java.util.Optional<AgentNotice>> interpret) {
+	public AgentLogWatcher(Path directory, Function<String, Optional<AgentNotice>> interpret) {
 		this(directory, interpret, notice -> {
 		});
 	}
@@ -90,7 +91,7 @@ public final class AgentLogWatcher implements AutoCloseable {
 	 * @param onNotice called for each new notice, from the watcher's own thread, so an
 	 * implementation that blocks delays only further reading of a log file
 	 */
-	public AgentLogWatcher(Path directory, Function<String, java.util.Optional<AgentNotice>> interpret,
+	public AgentLogWatcher(Path directory, Function<String, Optional<AgentNotice>> interpret,
 			Consumer<AgentNotice> onNotice) {
 		this.directory = directory;
 		this.interpret = interpret;
@@ -157,10 +158,10 @@ public final class AgentLogWatcher implements AutoCloseable {
 	 * to wait briefly. Polls rather than waits on a signal because the underlying source
 	 * is a file: there is nothing to signal on.
 	 */
-	public java.util.Optional<AgentNotice> awaitNotice(String subject, Duration timeout) {
+	public Optional<AgentNotice> awaitNotice(String subject, Duration timeout) {
 		long deadline = System.nanoTime() + Math.max(0, timeout.toNanos());
 		while (true) {
-			java.util.Optional<AgentNotice> found = notices.stream().filter(n -> n.concerns(subject)).findFirst();
+			Optional<AgentNotice> found = notices.stream().filter(n -> n.concerns(subject)).findFirst();
 			if (found.isPresent() || System.nanoTime() >= deadline) {
 				return found;
 			}
@@ -173,7 +174,7 @@ public final class AgentLogWatcher implements AutoCloseable {
 			}
 			catch (InterruptedException ex) {
 				Thread.currentThread().interrupt();
-				return java.util.Optional.empty();
+				return Optional.empty();
 			}
 		}
 	}

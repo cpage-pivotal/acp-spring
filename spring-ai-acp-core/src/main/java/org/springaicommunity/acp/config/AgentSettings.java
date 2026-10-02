@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springaicommunity.acp.permission.PermissionPolicy;
 import org.springaicommunity.acp.protocol.ProtocolSettings;
@@ -97,6 +98,11 @@ public record AgentSettings(String runtime, Path workspace, Path runtimeHome, Du
 	 */
 	private static Path defaultRuntimeHome(String runtime) {
 		return Paths.get(System.getProperty("java.io.tmpdir"), "spring-ai-acp", runtime).toAbsolutePath();
+	}
+
+	/** The requested model, or empty when none was asked for. */
+	public Optional<String> findModel() {
+		return Optional.ofNullable(model).filter(m -> !m.isBlank());
 	}
 
 	public static Builder builder(String runtime, Path workspace) {

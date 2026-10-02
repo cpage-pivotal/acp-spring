@@ -1,7 +1,11 @@
 package org.springaicommunity.acp.mcp.oauth;
 
+import java.util.Optional;
+import java.util.function.Supplier;
+
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.session.SessionPrincipal;
+import org.springframework.security.oauth2.client.ClientAuthorizationRequiredException;
 
 /**
  * How a user who has no token for an MCP server comes to have one.
@@ -45,7 +49,7 @@ public interface McpSignIn {
 	 * Security's {@code ClientAuthorizationRequiredException} for its redirect filter to
 	 * act on.
 	 */
-	static McpSignIn redirect(String redirectUri, java.util.function.Supplier<java.util.Optional<String>> baseUrl) {
+	static McpSignIn redirect(String redirectUri, Supplier<Optional<String>> baseUrl) {
 		return new McpSignIn() {
 			@Override
 			public String redirectUri(McpServerSpec.Http server) {
@@ -58,8 +62,7 @@ public interface McpSignIn {
 
 			@Override
 			public void signIn(McpServerSpec.Http server, SessionPrincipal principal) {
-				throw new org.springframework.security.oauth2.client.ClientAuthorizationRequiredException(
-						server.name());
+				throw new ClientAuthorizationRequiredException(server.name());
 			}
 		};
 	}

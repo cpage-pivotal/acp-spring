@@ -269,7 +269,7 @@ public final class ScriptedAgent implements AutoCloseable {
 	 */
 	private Map<String, Object> listSessions() {
 		requireOperation("list");
-		List<String> remaining = new java.util.ArrayList<>(storedSessions);
+		List<String> remaining = new ArrayList<>(storedSessions);
 		remaining.removeAll(listed);
 		if (remaining.isEmpty()) {
 			return Map.of("sessions", List.of());

@@ -10,9 +10,12 @@ import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpCli
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.McpOAuth2DcrClientManager;
 import org.springaicommunity.mcp.security.common.url.DefaultUrlValidator;
 import org.springaicommunity.mcp.security.common.url.UrlValidator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.SpringBootCondition;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -20,10 +23,17 @@ import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springaicommunity.acp.boot.AcpProperties;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.session.SessionPrincipalResolver;
@@ -80,7 +90,7 @@ public class McpOAuthAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	McpClientRegistrationRepository acpMcpClientRegistrationRepository(McpOAuthProperties properties,
-			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file) {
+			ObjectProvider<FileMcpOAuthStore> file) {
 		return switch (properties.effectiveStore()) {
 			case FILE -> file.getObject().registrations();
 			case JDBC ->
@@ -120,7 +130,7 @@ public class McpOAuthAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	OAuth2AuthorizedClientService acpMcpAuthorizedClientService(McpClientRegistrationRepository registrations,
-			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file) {
+			ObjectProvider<FileMcpOAuthStore> file) {
 		FileMcpOAuthStore store = file.getIfAvailable();
 		return store != null ? store.tokens() : new InMemoryOAuth2AuthorizedClientService(registrations);
 	}
@@ -142,8 +152,7 @@ public class McpOAuthAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	McpSignIn acpMcpSignIn(McpOAuthProperties properties, OAuth2AuthorizedClientService authorizedClients,
-			org.springframework.beans.factory.ObjectProvider<FileMcpOAuthStore> file,
-			org.springframework.beans.factory.ObjectProvider<AuthorizationPrompt> prompt) {
+			ObjectProvider<FileMcpOAuthStore> file, ObjectProvider<AuthorizationPrompt> prompt) {
 		if (properties.getMode() == McpOAuthProperties.Mode.WEB) {
 			return McpSignIn.redirect(properties.getRedirectUri(), new CurrentRequestBaseUrl(properties.getBaseUrl()));
 		}
@@ -162,9 +171,9 @@ public class McpOAuthAutoConfiguration {
 			McpClientRegistrationRepository registrations, McpOAuth2DcrClientManager clientManager,
 			OAuth2AuthorizedClientService authorizedClients, McpSignIn signIn, RefreshLock refreshLock,
 			Environment environment) {
-		List<McpServerSpec.Http> servers = acp.getMcpServers()
+		List<McpServerSpec.Http> servers = acp.mcpServers()
 			.stream()
-			.filter(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH)
+			.filter(server -> server.auth() == AcpProperties.McpAuth.OAUTH)
 			.map(AcpProperties.McpServer::spec)
 			.map(spec -> {
 				if (spec instanceof McpServerSpec.Http http) {
@@ -196,26 +205,22 @@ public class McpOAuthAutoConfiguration {
 	 * loaded when spring-jdbc is present, and processed before the in-memory defaults
 	 * above.
 	 */
-	@org.springframework.context.annotation.Configuration(proxyBeanMethods = false)
-	@org.springframework.boot.autoconfigure.condition.ConditionalOnClass(
-			name = "org.springframework.jdbc.core.JdbcOperations")
-	@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "spring.acp.mcp.oauth.store",
-			havingValue = "jdbc")
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(name = "org.springframework.jdbc.core.JdbcOperations")
+	@ConditionalOnProperty(name = "spring.acp.mcp.oauth.store", havingValue = "jdbc")
 	static class Jdbc {
 
 		@Bean
 		@ConditionalOnMissingBean
-		McpClientRegistrationRepository acpMcpClientRegistrationRepository(
-				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc) {
+		McpClientRegistrationRepository acpMcpClientRegistrationRepository(ObjectProvider<JdbcOperations> jdbc) {
 			return new JdbcMcpClientRegistrationRepository(requireJdbc(jdbc));
 		}
 
 		@Bean
 		@ConditionalOnMissingBean
 		OAuth2AuthorizedClientService acpMcpAuthorizedClientService(McpClientRegistrationRepository registrations,
-				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc) {
-			return new org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientService(requireJdbc(jdbc),
-					registrations);
+				ObjectProvider<JdbcOperations> jdbc) {
+			return new JdbcOAuth2AuthorizedClientService(requireJdbc(jdbc), registrations);
 		}
 
 		/**
@@ -226,26 +231,21 @@ public class McpOAuthAutoConfiguration {
 		 */
 		@Bean
 		@ConditionalOnMissingBean
-		RefreshLock acpMcpRefreshLock(
-				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc,
-				org.springframework.beans.factory.ObjectProvider<org.springframework.transaction.PlatformTransactionManager> transactions) {
-			org.springframework.jdbc.core.JdbcOperations operations = requireJdbc(jdbc);
-			org.springframework.transaction.PlatformTransactionManager manager = transactions.getIfAvailable(() -> {
-				if (operations instanceof org.springframework.jdbc.core.JdbcTemplate template
-						&& template.getDataSource() != null) {
-					return new org.springframework.jdbc.datasource.DataSourceTransactionManager(
-							template.getDataSource());
+		RefreshLock acpMcpRefreshLock(ObjectProvider<JdbcOperations> jdbc,
+				ObjectProvider<PlatformTransactionManager> transactions) {
+			JdbcOperations operations = requireJdbc(jdbc);
+			PlatformTransactionManager manager = transactions.getIfAvailable(() -> {
+				if (operations instanceof JdbcTemplate template && template.getDataSource() != null) {
+					return new DataSourceTransactionManager(template.getDataSource());
 				}
 				throw new IllegalStateException("spring.acp.mcp.oauth.store=jdbc needs a PlatformTransactionManager "
 						+ "to lock refreshes across instances");
 			});
-			return new JdbcRefreshLock(new org.springframework.transaction.support.TransactionTemplate(manager),
-					operations);
+			return new JdbcRefreshLock(new TransactionTemplate(manager), operations);
 		}
 
-		private static org.springframework.jdbc.core.JdbcOperations requireJdbc(
-				org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcOperations> jdbc) {
-			org.springframework.jdbc.core.JdbcOperations operations = jdbc.getIfAvailable();
+		private static JdbcOperations requireJdbc(ObjectProvider<JdbcOperations> jdbc) {
+			JdbcOperations operations = jdbc.getIfAvailable();
 			if (operations == null) {
 				throw new IllegalStateException("spring.acp.mcp.oauth.store=jdbc needs a JdbcOperations bean; "
 						+ "add spring-boot-starter-jdbc and a DataSource");
@@ -278,7 +278,7 @@ public class McpOAuthAutoConfiguration {
 			List<AcpProperties.McpServer> servers = Binder.get(context.getEnvironment())
 				.bind("spring.acp.mcp-servers", Bindable.listOf(AcpProperties.McpServer.class))
 				.orElse(List.of());
-			boolean any = servers.stream().anyMatch(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH);
+			boolean any = servers.stream().anyMatch(server -> server.auth() == AcpProperties.McpAuth.OAUTH);
 			return any ? ConditionOutcome.match("an MCP server is configured with auth: oauth")
 					: ConditionOutcome.noMatch("no MCP server is configured with auth: oauth");
 		}

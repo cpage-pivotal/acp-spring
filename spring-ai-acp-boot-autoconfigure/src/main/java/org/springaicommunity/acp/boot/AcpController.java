@@ -59,7 +59,7 @@ public class AcpController {
 
 	public AcpController(AgentClient agent, AcpProperties properties) {
 		this.agent = agent;
-		this.properties = properties.getController();
+		this.properties = properties.controller();
 	}
 
 	/** Runs a turn and returns the whole answer. */
@@ -149,7 +149,7 @@ public class AcpController {
 		if (request.timeout() != null) {
 			builder.timeout(request.timeout());
 		}
-		if (properties.isAllowRequestOverrides()) {
+		if (properties.allowRequestOverrides()) {
 			if (request.model() != null) {
 				builder.model(request.model());
 			}
@@ -164,7 +164,7 @@ public class AcpController {
 	}
 
 	private void requireAuthorized(Principal principal) {
-		if (!properties.isAllowUnauthenticated() && principal == null) {
+		if (!properties.allowUnauthenticated() && principal == null) {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication is required");
 		}
 	}
@@ -173,15 +173,15 @@ public class AcpController {
 		if (request == null || request.prompt() == null || request.prompt().isBlank()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "prompt is required");
 		}
-		if (request.prompt().length() > properties.getMaxPromptChars()) {
+		if (request.prompt().length() > properties.maxPromptChars()) {
 			throw new ResponseStatusException(HttpStatus.CONTENT_TOO_LARGE, "prompt is too large");
 		}
 		if (request.timeout() != null && (request.timeout().isNegative() || request.timeout().isZero()
-				|| request.timeout().compareTo(properties.getMaxTimeout()) > 0)) {
+				|| request.timeout().compareTo(properties.maxTimeout()) > 0)) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-					"timeout must be positive and at most " + properties.getMaxTimeout());
+					"timeout must be positive and at most " + properties.maxTimeout());
 		}
-		if (!properties.isAllowRequestOverrides()
+		if (!properties.allowRequestOverrides()
 				&& (request.model() != null || request.provider() != null || request.mode() != null)) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
 					"model, provider and mode overrides are disabled; see spring.acp.controller"

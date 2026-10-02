@@ -1,6 +1,7 @@
 package org.springaicommunity.acp.config;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -113,7 +114,7 @@ public final class Validation {
 		if (url.getUserInfo() != null) {
 			throw new IllegalArgumentException(what + " must not embed credentials");
 		}
-		String scheme = url.getScheme() == null ? "" : url.getScheme().toLowerCase(java.util.Locale.ROOT);
+		String scheme = url.getScheme() == null ? "" : url.getScheme().toLowerCase(Locale.ROOT);
 		if (scheme.equals("https")) {
 			return url;
 		}
@@ -125,7 +126,7 @@ public final class Validation {
 	}
 
 	private static boolean isLocalOrInternal(String host) {
-		String h = host.toLowerCase(java.util.Locale.ROOT);
+		String h = host.toLowerCase(Locale.ROOT);
 		return h.equals("localhost") || h.equals("127.0.0.1") || h.equals("::1") || h.equals("[::1]")
 				|| h.endsWith(INTERNAL_SUFFIX);
 	}

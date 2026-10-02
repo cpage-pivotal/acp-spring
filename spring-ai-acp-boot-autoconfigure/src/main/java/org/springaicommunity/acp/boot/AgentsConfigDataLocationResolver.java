@@ -1,6 +1,7 @@
 package org.springaicommunity.acp.boot;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.boot.context.config.ConfigDataLocation;
 import org.springframework.boot.context.config.ConfigDataLocationResolver;
@@ -42,7 +43,7 @@ public class AgentsConfigDataLocationResolver implements ConfigDataLocationResol
 				? value.substring(ConfigDataLocation.OPTIONAL_PREFIX.length()) : value;
 		int lastSlash = withoutOptional.lastIndexOf('/');
 		String fileName = lastSlash < 0 ? withoutOptional : withoutOptional.substring(lastSlash + 1);
-		return CLAIMED_FILE_NAMES.contains(fileName.toLowerCase(java.util.Locale.ROOT));
+		return CLAIMED_FILE_NAMES.contains(fileName.toLowerCase(Locale.ROOT));
 	}
 
 	@Override

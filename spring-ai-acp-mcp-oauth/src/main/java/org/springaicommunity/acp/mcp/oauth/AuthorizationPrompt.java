@@ -1,6 +1,7 @@
 package org.springaicommunity.acp.mcp.oauth;
 
 import java.awt.Desktop;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URI;
 import java.util.Locale;
@@ -77,7 +78,7 @@ public interface AuthorizationPrompt {
 				try {
 					return new ProcessBuilder(opener, uri.toString()).start().waitFor(10, TimeUnit.SECONDS);
 				}
-				catch (java.io.IOException ex) {
+				catch (IOException ex) {
 					logger.debug("Could not run {}: {}", opener, ex.getMessage());
 					return false;
 				}

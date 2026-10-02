@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -140,7 +141,7 @@ public final class RuntimeOptions {
 		}
 		if (value.get() instanceof List<?> list) {
 			return list.stream()
-				.filter(java.util.Objects::nonNull)
+				.filter(Objects::nonNull)
 				.map(String::valueOf)
 				.map(String::strip)
 				.filter(s -> !s.isEmpty())

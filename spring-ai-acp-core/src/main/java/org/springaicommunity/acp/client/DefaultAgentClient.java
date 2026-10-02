@@ -2,9 +2,13 @@ package org.springaicommunity.acp.client;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,10 +17,14 @@ import org.springaicommunity.acp.config.AgentOptions;
 import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.ConfigResolver;
 import org.springaicommunity.acp.config.McpServerSpec;
+import org.springaicommunity.acp.config.McpSettings;
 import org.springaicommunity.acp.config.SessionConfiguration;
 import org.springaicommunity.acp.event.AgentEvent;
 import org.springaicommunity.acp.mcp.McpAccess;
 import org.springaicommunity.acp.observation.AgentObservations;
+import org.springaicommunity.acp.process.AgentLogWatcher;
+import org.springaicommunity.acp.protocol.AcpProtocol;
+import org.springaicommunity.acp.runtime.AgentNotice;
 import org.springaicommunity.acp.runtime.AgentRuntime;
 import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
 import org.springaicommunity.acp.session.AgentSession;
@@ -63,14 +71,14 @@ public final class DefaultAgentClient implements AgentClient {
 	private final AgentObservations observations;
 
 	/** Null when the transport cannot tell; see {@code AgentClientFactory.Liveness}. */
-	private final java.util.function.BooleanSupplier alive;
+	private final BooleanSupplier alive;
 
-	private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
+	private final AtomicBoolean closed = new AtomicBoolean();
 
 	private final Runnable onClose;
 
 	/** Set once by the factory before this client is handed out, or left null. */
-	private volatile org.springaicommunity.acp.process.AgentLogWatcher watcher;
+	private volatile AgentLogWatcher watcher;
 
 	/**
 	 * Each session's MCP servers as the agent is to see them; owns the loopback proxy, if
@@ -80,15 +88,15 @@ public final class DefaultAgentClient implements AgentClient {
 
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
 			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
-			AcpSchema.InitializeResponse initialized, java.util.function.BooleanSupplier alive, Runnable onClose) {
-		this(acp, runtime, settings, sessions, router, recorder, initialized,
-				org.springaicommunity.acp.protocol.AcpProtocol.V1, AgentObservations.NONE, alive, onClose);
+			AcpSchema.InitializeResponse initialized, BooleanSupplier alive, Runnable onClose) {
+		this(acp, runtime, settings, sessions, router, recorder, initialized, AcpProtocol.V1, AgentObservations.NONE,
+				alive, onClose);
 	}
 
 	public DefaultAgentClient(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
 			SessionRegistry sessions, SessionUpdateRouter router, SessionConfigRecorder recorder,
 			AcpSchema.InitializeResponse initialized, int protocolVersion, AgentObservations observations,
-			java.util.function.BooleanSupplier alive, Runnable onClose) {
+			BooleanSupplier alive, Runnable onClose) {
 		this.protocolVersion = protocolVersion;
 		this.observations = observations == null ? AgentObservations.NONE : observations;
 		this.acp = acp;
@@ -117,13 +125,13 @@ public final class DefaultAgentClient implements AgentClient {
 	 * the eleventh thing this class is handed; set once, by {@code AgentClientFactory},
 	 * before anything can call {@link #notices()}.
 	 */
-	void watch(org.springaicommunity.acp.process.AgentLogWatcher watcher) {
+	void watch(AgentLogWatcher watcher) {
 		this.watcher = watcher;
 	}
 
 	@Override
-	public java.util.List<org.springaicommunity.acp.runtime.AgentNotice> notices() {
-		org.springaicommunity.acp.process.AgentLogWatcher current = watcher;
+	public List<AgentNotice> notices() {
+		AgentLogWatcher current = watcher;
 		return current == null ? List.of() : current.notices();
 	}
 
@@ -254,7 +262,7 @@ public final class DefaultAgentClient implements AgentClient {
 	 */
 	private AgentSession openSession(String name, AgentSettings effective, SessionPrincipal principal) {
 		AtomicReference<AdvertisedSessionConfig> advertised = new AtomicReference<>();
-		java.util.concurrent.atomic.AtomicBoolean opened = new java.util.concurrent.atomic.AtomicBoolean();
+		AtomicBoolean opened = new AtomicBoolean();
 		AgentSession session = sessions.resolve(name, principal, n -> {
 			opened.set(true);
 			McpAccess.Grant grant = mcpAccess.grant(principal, effective.mcpServers());
@@ -308,14 +316,13 @@ public final class DefaultAgentClient implements AgentClient {
 	 * over.
 	 */
 	private void failIfAnMcpServerDidNotLoad(String name, AgentSession session, AgentSettings effective) {
-		org.springaicommunity.acp.process.AgentLogWatcher current = watcher;
-		if (current == null || effective.mcpServers().isEmpty() || effective.mcp()
-			.onServerFailure() != org.springaicommunity.acp.config.McpSettings.OnServerFailure.FAIL) {
+		AgentLogWatcher current = watcher;
+		if (current == null || effective.mcpServers().isEmpty()
+				|| effective.mcp().onServerFailure() != McpSettings.OnServerFailure.FAIL) {
 			return;
 		}
-		for (org.springaicommunity.acp.config.McpServerSpec server : effective.mcpServers()) {
-			Optional<org.springaicommunity.acp.runtime.AgentNotice> failure = current.awaitNotice(server.name(),
-					effective.mcp().detectTimeout());
+		for (McpServerSpec server : effective.mcpServers()) {
+			Optional<AgentNotice> failure = current.awaitNotice(server.name(), effective.mcp().detectTimeout());
 			if (failure.isEmpty()) {
 				continue;
 			}
@@ -373,7 +380,7 @@ public final class DefaultAgentClient implements AgentClient {
 	}
 
 	private static boolean same(String applied, String requested) {
-		return java.util.Objects.equals(blankToNull(applied), blankToNull(requested));
+		return Objects.equals(blankToNull(applied), blankToNull(requested));
 	}
 
 	private static String blankToNull(String value) {
@@ -420,7 +427,7 @@ public final class DefaultAgentClient implements AgentClient {
 		}
 
 		@Override
-		public PromptSpec options(java.util.function.Consumer<AgentOptions.Builder> customizer) {
+		public PromptSpec options(Consumer<AgentOptions.Builder> customizer) {
 			AgentOptions.Builder builder = AgentOptions.builder();
 			customizer.accept(builder);
 			return options(builder.build());

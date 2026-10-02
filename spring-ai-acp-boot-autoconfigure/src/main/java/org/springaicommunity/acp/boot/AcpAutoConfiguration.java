@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springaicommunity.acp.client.AgentClient;
 import org.springaicommunity.acp.client.AgentClientPool;
 import org.springaicommunity.acp.codex.CodexRuntime;
@@ -20,10 +22,13 @@ import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.executor.AgentExecutor;
 import org.springaicommunity.acp.executor.DefaultAgentExecutor;
 import org.springaicommunity.acp.goose.GooseRuntime;
+import org.springaicommunity.acp.mcp.McpCredentialsProvider;
 import org.springaicommunity.acp.opencode.OpenCodeRuntime;
 import org.springaicommunity.acp.observation.AgentObservations;
+import org.springaicommunity.acp.permission.PermissionPrompt;
 import org.springaicommunity.acp.runtime.AgentRuntime;
 import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
+import org.springaicommunity.acp.session.SessionPrincipalResolver;
 
 /**
  * Wires an {@link AgentClient} from {@code spring.acp.*}.
@@ -40,9 +45,9 @@ import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
 @ConditionalOnClass(AgentClient.class)
 @ConditionalOnProperty(prefix = "spring.acp", name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(AcpProperties.class)
-@org.springframework.context.annotation.Import({ AcpAutoConfiguration.GooseRuntimeConfiguration.class,
-		AcpAutoConfiguration.CodexRuntimeConfiguration.class, AcpAutoConfiguration.OpenCodeRuntimeConfiguration.class,
-		AcpRegistryConfiguration.class, AcpObservationConfiguration.class })
+@Import({ AcpAutoConfiguration.GooseRuntimeConfiguration.class, AcpAutoConfiguration.CodexRuntimeConfiguration.class,
+		AcpAutoConfiguration.OpenCodeRuntimeConfiguration.class, AcpRegistryConfiguration.class,
+		AcpObservationConfiguration.class })
 public class AcpAutoConfiguration {
 
 	private static final Logger logger = LoggerFactory.getLogger(AcpAutoConfiguration.class);
@@ -117,20 +122,19 @@ public class AcpAutoConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	AgentSettings acpAgentSettings(AcpProperties properties, SelectedRuntime selected,
-			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.mcp.McpCredentialsProvider> credentials,
-			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.session.SessionPrincipalResolver> principals,
-			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.permission.PermissionPrompt> prompts) {
-		Path workspace = properties.getWorkspace() == null ? Paths.get("").toAbsolutePath()
-				: properties.getWorkspace().toAbsolutePath();
+			ObjectProvider<McpCredentialsProvider> credentials, ObjectProvider<SessionPrincipalResolver> principals,
+			ObjectProvider<PermissionPrompt> prompts) {
+		Path workspace = properties.workspace() == null ? Paths.get("").toAbsolutePath()
+				: properties.workspace().toAbsolutePath();
 		warnAboutUncredentialedServers(properties, credentials);
 		String runtime = selected.runtime().id();
 
 		return AgentSettings.builder(runtime, workspace)
-			.runtimeHome(properties.getRuntimeHome())
-			.timeout(properties.getTimeout())
-			.model(properties.getModel())
+			.runtimeHome(properties.runtimeHome())
+			.timeout(properties.timeout())
+			.model(properties.model())
 			.provider(properties.toProviderSpec())
-			.mode(properties.getMode())
+			.mode(properties.mode())
 			.mcpServers(properties.toMcpServerSpecs())
 			.skills(properties.toSkillSpecs())
 			.mcp(properties.toMcpSettings()
@@ -139,8 +143,8 @@ public class AcpAutoConfiguration {
 			.permissions(properties.toPermissionPolicy(prompts.getIfAvailable()))
 			.filesystem(properties.toFileSystemAccess())
 			.terminal(properties.toTerminalAccess())
-			.onUnsupported(properties.getOnUnsupported())
-			.sessionTtl(properties.getPool().getSessionTtl())
+			.onUnsupported(properties.onUnsupported())
+			.sessionTtl(properties.pool().sessionTtl())
 			.pool(properties.toPoolSettings())
 			.protocol(properties.toProtocolSettings())
 			.runtimeOptions(properties.optionsFor(runtime))
@@ -153,20 +157,20 @@ public class AcpAutoConfiguration {
 	 * token and fail in the silent way MCP servers fail: no tools, no error.
 	 */
 	private static void warnAboutUncredentialedServers(AcpProperties properties,
-			org.springframework.beans.factory.ObjectProvider<org.springaicommunity.acp.mcp.McpCredentialsProvider> credentials) {
-		List<String> oauth = properties.getMcpServers()
+			ObjectProvider<McpCredentialsProvider> credentials) {
+		List<String> oauth = properties.mcpServers()
 			.stream()
-			.filter(server -> server.getAuth() == AcpProperties.McpAuth.OAUTH)
-			.map(AcpProperties.McpServer::getName)
+			.filter(server -> server.auth() == AcpProperties.McpAuth.OAUTH)
+			.map(AcpProperties.McpServer::name)
 			.toList();
 		if (!oauth.isEmpty() && credentials.getIfAvailable() == null) {
 			logger.warn("MCP server(s) {} are configured with auth: oauth, but nothing provides OAuth credentials; "
 					+ "add spring-ai-acp-mcp-oauth, or they will be called without a token", oauth);
 		}
-		List<String> provided = properties.getMcpServers()
+		List<String> provided = properties.mcpServers()
 			.stream()
-			.filter(server -> server.getAuth() == AcpProperties.McpAuth.PROVIDED)
-			.map(AcpProperties.McpServer::getName)
+			.filter(server -> server.auth() == AcpProperties.McpAuth.PROVIDED)
+			.map(AcpProperties.McpServer::name)
 			.toList();
 		if (!provided.isEmpty() && credentials.getIfAvailable() == null) {
 			logger.warn("MCP server(s) {} are configured with auth: provided, but there is no McpCredentialsProvider "
@@ -194,7 +198,7 @@ public class AcpAutoConfiguration {
 	@Bean(destroyMethod = "close")
 	@ConditionalOnMissingBean
 	AgentClient acpAgentClient(SelectedRuntime selected, AgentSettings settings,
-			org.springframework.beans.factory.ObjectProvider<AgentObservations> observations) {
+			ObjectProvider<AgentObservations> observations) {
 		logger.info("ACP runtime '{}' selected, workspace {}, up to {} process(es)", selected.runtime().id(),
 				settings.workspace(), settings.pool().maxProcesses());
 		// ObjectProvider rather than an optional parameter: the observations bean only

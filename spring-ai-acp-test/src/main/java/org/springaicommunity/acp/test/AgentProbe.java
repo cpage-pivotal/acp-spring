@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -130,7 +131,7 @@ public final class AgentProbe {
 			return;
 		}
 		try (var paths = Files.walk(directory)) {
-			paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+			paths.sorted(Comparator.reverseOrder()).forEach(path -> {
 				try {
 					Files.deleteIfExists(path);
 				}

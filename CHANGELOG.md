@@ -26,6 +26,21 @@ All notable changes to Spring AI ACP are documented here. The project follows
   and sends no ACP `plan` update, so each `todo__todo_write` call is read as the agent's plan
   instead of being reported as a tool call. `AgentRuntime.planOf` is the hook any adapter can use
   for an agent that does the same.
+- Helpers for runtime adapters, so their shared rules live in core:
+  - `AgentEnvironment.layered` builds a launch environment in the order every adapter uses.
+    Agent defaults come first, then provider credentials, then the tier-3 `env` block, which wins.
+  - `Executables.fromEnvironment` reads an executable path from an environment variable such as
+    `GOOSE_CLI_PATH`, and checks it at startup.
+  - `AgentSettings.findModel()` returns the requested model, or empty when it is blank.
+
+### Changed
+
+- `AcpProperties` and its nested types are records, bound through their constructors. Code that
+  reads them uses record accessors (`properties.model()`, `properties.pool().sessionTtl()`) in
+  place of getters. Property names, defaults and metadata are unchanged, except that
+  `spring.acp.protocol.max-version` now lists its default (`1`) in the metadata. A test that
+  declared `new AcpProperties()` as a bean registers it with
+  `@EnableConfigurationProperties(AcpProperties.class)` instead.
 
 ### Fixed
 

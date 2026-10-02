@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.webflux.autoconfigure.WebFluxAutoConfiguration;
 import org.springframework.boot.http.codec.autoconfigure.CodecsAutoConfiguration;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
@@ -187,12 +188,8 @@ class AcpControllerTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
+	@EnableConfigurationProperties(AcpProperties.class)
 	static class StubAgent {
-
-		@Bean
-		AcpProperties acpProperties() {
-			return new AcpProperties();
-		}
 
 		@Bean
 		AgentClient acpAgentClient() {

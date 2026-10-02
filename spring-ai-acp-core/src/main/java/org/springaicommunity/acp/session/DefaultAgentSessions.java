@@ -13,6 +13,7 @@ import org.springaicommunity.acp.client.AgentClientException;
 import org.springaicommunity.acp.client.SessionConfigRecorder;
 import org.springaicommunity.acp.config.AdvertisedSessionConfig;
 import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.config.Validation;
 import org.springaicommunity.acp.mcp.McpAccess;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -158,7 +159,7 @@ public final class DefaultAgentSessions implements AgentSessions {
 	 * cannot leave a name pointing at a session this client never attached to.
 	 */
 	private AgentSession attach(String name, String sessionId, Operation operation, SessionPrincipal principal) {
-		org.springaicommunity.acp.config.Validation.requireText(sessionId, "session id");
+		Validation.requireText(sessionId, "session id");
 		McpAccess.Grant grant = mcpAccess.grant(principal, settings.mcpServers());
 		AgentSession session = registry.adopt(name, sessionId, principal, grant::close);
 		try {
@@ -221,7 +222,7 @@ public final class DefaultAgentSessions implements AgentSessions {
 	@Override
 	public void delete(String sessionId) {
 		require(Operation.DELETE);
-		org.springaicommunity.acp.config.Validation.requireText(sessionId, "session id");
+		Validation.requireText(sessionId, "session id");
 		// A deleted session that is still bound here would be a name pointing at nothing.
 		registry.all()
 			.stream()

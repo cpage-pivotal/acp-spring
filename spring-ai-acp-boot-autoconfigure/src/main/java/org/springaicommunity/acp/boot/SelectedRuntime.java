@@ -48,7 +48,7 @@ public record SelectedRuntime(AgentRuntime runtime) {
 			AcpProperties properties) {
 		requireDistinctIds(available);
 		List<String> adapterIds = available.stream().map(AgentRuntime::id).sorted().toList();
-		String id = properties.getRuntime();
+		String id = properties.runtime();
 		if (id == null || id.isBlank()) {
 			AgentRuntime only = onlyAdapter(available, providers, adapterIds);
 			requireKnownTierThreeRuntimes(properties, adapterIds, providers, only);
@@ -137,7 +137,7 @@ public record SelectedRuntime(AgentRuntime runtime) {
 		Set<String> known = new LinkedHashSet<>(adapterIds);
 		known.add(selected.id());
 		List<String> unknown = new ArrayList<>();
-		for (String id : properties.getRuntimes().keySet()) {
+		for (String id : properties.runtimes().keySet()) {
 			if (known.contains(id)) {
 				continue;
 			}

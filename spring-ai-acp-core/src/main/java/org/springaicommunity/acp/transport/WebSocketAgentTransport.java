@@ -11,6 +11,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -228,7 +229,7 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 		}
 	}
 
-	private static java.util.concurrent.ThreadFactory daemon(String name) {
+	private static ThreadFactory daemon(String name) {
 		return runnable -> {
 			Thread thread = new Thread(runnable, name);
 			thread.setDaemon(true);

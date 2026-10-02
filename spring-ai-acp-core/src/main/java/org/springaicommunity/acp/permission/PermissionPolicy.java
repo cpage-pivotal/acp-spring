@@ -2,8 +2,10 @@ package org.springaicommunity.acp.permission;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -46,7 +48,7 @@ public interface PermissionPolicy {
 	 * did not offer is treated as a cancellation rather than sent back.
 	 */
 	static PermissionPolicy ask(PermissionPrompt prompt) {
-		java.util.Objects.requireNonNull(prompt, "prompt");
+		Objects.requireNonNull(prompt, "prompt");
 		return new PermissionPolicy() {
 			@Override
 			public Optional<AcpSchema.PermissionOption> decide(Optional<String> toolName,
@@ -87,7 +89,7 @@ public interface PermissionPolicy {
 	static PermissionPolicy allowlist(Set<String> allowedTools) {
 		Set<String> allowed = allowedTools.stream()
 			.map(t -> t.toLowerCase(Locale.ROOT))
-			.collect(java.util.stream.Collectors.toUnmodifiableSet());
+			.collect(Collectors.toUnmodifiableSet());
 		return (toolName, options) -> {
 			boolean permit = toolName.map(n -> allowed.contains(n.toLowerCase(Locale.ROOT))).orElse(false);
 			return permit ? autoApprove().decide(toolName, options) : deny().decide(toolName, options);

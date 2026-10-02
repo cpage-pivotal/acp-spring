@@ -1,5 +1,7 @@
 package org.springaicommunity.acp.observation;
 
+import java.util.Locale;
+
 import org.springaicommunity.acp.observation.AcpObservationDocumentation.ToolCallHighCardinalityKeys;
 import org.springaicommunity.acp.observation.AcpObservationDocumentation.ToolCallLowCardinalityKeys;
 
@@ -28,7 +30,7 @@ public class DefaultToolCallObservationConvention implements ObservationConventi
 
 	@Override
 	public String getContextualName(ToolCallObservationContext context) {
-		return "acp tool call " + orUnknown(context.kind()).toLowerCase(java.util.Locale.ROOT);
+		return "acp tool call " + orUnknown(context.kind()).toLowerCase(Locale.ROOT);
 	}
 
 	@Override

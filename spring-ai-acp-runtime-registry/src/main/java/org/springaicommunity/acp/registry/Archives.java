@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -252,7 +253,7 @@ final class Archives {
 
 	static void makeExecutable(Path file) {
 		try {
-			Set<PosixFilePermission> permissions = new java.util.HashSet<>(Files.getPosixFilePermissions(file));
+			Set<PosixFilePermission> permissions = new HashSet<>(Files.getPosixFilePermissions(file));
 			permissions.add(PosixFilePermission.OWNER_EXECUTE);
 			Files.setPosixFilePermissions(file, permissions);
 		}

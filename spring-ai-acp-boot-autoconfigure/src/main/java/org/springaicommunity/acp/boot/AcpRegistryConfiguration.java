@@ -36,9 +36,9 @@ class AcpRegistryConfiguration {
 	@Bean
 	@ConditionalOnMissingBean
 	RegistrySettings acpRegistrySettings(AcpProperties properties) {
-		AcpProperties.Registry registry = properties.getRegistry();
-		return new RegistrySettings(registry.getUrl(), registry.getCache(), registry.getRefresh(), registry.isOffline(),
-				registry.isRequireChecksum(), registry.getDownloadTimeout());
+		AcpProperties.Registry registry = properties.registry();
+		return new RegistrySettings(registry.url(), registry.cache(), registry.refresh(), registry.offline(),
+				registry.requireChecksum(), registry.downloadTimeout());
 	}
 
 	@Bean

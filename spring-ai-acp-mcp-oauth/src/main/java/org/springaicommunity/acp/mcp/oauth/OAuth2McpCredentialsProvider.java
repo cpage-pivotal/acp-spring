@@ -1,5 +1,7 @@
 package org.springaicommunity.acp.mcp.oauth;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationResponseType;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.mcp.McpCredentials;
@@ -88,7 +91,7 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 	 * Security's refresh provider allows, so a token this class hands out as fresh is one
 	 * the manager would not refresh.
 	 */
-	private static final java.time.Duration CLOCK_SKEW = java.time.Duration.ofSeconds(60);
+	private static final Duration CLOCK_SKEW = Duration.ofSeconds(60);
 
 	/**
 	 * @param servers the servers to authorize; any other server is left as configured
@@ -286,8 +289,8 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 	private record Refresh(String token, String refusal) {
 	}
 
-	private static boolean isFresh(org.springframework.security.oauth2.core.OAuth2AccessToken token) {
-		return token.getExpiresAt() == null || token.getExpiresAt().isAfter(java.time.Instant.now().plus(CLOCK_SKEW));
+	private static boolean isFresh(OAuth2AccessToken token) {
+		return token.getExpiresAt() == null || token.getExpiresAt().isAfter(Instant.now().plus(CLOCK_SKEW));
 	}
 
 	private Object lock(String first, String second) {

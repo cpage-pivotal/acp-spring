@@ -5,9 +5,11 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -594,12 +596,12 @@ public abstract class AgentRuntimeContract {
 	 * its files.
 	 */
 	private List<String> carriedBy(AgentLaunchSpec launch, AgentSettings settings) throws IOException {
-		List<String> carried = new java.util.ArrayList<>(switch (launch) {
+		List<String> carried = new ArrayList<>(switch (launch) {
 			case AgentLaunchSpec.Stdio stdio -> stdio.env().values();
 			case AgentLaunchSpec.WebSocket socket -> socket.process().env().values();
 		});
 		if (Files.isDirectory(settings.runtimeHome())) {
-			try (java.util.stream.Stream<Path> files = Files.walk(settings.runtimeHome())) {
+			try (Stream<Path> files = Files.walk(settings.runtimeHome())) {
 				for (Path file : files.filter(Files::isRegularFile).toList()) {
 					carried.add(Files.readString(file));
 				}
@@ -613,7 +615,7 @@ public abstract class AgentRuntimeContract {
 	}
 
 	private static List<Throwable> chain(Throwable thrown) {
-		List<Throwable> causes = new java.util.ArrayList<>();
+		List<Throwable> causes = new ArrayList<>();
 		for (Throwable current = thrown; current != null && !causes.contains(current); current = current.getCause()) {
 			causes.add(current);
 		}

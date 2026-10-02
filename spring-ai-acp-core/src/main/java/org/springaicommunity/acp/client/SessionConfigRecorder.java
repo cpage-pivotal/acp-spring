@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +59,7 @@ public final class SessionConfigRecorder {
 	private final Map<String, List<AcpSchema.SessionConfigOption>> bySession = new ConcurrentHashMap<>();
 
 	/** Options from a response that did not name its session. See the class javadoc. */
-	private final java.util.concurrent.atomic.AtomicReference<List<AcpSchema.SessionConfigOption>> unattributed = new java.util.concurrent.atomic.AtomicReference<>();
+	private final AtomicReference<List<AcpSchema.SessionConfigOption>> unattributed = new AtomicReference<>();
 
 	/**
 	 * Wraps {@code delegate} so that new sessions' config options are recorded as they
@@ -148,8 +150,7 @@ public final class SessionConfigRecorder {
 		}
 
 		@Override
-		public Mono<Void> connect(
-				java.util.function.Function<Mono<AcpSchema.JSONRPCMessage>, Mono<AcpSchema.JSONRPCMessage>> handler) {
+		public Mono<Void> connect(Function<Mono<AcpSchema.JSONRPCMessage>, Mono<AcpSchema.JSONRPCMessage>> handler) {
 			return delegate.connect(handler);
 		}
 

@@ -1,10 +1,12 @@
 package org.springaicommunity.acp.runtime;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.mcp.McpRequestFilter;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -122,7 +124,7 @@ public interface AgentRuntime {
 	 *
 	 * @see #noticeOf(String)
 	 */
-	default Optional<java.nio.file.Path> logDirectory(AgentSettings settings) {
+	default Optional<Path> logDirectory(AgentSettings settings) {
 		return Optional.empty();
 	}
 
@@ -155,7 +157,7 @@ public interface AgentRuntime {
 	 * straight to the server — so an adapter should return filters only when the
 	 * application has asked for them.
 	 */
-	default List<org.springaicommunity.acp.mcp.McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
+	default List<McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
 		return List.of();
 	}
 

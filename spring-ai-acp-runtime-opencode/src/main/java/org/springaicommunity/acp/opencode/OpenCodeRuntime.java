@@ -17,8 +17,10 @@ import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.ProviderEnvironment;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
+import org.springaicommunity.acp.runtime.AgentEnvironment;
 import org.springaicommunity.acp.runtime.AgentLaunchSpec;
 import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.Executables;
 import org.springaicommunity.acp.runtime.ToolNames;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -181,12 +183,12 @@ public class OpenCodeRuntime implements AgentRuntime {
 		endpoint.put("npm", COMPATIBLE_PACKAGE);
 		endpoint.put("name", provider.findId().orElse(id));
 		endpoint.put("options", options);
-		startingModel(settings).ifPresent(model -> endpoint.put("models", Map.of(model, Map.of("name", model))));
+		settings.findModel().ifPresent(model -> endpoint.put("models", Map.of(model, Map.of("name", model))));
 
 		Map<String, Object> config = new LinkedHashMap<>();
 		config.put("provider", Map.of(id, endpoint));
 		config.put("disabled_providers", List.of(provider.apiType()));
-		startingModel(settings).ifPresent(model -> config.put("model", id + "/" + model));
+		settings.findModel().ifPresent(model -> config.put("model", id + "/" + model));
 		return config;
 	}
 
@@ -209,10 +211,6 @@ public class OpenCodeRuntime implements AgentRuntime {
 		return provider.findId().filter(id -> !id.equalsIgnoreCase(provider.apiType())).orElse(DEFAULT_PROVIDER_KEY);
 	}
 
-	private static Optional<String> startingModel(AgentSettings settings) {
-		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
-	}
-
 	@Override
 	public List<String> configIdsFor(PortableOption option) {
 		// Verified against opencode 1.18.31.
@@ -232,9 +230,8 @@ public class OpenCodeRuntime implements AgentRuntime {
 	@Override
 	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
 		return switch (option) {
-			case PROVIDER ->
-				settings.model() != null && !settings.model().isBlank() || settings.provider().hasCredentials();
-			case MODEL -> !endpointConfig(settings).isEmpty() && startingModel(settings).isPresent();
+			case PROVIDER -> settings.findModel().isPresent() || settings.provider().hasCredentials();
+			case MODEL -> !endpointConfig(settings).isEmpty() && settings.findModel().isPresent();
 			case MODE -> false;
 		};
 	}
@@ -257,15 +254,9 @@ public class OpenCodeRuntime implements AgentRuntime {
 	}
 
 	private Map<String, String> environment(AgentSettings settings) {
-		Map<String, String> env = new LinkedHashMap<>();
-		RuntimeOptions options = settings.runtimeOptions();
-
-		if (!configFor(settings).isEmpty()) {
-			env.put(CONFIG_ENV, configFile(settings).toString());
-		}
-		env.putAll(ProviderEnvironment.of(settings.provider()));
-		env.putAll(options.textSection("env"));
-		return env;
+		Map<String, String> defaults = configFor(settings).isEmpty() ? Map.of()
+				: Map.of(CONFIG_ENV, configFile(settings).toString());
+		return AgentEnvironment.layered(defaults, ProviderEnvironment.of(settings.provider()), settings);
 	}
 
 	private Path configFile(AgentSettings settings) {
@@ -277,16 +268,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 	}
 
 	private static String defaultExecutable() {
-		String configured = System.getenv(CLI_PATH_ENV);
-		if (configured != null && !configured.isBlank()) {
-			Path path = Path.of(configured);
-			if (!Files.isExecutable(path)) {
-				throw new IllegalStateException(
-						CLI_PATH_ENV + " points at '" + configured + "', which is not an executable file");
-			}
-			return path.toString();
-		}
-		return "opencode";
+		return Executables.fromEnvironment(CLI_PATH_ENV).orElse("opencode");
 	}
 
 }

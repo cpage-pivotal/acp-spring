@@ -17,8 +17,10 @@ import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.ProviderEnvironment;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
+import org.springaicommunity.acp.runtime.AgentEnvironment;
 import org.springaicommunity.acp.runtime.AgentLaunchSpec;
 import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.Executables;
 import org.springaicommunity.acp.runtime.ToolNames;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -266,7 +268,7 @@ public class CodexRuntime implements AgentRuntime {
 		endpoint.put("env_key", ProviderEnvironment.apiKeyVariable(provider.apiType()));
 
 		Map<String, Object> config = new LinkedHashMap<>();
-		startingModel(settings).ifPresent(model -> config.put("model", model));
+		settings.findModel().ifPresent(model -> config.put("model", model));
 		config.put("model_provider", id);
 		config.put("model_providers", Map.of(id, endpoint));
 		return config;
@@ -282,10 +284,6 @@ public class CodexRuntime implements AgentRuntime {
 
 	private static boolean isOpenAiCompatible(ProviderSpec provider) {
 		return provider.findApiType().filter("openai"::equalsIgnoreCase).isPresent();
-	}
-
-	private static Optional<String> startingModel(AgentSettings settings) {
-		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
 	}
 
 	/**
@@ -325,16 +323,7 @@ public class CodexRuntime implements AgentRuntime {
 	}
 
 	private static Optional<String> defaultExecutable() {
-		String configured = System.getenv(CLI_PATH_ENV);
-		if (configured == null || configured.isBlank()) {
-			return Optional.empty();
-		}
-		Path path = Path.of(configured);
-		if (!Files.isExecutable(path)) {
-			throw new IllegalStateException(
-					CLI_PATH_ENV + " points at '" + configured + "', which is not an executable file");
-		}
-		return Optional.of(path.toString());
+		return Executables.fromEnvironment(CLI_PATH_ENV);
 	}
 
 	/** Where Codex would look if this adapter did nothing. */
@@ -377,7 +366,7 @@ public class CodexRuntime implements AgentRuntime {
 	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
 		return switch (option) {
 			case PROVIDER -> settings.provider().hasCredentials();
-			case MODEL -> !endpointConfig(settings).isEmpty() && startingModel(settings).isPresent();
+			case MODEL -> !endpointConfig(settings).isEmpty() && settings.findModel().isPresent();
 			case MODE -> false;
 		};
 	}
@@ -389,25 +378,16 @@ public class CodexRuntime implements AgentRuntime {
 	}
 
 	private Map<String, String> environment(AgentSettings settings) {
-		Map<String, String> env = new LinkedHashMap<>();
-		RuntimeOptions options = settings.runtimeOptions();
-
-		homeFor(settings).ifPresent(home -> env.put(HOME_ENV, home.toString()));
-		env.putAll(ProviderEnvironment.of(settings.provider()));
-		env.putAll(options.textSection("env"));
-		return env;
+		Map<String, String> home = homeFor(settings).map(path -> Map.of(HOME_ENV, path.toString())).orElse(Map.of());
+		return AgentEnvironment.layered(home, ProviderEnvironment.of(settings.provider()), settings);
 	}
 
 	/**
 	 * The home to point Codex at, or empty to inherit whatever the process already has.
 	 */
 	private Optional<Path> homeFor(AgentSettings settings) {
-		RuntimeOptions options = settings.runtimeOptions();
-		Optional<Path> explicit = options.text("home").map(Path::of).map(Path::toAbsolutePath);
-		if (explicit.isPresent()) {
-			return explicit;
-		}
-		return configFor(settings).isEmpty() ? Optional.empty() : Optional.of(managedHome(settings));
+		boolean relocated = settings.runtimeOptions().text("home").isPresent() || !configFor(settings).isEmpty();
+		return relocated ? Optional.of(managedHome(settings)) : Optional.empty();
 	}
 
 	private Path managedHome(AgentSettings settings) {

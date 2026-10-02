@@ -1,9 +1,16 @@
 package org.springaicommunity.acp.client;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import org.springaicommunity.acp.config.AgentOptions;
 import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.protocol.AcpProtocol;
+import org.springaicommunity.acp.runtime.AgentNotice;
+import org.springaicommunity.acp.session.AgentSession;
+import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.session.SessionPrincipal;
 
 import reactor.core.publisher.Flux;
 
@@ -41,7 +48,7 @@ public interface AgentClient extends AutoCloseable {
 	String runtimeId();
 
 	/** What the agent called itself during {@code initialize}, when it said. */
-	java.util.Optional<AgentInfo> agentInfo();
+	Optional<AgentInfo> agentInfo();
 
 	/**
 	 * The ACP version this connection settled on.
@@ -53,7 +60,7 @@ public interface AgentClient extends AutoCloseable {
 	 * {@code AcpProtocol}.
 	 */
 	default int protocolVersion() {
-		return org.springaicommunity.acp.protocol.AcpProtocol.V1;
+		return AcpProtocol.V1;
 	}
 
 	/**
@@ -79,8 +86,8 @@ public interface AgentClient extends AutoCloseable {
 	 * could not load, which ACP has no way to tell a client about at all. See
 	 * {@code AgentLogWatcher}.
 	 */
-	default java.util.List<org.springaicommunity.acp.runtime.AgentNotice> notices() {
-		return java.util.List.of();
+	default List<AgentNotice> notices() {
+		return List.of();
 	}
 
 	/**
@@ -104,7 +111,7 @@ public interface AgentClient extends AutoCloseable {
 	 * implement, so ask {@code sessions().supports(...)} before spending a round trip on
 	 * finding out.
 	 */
-	org.springaicommunity.acp.session.AgentSessions sessions();
+	AgentSessions sessions();
 
 	/**
 	 * The named session, once a turn has opened it.
@@ -115,7 +122,7 @@ public interface AgentClient extends AutoCloseable {
 	 * mechanism. With {@code on-unsupported: warn} that is the difference between the
 	 * model an application asked for and the model it is talking to.
 	 */
-	java.util.Optional<org.springaicommunity.acp.session.AgentSession> session(String name);
+	Optional<AgentSession> session(String name);
 
 	/**
 	 * Opens the named session now, or returns the one already open, without prompting.
@@ -127,7 +134,7 @@ public interface AgentClient extends AutoCloseable {
 	 * to find out that a requested model is unsupported without paying for a turn to
 	 * discover it.
 	 */
-	org.springaicommunity.acp.session.AgentSession openSession(String name);
+	AgentSession openSession(String name);
 
 	/**
 	 * Opens the named session on behalf of {@code principal}, or returns the one already
@@ -140,8 +147,7 @@ public interface AgentClient extends AutoCloseable {
 	 * {@code McpSettings.principals()} instead.
 	 * @param principal who the session is for, or null for nobody
 	 */
-	default org.springaicommunity.acp.session.AgentSession openSession(String name,
-			org.springaicommunity.acp.session.SessionPrincipal principal) {
+	default AgentSession openSession(String name, SessionPrincipal principal) {
 		if (principal == null) {
 			return openSession(name);
 		}
@@ -183,7 +189,7 @@ public interface AgentClient extends AutoCloseable {
 		 * ignore it: silently running a user's turn with nobody's credentials is worse
 		 * than failing.
 		 */
-		default PromptSpec principal(org.springaicommunity.acp.session.SessionPrincipal principal) {
+		default PromptSpec principal(SessionPrincipal principal) {
 			if (principal == null) {
 				return this;
 			}

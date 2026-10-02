@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
@@ -157,10 +159,10 @@ public class ConsoleRenderer {
 	/** The question part of a permission request; the answer is read by the caller. */
 	public synchronized void permission(PermissionQuestion question) {
 		String detail = String.join(" · ",
-				java.util.stream.Stream
+				Stream
 					.of(question.kind() == null ? null : question.kind().name().toLowerCase(Locale.ROOT),
 							question.toolName().filter(name -> !name.equals(question.describe())).orElse(null))
-					.filter(java.util.Objects::nonNull)
+					.filter(Objects::nonNull)
 					.toList());
 		line(styled("  ? The agent wants to: " + question.describe(), QUESTION)
 				+ (detail.isEmpty() ? "" : styled("  (" + detail + ")", DIM)));

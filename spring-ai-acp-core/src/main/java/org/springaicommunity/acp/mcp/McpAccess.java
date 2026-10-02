@@ -4,10 +4,12 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -212,7 +214,7 @@ public final class McpAccess implements AutoCloseable {
 	 * server the grant left out was not asked for at all.
 	 */
 	public static List<String> describeHanded(List<McpServerSpec> configured, Grant grant) {
-		java.util.Set<String> handed = new java.util.HashSet<>();
+		Set<String> handed = new HashSet<>();
 		grant.servers().forEach(server -> handed.add(server.name()));
 		return configured.stream()
 			.filter(server -> handed.contains(server.name()))

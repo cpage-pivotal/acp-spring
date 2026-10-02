@@ -1,10 +1,12 @@
 package org.springaicommunity.acp.client;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -13,17 +15,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.acp.config.AgentOptions;
 import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.PoolSettings;
+import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.observation.AgentObservations;
+import org.springaicommunity.acp.protocol.AcpProtocol;
 import org.springaicommunity.acp.runtime.AgentRuntime;
 import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
 import org.springaicommunity.acp.session.AgentSession;
 import org.springaicommunity.acp.session.AgentSessions;
 import org.springaicommunity.acp.session.SessionPrincipal;
+import org.springaicommunity.acp.session.SessionPrincipalResolver;
+import org.springaicommunity.acp.session.StoredSession;
 
 import reactor.core.publisher.Flux;
 
@@ -83,7 +91,7 @@ public final class AgentClientPool implements AgentClient {
 	 * Asked eagerly, on the caller's thread, since connections are chosen later on
 	 * subscription.
 	 */
-	private final org.springaicommunity.acp.session.SessionPrincipalResolver principals;
+	private final SessionPrincipalResolver principals;
 
 	private final McpScope mcpScope;
 
@@ -102,7 +110,7 @@ public final class AgentClientPool implements AgentClient {
 	 * Names whose session was already missing at the previous sweep. See
 	 * {@link #sweep()}.
 	 */
-	private final java.util.Set<String> missedLastSweep = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	private final Set<String> missedLastSweep = ConcurrentHashMap.newKeySet();
 
 	private final ScheduledExecutorService sweeper;
 
@@ -110,12 +118,11 @@ public final class AgentClientPool implements AgentClient {
 
 	/** A pool over the given runtime, connecting through {@link AgentClientFactory}. */
 	public AgentClientPool(AgentRuntime runtime, AgentSettings settings) {
-		this(runtime, settings, org.springaicommunity.acp.observation.AgentObservations.NONE);
+		this(runtime, settings, AgentObservations.NONE);
 	}
 
 	/** Same, with every turn on every connection reported to {@code observations}. */
-	public AgentClientPool(AgentRuntime runtime, AgentSettings settings,
-			org.springaicommunity.acp.observation.AgentObservations observations) {
+	public AgentClientPool(AgentRuntime runtime, AgentSettings settings, AgentObservations observations) {
 		this(runtime.id(), settings, () -> AgentClientFactory.create(runtime, settings, observations),
 				runtime.mcpScope());
 	}
@@ -185,9 +192,7 @@ public final class AgentClientPool implements AgentClient {
 	 */
 	@Override
 	public int protocolVersion() {
-		return connected().findFirst()
-			.map(AgentClient::protocolVersion)
-			.orElse(org.springaicommunity.acp.protocol.AcpProtocol.V1);
+		return connected().findFirst().map(AgentClient::protocolVersion).orElse(AcpProtocol.V1);
 	}
 
 	@Override
@@ -201,11 +206,11 @@ public final class AgentClientPool implements AgentClient {
 	}
 
 	@Override
-	public AgentSession openSession(String name, org.springaicommunity.acp.session.SessionPrincipal principal) {
+	public AgentSession openSession(String name, SessionPrincipal principal) {
 		return clientFor(name, principal).openSession(name, principal);
 	}
 
-	private org.springaicommunity.acp.session.SessionPrincipal currentPrincipal() {
+	private SessionPrincipal currentPrincipal() {
 		return principals.current().orElse(null);
 	}
 
@@ -436,7 +441,7 @@ public final class AgentClientPool implements AgentClient {
 		return best;
 	}
 
-	private java.util.stream.Stream<AgentClient> connected() {
+	private Stream<AgentClient> connected() {
 		return slots.stream().map(Slot::connected).filter(Optional::isPresent).map(Optional::get);
 	}
 
@@ -557,7 +562,7 @@ public final class AgentClientPool implements AgentClient {
 
 		private AgentOptions options = AgentOptions.none();
 
-		private org.springaicommunity.acp.session.SessionPrincipal principal;
+		private SessionPrincipal principal;
 
 		@Override
 		public PromptSpec session(String name) {
@@ -566,7 +571,7 @@ public final class AgentClientPool implements AgentClient {
 		}
 
 		@Override
-		public PromptSpec principal(org.springaicommunity.acp.session.SessionPrincipal principal) {
+		public PromptSpec principal(SessionPrincipal principal) {
 			this.principal = principal;
 			return this;
 		}
@@ -609,10 +614,10 @@ public final class AgentClientPool implements AgentClient {
 			// on subscription rather than when the stream was described. The principal is
 			// the
 			// exception: it is read now, on the caller's thread, and carried in.
-			org.springaicommunity.acp.session.SessionPrincipal owner = owner();
+			SessionPrincipal owner = owner();
 			return () -> Flux.defer(() -> {
 				Lease lease = lease(owner);
-				Flux<org.springaicommunity.acp.event.AgentEvent> events;
+				Flux<AgentEvent> events;
 				try {
 					events = delegate(lease.client(), owner).stream().events();
 				}
@@ -624,7 +629,7 @@ public final class AgentClientPool implements AgentClient {
 			});
 		}
 
-		private org.springaicommunity.acp.session.SessionPrincipal owner() {
+		private SessionPrincipal owner() {
 			return principal != null ? principal : currentPrincipal();
 		}
 
@@ -652,12 +657,12 @@ public final class AgentClientPool implements AgentClient {
 	private final class PooledSessions implements AgentSessions {
 
 		@Override
-		public List<org.springaicommunity.acp.session.StoredSession> list() {
+		public List<StoredSession> list() {
 			return any().sessions().list();
 		}
 
 		@Override
-		public List<org.springaicommunity.acp.session.StoredSession> list(java.nio.file.Path cwd) {
+		public List<StoredSession> list(Path cwd) {
 			return any().sessions().list(cwd);
 		}
 
@@ -672,14 +677,12 @@ public final class AgentClientPool implements AgentClient {
 		}
 
 		@Override
-		public AgentSession load(String name, String sessionId,
-				org.springaicommunity.acp.session.SessionPrincipal principal) {
+		public AgentSession load(String name, String sessionId, SessionPrincipal principal) {
 			return clientFor(name, principal).sessions().load(name, sessionId, principal);
 		}
 
 		@Override
-		public AgentSession resume(String name, String sessionId,
-				org.springaicommunity.acp.session.SessionPrincipal principal) {
+		public AgentSession resume(String name, String sessionId, SessionPrincipal principal) {
 			return clientFor(name, principal).sessions().resume(name, sessionId, principal);
 		}
 

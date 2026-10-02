@@ -3,6 +3,7 @@ package org.springaicommunity.acp.session;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -34,7 +35,7 @@ public record StoredSession(String sessionId, Path cwd, String title, Instant up
 		try {
 			return Instant.parse(value);
 		}
-		catch (java.time.format.DateTimeParseException ex) {
+		catch (DateTimeParseException ex) {
 			return null;
 		}
 	}

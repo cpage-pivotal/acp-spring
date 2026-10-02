@@ -3,6 +3,7 @@ package org.springaicommunity.acp.config;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -54,7 +55,7 @@ public record AdvertisedSessionConfig(List<AcpSchema.SessionConfigOption> config
 	}
 
 	/** Every select option the agent advertised, in the order it advertised them. */
-	public java.util.stream.Stream<AcpSchema.SessionConfigSelect> selects() {
+	public Stream<AcpSchema.SessionConfigSelect> selects() {
 		return configOptions.stream()
 			.filter(AcpSchema.SessionConfigSelect.class::isInstance)
 			.map(AcpSchema.SessionConfigSelect.class::cast);

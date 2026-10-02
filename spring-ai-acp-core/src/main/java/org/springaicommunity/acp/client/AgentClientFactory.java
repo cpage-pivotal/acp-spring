@@ -1,7 +1,13 @@
 package org.springaicommunity.acp.client;
 
 import java.time.Duration;
+import java.util.Deque;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,9 +80,9 @@ public final class AgentClientFactory {
 
 		AgentDiagnostics diagnostics = new AgentDiagnostics();
 		return switch (runtime.launch(settings)) {
-			case AgentLaunchSpec.Stdio stdio -> connect(runtime, settings, stdioTransport(stdio, diagnostics),
-					diagnostics, Liveness.unknowable(), () -> {
-					}, observations, logWatcher(runtime, settings));
+			case AgentLaunchSpec.Stdio stdio -> connect(runtime, settings,
+					new Launched(stdioTransport(stdio, diagnostics), diagnostics, Liveness.unknowable(), () -> {
+					}, logWatcher(runtime, settings)), observations);
 			case AgentLaunchSpec.WebSocket served ->
 				connectServed(runtime, settings, served, diagnostics, observations);
 		};
@@ -122,7 +128,7 @@ public final class AgentClientFactory {
 		}
 
 		WebSocketAgentTransport transport = new WebSocketAgentTransport(served.uri(), served.headers());
-		java.util.concurrent.atomic.AtomicBoolean connected = new java.util.concurrent.atomic.AtomicBoolean(true);
+		AtomicBoolean connected = new AtomicBoolean(true);
 		transport.onDisconnect(() -> connected.set(false));
 		// A restarted server is a new process behind the same address: this connection is
 		// stale
@@ -140,14 +146,38 @@ public final class AgentClientFactory {
 		// log it can
 		// find; an attached one is somebody else's process.
 		AgentLogWatcher watcher = supervisor == null ? null : logWatcher(runtime, settings);
+		Launched launched = new Launched(transport, diagnostics, liveness, onClose, watcher);
 		try {
-			return connect(runtime, settings, transport, diagnostics, liveness, onClose, observations, watcher);
+			return connect(runtime, settings, launched, observations);
 		}
 		catch (RuntimeException ex) {
-			closeQuietly(watcher);
-			onClose.run();
+			launched.close();
 			throw ex;
 		}
+	}
+
+	/**
+	 * An agent this client can reach, and what to release when it is done with it.
+	 *
+	 * @param diagnostics the agent's stderr, for a failed handshake to quote
+	 * @param onClose stops whatever was started to reach the agent, such as a supervised
+	 * server
+	 * @param watcher the agent's own log, or null when there is none to watch
+	 */
+	private record Launched(AcpClientTransport transport, AgentDiagnostics diagnostics, Liveness liveness,
+			Runnable onClose, AgentLogWatcher watcher) {
+
+		/** An agent somebody else started, which this client cannot see the health of. */
+		static Launched attached(AcpClientTransport transport, AgentLogWatcher watcher) {
+			return new Launched(transport, new AgentDiagnostics(), Liveness.unknowable(), () -> {
+			}, watcher);
+		}
+
+		void close() {
+			closeQuietly(watcher);
+			onClose.run();
+		}
+
 	}
 
 	/**
@@ -162,7 +192,7 @@ public final class AgentClientFactory {
 	 * dead agent is a request that does not come back. A served agent has a socket that
 	 * closes and a supervisor that watches the process.
 	 */
-	private record Liveness(boolean knowable, java.util.function.BooleanSupplier alive) {
+	private record Liveness(boolean knowable, BooleanSupplier alive) {
 
 		static Liveness unknowable() {
 			return new Liveness(false, () -> true);
@@ -199,15 +229,13 @@ public final class AgentClientFactory {
 	 */
 	public static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
 			AgentObservations observations, AgentLogWatcher watcher) {
-		return connect(runtime, settings, launched, new AgentDiagnostics(), Liveness.unknowable(), () -> {
-		}, observations, watcher);
+		return connect(runtime, settings, Launched.attached(launched, watcher), observations);
 	}
 
-	private static AgentClient connect(AgentRuntime runtime, AgentSettings settings, AcpClientTransport launched,
-			AgentDiagnostics diagnostics, Liveness liveness, Runnable onTransportClose, AgentObservations observations,
-			AgentLogWatcher watcher) {
+	private static AgentClient connect(AgentRuntime runtime, AgentSettings settings, Launched launched,
+			AgentObservations observations) {
 		SessionConfigRecorder recorder = new SessionConfigRecorder();
-		AcpClientTransport transport = recorder.wrap(launched);
+		AcpClientTransport transport = recorder.wrap(launched.transport());
 		SessionUpdateRouter router = new SessionUpdateRouter();
 
 		WorkspaceFileSystem files = new WorkspaceFileSystem(settings.workspace(), settings.filesystem());
@@ -240,8 +268,42 @@ public final class AgentClientFactory {
 
 		AcpAsyncClient acp = spec.build();
 
+		// What the client releases when it closes, after closing the connection itself.
+		Runnable release = () -> {
+			terminals.close();
+			launched.close();
+		};
+		Handshake handshake;
+		try {
+			handshake = handshake(acp, runtime, settings, launched.diagnostics());
+		}
+		catch (RuntimeException ex) {
+			closeQuietly(acp);
+			release.run();
+			throw ex;
+		}
+
+		Liveness liveness = launched.liveness();
+		DefaultAgentClient client = new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router,
+				recorder, handshake.initialized(), handshake.protocolVersion(), observations,
+				liveness.knowable() ? liveness.alive() : null, release);
+		client.watch(launched.watcher());
+		return client;
+	}
+
+	/**
+	 * What {@code initialize} established: the agent's answer, and the version agreed.
+	 */
+	private record Handshake(AcpSchema.InitializeResponse initialized, int protocolVersion) {
+	}
+
+	/**
+	 * Initializes, agrees a protocol version and signs in: everything that happens once
+	 * per connection before the first session.
+	 */
+	private static Handshake handshake(AcpAsyncClient acp, AgentRuntime runtime, AgentSettings settings,
+			AgentDiagnostics diagnostics) {
 		AcpSchema.InitializeResponse initialized;
-		int protocolVersion;
 		int offered = settings.protocol().maxVersion();
 		try {
 			initialized = acp
@@ -253,61 +315,27 @@ public final class AgentClientFactory {
 			}
 		}
 		catch (RuntimeException ex) {
-			// Collected before the close, not after: closing disposes the scheduler that
-			// delivers the
-			// agent's stderr, so a complaint still in flight is lost the moment the
-			// transport goes down.
-			String reported = diagnostics.settledSummary();
-			terminals.close();
-			closeQuietly(acp);
-			closeQuietly(watcher);
-			onTransportClose.run();
-			throw new AgentClientException("Failed to initialize runtime '" + runtime.id() + "'" + reported, ex);
+			// Collected here, before the caller closes anything: closing disposes the
+			// scheduler that delivers the agent's stderr, so a complaint still in flight
+			// is lost the moment the transport goes down.
+			throw new AgentClientException(
+					"Failed to initialize runtime '" + runtime.id() + "'" + diagnostics.settledSummary(), ex);
 		}
 
 		// Outside the catch on purpose. A version nobody can speak is a handshake that
-		// succeeded and
-		// produced something unusable, not a handshake that failed, and wrapping it in
-		// "failed to
-		// initialize" would bury the one sentence that says what to change. Reconciled
-		// rather than
-		// read, because goose 1.51 answers whatever version it is offered — see
-		// AcpProtocol.
-		try {
-			protocolVersion = AcpProtocol.negotiated(runtime.id(), offered, initialized.protocolVersion(),
-					settings.protocol().strict());
-		}
-		catch (RuntimeException ex) {
-			terminals.close();
-			closeQuietly(acp);
-			closeQuietly(watcher);
-			onTransportClose.run();
-			throw ex;
-		}
+		// succeeded and produced something unusable, not a handshake that failed, and
+		// wrapping it in "failed to initialize" would bury the one sentence that says
+		// what
+		// to change. Reconciled rather than read, because goose 1.51 answers whatever
+		// version it is offered — see AcpProtocol.
+		int protocolVersion = AcpProtocol.negotiated(runtime.id(), offered, initialized.protocolVersion(),
+				settings.protocol().strict());
 		logger.info("Connected to {} {} over ACP v{}",
 				initialized.agentInfo() == null ? runtime.id() : initialized.agentInfo().name(),
 				initialized.agentInfo() == null ? "" : initialized.agentInfo().version(), protocolVersion);
 
-		try {
-			authenticate(acp, runtime, settings, initialized, diagnostics);
-		}
-		catch (RuntimeException ex) {
-			terminals.close();
-			closeQuietly(acp);
-			closeQuietly(watcher);
-			onTransportClose.run();
-			throw ex;
-		}
-
-		DefaultAgentClient client = new DefaultAgentClient(acp, runtime, settings, new SessionRegistry(), router,
-				recorder, initialized, protocolVersion, observations, liveness.knowable() ? liveness.alive() : null,
-				() -> {
-					terminals.close();
-					closeQuietly(watcher);
-					onTransportClose.run();
-				});
-		client.watch(watcher);
-		return client;
+		authenticate(acp, runtime, settings, initialized, diagnostics);
+		return new Handshake(initialized, protocolVersion);
 	}
 
 	/**
@@ -328,7 +356,7 @@ public final class AgentClientFactory {
 		if (method.isEmpty()) {
 			return;
 		}
-		java.util.List<String> offered = initialized.authMethods() == null ? java.util.List.of()
+		List<String> offered = initialized.authMethods() == null ? List.of()
 				: initialized.authMethods().stream().map(AcpSchema.AuthMethod::id).toList();
 		if (!offered.contains(method.get())) {
 			logger.warn("Runtime '{}' wants to authenticate with '{}', but the agent offers only {}; not sending it",
@@ -376,9 +404,9 @@ public final class AgentClientFactory {
 		private static final Duration SETTLE = Duration.ofMillis(500);
 
 		/** Agents colour their errors for a terminal; an exception message is not one. */
-		private static final java.util.regex.Pattern ANSI = java.util.regex.Pattern.compile("\u001B\\[[0-9;]*[a-zA-Z]");
+		private static final Pattern ANSI = Pattern.compile("\u001B\\[[0-9;]*[a-zA-Z]");
 
-		private final java.util.Deque<String> lines = new java.util.concurrent.ConcurrentLinkedDeque<>();
+		private final Deque<String> lines = new ConcurrentLinkedDeque<>();
 
 		private void record(String line) {
 			if (line == null || line.isBlank()) {

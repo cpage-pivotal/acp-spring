@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -98,7 +99,7 @@ public final class LoopbackSignIn implements McpSignIn {
 				.clientId(registration.getClientId())
 				.redirectUri(registration.getRedirectUri())
 				.scopes(registration.getScopes())
-				.state(java.util.UUID.randomUUID().toString())
+				.state(UUID.randomUUID().toString())
 				.attributes(attributes -> attributes.put("registration_id", server.name()));
 			if (resource != null) {
 				builder.additionalParameters(Map.of("resource", resource));

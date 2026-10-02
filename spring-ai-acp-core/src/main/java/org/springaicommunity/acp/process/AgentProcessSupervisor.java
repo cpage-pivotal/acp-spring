@@ -9,7 +9,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -85,7 +87,7 @@ public final class AgentProcessSupervisor implements AutoCloseable {
 
 	private final AtomicInteger restartsInWindow = new AtomicInteger();
 
-	private final java.util.Deque<String> recent = new java.util.concurrent.ConcurrentLinkedDeque<>();
+	private final Deque<String> recent = new ConcurrentLinkedDeque<>();
 
 	private volatile long windowStartedAt = System.nanoTime();
 

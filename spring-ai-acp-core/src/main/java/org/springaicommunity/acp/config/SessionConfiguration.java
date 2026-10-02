@@ -1,5 +1,6 @@
 package org.springaicommunity.acp.config;
 
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,7 @@ public record SessionConfiguration(Map<PortableOption, OptionResolution> resolut
 		for (PortableOption option : PortableOption.values()) {
 			copy.putIfAbsent(option, OptionResolution.notRequested(option));
 		}
-		resolutions = java.util.Collections.unmodifiableMap(copy);
+		resolutions = Collections.unmodifiableMap(copy);
 	}
 
 	public static SessionConfiguration empty() {

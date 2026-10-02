@@ -3,6 +3,7 @@ package org.springaicommunity.acp.runtime;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springaicommunity.acp.config.Validation;
@@ -54,7 +55,7 @@ public sealed interface AgentLaunchSpec {
 			if (uri == null) {
 				throw new IllegalArgumentException("agent WebSocket uri must not be null");
 			}
-			String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(java.util.Locale.ROOT);
+			String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
 			if (!scheme.equals("ws") && !scheme.equals("wss")) {
 				throw new IllegalArgumentException("agent WebSocket uri must use ws or wss but was '" + uri + "'");
 			}

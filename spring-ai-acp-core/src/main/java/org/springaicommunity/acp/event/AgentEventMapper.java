@@ -1,6 +1,7 @@
 package org.springaicommunity.acp.event;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -57,7 +58,7 @@ public final class AgentEventMapper {
 				? Optional.of(t.text()) : Optional.empty();
 	}
 
-	private static boolean isReplay(java.util.Map<String, Object> meta) {
+	private static boolean isReplay(Map<String, Object> meta) {
 		return meta != null && Boolean.TRUE.equals(meta.get("replay"));
 	}
 

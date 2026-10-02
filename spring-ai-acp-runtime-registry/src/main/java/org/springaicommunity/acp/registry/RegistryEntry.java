@@ -3,6 +3,7 @@ package org.springaicommunity.acp.registry;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -49,11 +50,7 @@ public record RegistryEntry(String id, String name, String version, Distribution
 
 			/** The build for {@code platform}, trying its fallbacks in order. */
 			public Optional<Artifact> forPlatform(Platform platform) {
-				return platform.candidateKeys()
-					.stream()
-					.map(artifacts::get)
-					.filter(java.util.Objects::nonNull)
-					.findFirst();
+				return platform.candidateKeys().stream().map(artifacts::get).filter(Objects::nonNull).findFirst();
 			}
 		}
 

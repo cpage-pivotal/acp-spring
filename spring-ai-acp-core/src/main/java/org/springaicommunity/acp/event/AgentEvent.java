@@ -1,6 +1,7 @@
 package org.springaicommunity.acp.event;
 
 import java.util.List;
+import java.util.OptionalDouble;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -65,9 +66,8 @@ public sealed interface AgentEvent {
 			String costCurrency) implements AgentEvent {
 
 		/** How much of the context window is gone, when the agent said how big it is. */
-		public java.util.OptionalDouble contextFraction() {
-			return contextSize <= 0 ? java.util.OptionalDouble.empty()
-					: java.util.OptionalDouble.of((double) contextUsed / contextSize);
+		public OptionalDouble contextFraction() {
+			return contextSize <= 0 ? OptionalDouble.empty() : OptionalDouble.of((double) contextUsed / contextSize);
 		}
 	}
 

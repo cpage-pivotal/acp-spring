@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springaicommunity.acp.client.AgentClient;
 import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.runtime.AgentRuntime;
 
 import reactor.core.publisher.Flux;
 
@@ -85,7 +87,7 @@ public class AcpChatModel implements ChatModel {
 	private final AcpChatOptions defaultOptions;
 
 	/** So an ignored option is named once per model, not once per call. */
-	private final Set<String> reportedUnsupported = java.util.concurrent.ConcurrentHashMap.newKeySet();
+	private final Set<String> reportedUnsupported = ConcurrentHashMap.newKeySet();
 
 	public AcpChatModel(AgentClient client) {
 		this(client, AcpChatOptions.builder().build());
@@ -335,8 +337,7 @@ public class AcpChatModel implements ChatModel {
 	private String modelOf(AcpChatOptions options) {
 		if (options.getSession() != null) {
 			String applied = client.session(options.getSession())
-				.flatMap(session -> session.configuration()
-					.applied(org.springaicommunity.acp.runtime.AgentRuntime.PortableOption.MODEL))
+				.flatMap(session -> session.configuration().applied(AgentRuntime.PortableOption.MODEL))
 				.orElse(null);
 			if (applied != null) {
 				return applied;

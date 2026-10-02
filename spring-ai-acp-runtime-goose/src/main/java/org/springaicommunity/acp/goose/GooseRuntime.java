@@ -1,25 +1,31 @@
 package org.springaicommunity.acp.goose;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springaicommunity.acp.config.AgentSettings;
 import org.springaicommunity.acp.config.ProviderEnvironment;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
-import java.util.regex.Matcher;
-
+import org.springaicommunity.acp.mcp.McpRequestFilter;
+import org.springaicommunity.acp.runtime.AgentEnvironment;
 import org.springaicommunity.acp.runtime.AgentLaunchSpec;
 import org.springaicommunity.acp.runtime.AgentNotice;
 import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.Executables;
 import org.springaicommunity.acp.runtime.ToolNames;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -116,8 +122,7 @@ public class GooseRuntime implements AgentRuntime {
 	 * knowing and is why the upstream fix — the warning arriving over ACP — is the one
 	 * that ends this.
 	 */
-	private static final java.util.regex.Pattern EXTENSION_FAILURE = java.util.regex.Pattern
-		.compile("Failed to load extension ([^:]+): (.*)");
+	private static final Pattern EXTENSION_FAILURE = Pattern.compile("Failed to load extension ([^:]+): (.*)");
 
 	private static final String DEFAULT_SERVE_HOST = "127.0.0.1";
 
@@ -206,18 +211,18 @@ public class GooseRuntime implements AgentRuntime {
 	}
 
 	private static int freePort() {
-		try (java.net.ServerSocket socket = new java.net.ServerSocket(0)) {
+		try (ServerSocket socket = new ServerSocket(0)) {
 			return socket.getLocalPort();
 		}
-		catch (java.io.IOException ex) {
+		catch (IOException ex) {
 			throw new IllegalStateException("Could not allocate a port for 'goose serve'", ex);
 		}
 	}
 
 	private static String newSecret() {
 		byte[] bytes = new byte[32];
-		new java.security.SecureRandom().nextBytes(bytes);
-		return java.util.HexFormat.of().formatHex(bytes);
+		new SecureRandom().nextBytes(bytes);
+		return HexFormat.of().formatHex(bytes);
 	}
 
 	/**
@@ -339,7 +344,7 @@ public class GooseRuntime implements AgentRuntime {
 	 * failure it hides and why it is not on by default.
 	 */
 	@Override
-	public List<org.springaicommunity.acp.mcp.McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
+	public List<McpRequestFilter> mcpRequestFilters(AgentSettings settings) {
 		boolean answer = settings.runtimeOptions().text("mcp.answer-discover").map(Boolean::parseBoolean).orElse(false);
 		return answer ? List.of(new DiscoverProbeFilter()) : List.of();
 	}
@@ -365,27 +370,16 @@ public class GooseRuntime implements AgentRuntime {
 	}
 
 	/**
-	 * The environment Goose starts with.
-	 *
-	 * <p>
-	 * Ordering is the contract: the hardening defaults first, then the provider's
-	 * credentials, then the application's own tier-3 {@code env} block, which therefore
-	 * wins over both.
+	 * The environment Goose starts with: the hardening defaults, then the provider's
+	 * credentials, then tier 3. See {@link AgentEnvironment}.
 	 */
 	private Map<String, String> environment(AgentSettings settings) {
-		Map<String, String> env = new LinkedHashMap<>();
-
 		// TAS containers have no durable desktop keyring, and telemetry from a
-		// server-side agent is
-		// not the operator's to send.
-		env.put("GOOSE_DISABLE_KEYRING", "1");
-		env.put("GOOSE_TELEMETRY_ENABLED", "false");
-
-		env.putAll(providerEnvironment(settings));
-
-		RuntimeOptions options = settings.runtimeOptions();
-		env.putAll(options.textSection("env"));
-		return env;
+		// server-side agent is not the operator's to send.
+		Map<String, String> hardening = new LinkedHashMap<>();
+		hardening.put("GOOSE_DISABLE_KEYRING", "1");
+		hardening.put("GOOSE_TELEMETRY_ENABLED", "false");
+		return AgentEnvironment.layered(hardening, providerEnvironment(settings), settings);
 	}
 
 	/**
@@ -414,7 +408,7 @@ public class GooseRuntime implements AgentRuntime {
 
 		if (provider.isByo()) {
 			provider.findApiType().or(provider::findId).ifPresent(id -> env.put(GOOSE_PROVIDER, id));
-			startingModel(settings).ifPresent(model -> env.put(GOOSE_MODEL, model));
+			settings.findModel().ifPresent(model -> env.put(GOOSE_MODEL, model));
 		}
 		return env;
 	}
@@ -435,10 +429,6 @@ public class GooseRuntime implements AgentRuntime {
 		return provider.findApiType().filter("openai"::equalsIgnoreCase).isPresent();
 	}
 
-	private static Optional<String> startingModel(AgentSettings settings) {
-		return Optional.ofNullable(settings.model()).filter(model -> !model.isBlank());
-	}
-
 	/**
 	 * What {@link #providerEnvironment} already carried, declared so the resolver can
 	 * price it.
@@ -452,28 +442,15 @@ public class GooseRuntime implements AgentRuntime {
 	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
 		ProviderSpec provider = settings.provider();
 		return switch (option) {
-			case MODEL -> provider.isByo() && startingModel(settings).isPresent();
+			case MODEL -> provider.isByo() && settings.findModel().isPresent();
 			case PROVIDER -> provider.isByo() && provider.findApiType().or(provider::findId).isPresent();
 			case MODE -> false;
 		};
 	}
 
-	/**
-	 * Prefers the explicit path the buildpack exports, then falls back to the PATH.
-	 * Resolving an absolute path here means the failure, when there is one, names the
-	 * file rather than surfacing as a bare {@code IOException} from process start.
-	 */
+	/** Prefers the explicit path the buildpack exports, then falls back to the PATH. */
 	private static String defaultExecutable() {
-		String configured = System.getenv(CLI_PATH_ENV);
-		if (configured != null && !configured.isBlank()) {
-			Path path = Paths.get(configured);
-			if (!Files.isExecutable(path)) {
-				throw new IllegalStateException(
-						CLI_PATH_ENV + " points at '" + configured + "', which is not an executable file");
-			}
-			return path.toString();
-		}
-		return "goose";
+		return Executables.fromEnvironment(CLI_PATH_ENV).orElse("goose");
 	}
 
 }

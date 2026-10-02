@@ -1,5 +1,6 @@
 package org.springaicommunity.acp.config;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -273,7 +274,7 @@ public final class ConfigResolver {
 		ProviderSpec provider = settings.provider();
 		return client
 			.setProvider(new AcpSchema.SetProviderRequest(value, provider.apiType(),
-					provider.findBaseUrl().map(java.net.URI::toString).orElse(null), provider.headers()))
+					provider.findBaseUrl().map(URI::toString).orElse(null), provider.headers()))
 			.thenReturn(OptionResolution.applied(option, value, value, Mechanism.PROVIDERS_SET, "providers/set"));
 	}
 

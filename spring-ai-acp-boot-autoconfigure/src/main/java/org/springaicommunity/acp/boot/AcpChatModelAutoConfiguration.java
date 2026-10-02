@@ -43,9 +43,9 @@ public class AcpChatModelAutoConfiguration {
 	AcpChatModel acpChatModel(AgentClient client, AcpProperties properties) {
 		return new AcpChatModel(client,
 				AcpChatOptions.builder()
-					.model(properties.getModel())
-					.mode(properties.getMode())
-					.timeout(properties.getTimeout())
+					.model(properties.model())
+					.mode(properties.mode())
+					.timeout(properties.timeout())
 					.build());
 	}
 
