@@ -49,7 +49,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * Tier-3 options, under {@code spring.acp.runtimes.codex}:
  *
  * <pre>{@code
- * package: "@agentclientprotocol/codex-acp@1.13.1"   # what npx runs
+ * package: "@agentclientprotocol/codex-acp@2.1.1"   # what npx runs
  * command: /usr/local/bin/codex-acp                  # instead of npx
  * args: [ --verbose ]
  * home: /var/lib/codex                               # CODEX_HOME
@@ -65,7 +65,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * Pinned rather than floating: an agent that changes under a running application is
 	 * not a feature.
 	 */
-	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@1.13.1";
+	public static final String DEFAULT_PACKAGE = "@agentclientprotocol/codex-acp@2.1.1";
 
 	/**
 	 * The buildpack, or an operator, can name a local codex-acp without touching
