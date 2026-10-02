@@ -3,7 +3,7 @@
 All notable changes to Spring AI ACP are documented here. The project follows
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
-## [0.3.1] - Unreleased
+## [0.3.1] - 2026-10-01
 
 ### Added
 
