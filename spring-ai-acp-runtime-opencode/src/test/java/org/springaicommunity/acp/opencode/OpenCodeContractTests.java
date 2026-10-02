@@ -28,18 +28,18 @@ class OpenCodeContractTests extends AgentRuntimeContract {
 	}
 
 	/**
-	 * OpenCode qualifies its model ids with the provider, so these are not Goose's
-	 * spellings.
+	 * OpenCode qualifies its model ids with the provider, so this is not Goose's
+	 * spelling.
 	 *
 	 * <p>
-	 * Same reasoning as the other two runtimes: the cheap end of the agentic coding line,
-	 * with a cheaper fallback behind it. OpenCode also advertises free {@code opencode/*}
-	 * models, which are not used here — a rate-limited free tier turns a contract failure
-	 * into a coin toss, and a flaky suite costs more than the tokens it saves.
+	 * Same reasoning as the other two runtimes: the cheap end of the agentic coding line.
+	 * OpenCode also advertises free {@code opencode/*} models, which are not used here —
+	 * a rate-limited free tier turns a contract failure into a coin toss, and a flaky
+	 * suite costs more than the tokens it saves.
 	 */
 	@Override
 	protected java.util.List<String> preferredModels() {
-		return java.util.List.of("openai/gpt-5.6-luna", "openai/gpt-5.4-mini");
+		return java.util.List.of("openai/gpt-6-luna");
 	}
 
 	@Override

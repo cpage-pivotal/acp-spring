@@ -36,7 +36,7 @@ class CodexContractTests extends AgentRuntimeContract {
 	 */
 	@Override
 	protected java.util.List<String> preferredModels() {
-		return java.util.List.of("gpt-5.6-luna");
+		return java.util.List.of("gpt-6-luna");
 	}
 
 	/**
