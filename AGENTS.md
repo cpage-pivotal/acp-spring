@@ -8,7 +8,8 @@ repository. `CLAUDE.md` imports this file; keep project guidance here.
 `spring-ai-acp`: a Spring Boot 4 / Java 21 library that drives any Agent Client Protocol (ACP)
 coding agent (Goose, Codex, OpenCode, or any of the ~41 in the ACP registry) behind one API,
 selected by `spring.acp.runtime`. Successor to the `java-wrapper` module of `../goose-buildpack`.
-Built on the official `com.agentclientprotocol:acp-core` (pre-1.0, pinned exactly). Packaging the
+Built on the official `com.agentclientprotocol:acp-core` (pre-1.0, pinned exactly) with its
+Jackson 3 JSON module, `acp-json-jackson3`; nothing here uses Jackson 2. Packaging the
 agent binary is out of scope. `docs/user-guide.html` is the reference; read the relevant section
 before changing behaviour it documents.
 

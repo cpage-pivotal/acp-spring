@@ -5,9 +5,10 @@ import java.util.List;
 
 import org.springaicommunity.acp.mcp.McpRequestFilter;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Answers goose's {@code server/discover} probe for an MCP server that mishandles it.
@@ -40,12 +41,12 @@ final class DiscoverProbeFilter implements McpRequestFilter {
 
 	private static final String VERSION_HEADER = "MCP-Protocol-Version";
 
-	private static final ObjectMapper JSON = new ObjectMapper();
+	private static final JsonMapper JSON = JsonMapper.shared();
 
 	@Override
 	public Outcome filter(McpRequest request) {
 		JsonNode message = parse(request.body());
-		if (message != null && DISCOVER.equals(message.path("method").asText(null))) {
+		if (message != null && DISCOVER.equals(message.path("method").asString(null))) {
 			if (!message.has("id")) {
 				// A notification, which JSON-RPC answers with nothing at all.
 				return new Outcome.Answer(202, null, new byte[0]);
@@ -67,7 +68,7 @@ final class DiscoverProbeFilter implements McpRequestFilter {
 			JsonNode node = JSON.readTree(body);
 			return node != null && node.isObject() ? node : null;
 		}
-		catch (IOException ex) {
+		catch (JacksonException ex) {
 			return null;
 		}
 	}

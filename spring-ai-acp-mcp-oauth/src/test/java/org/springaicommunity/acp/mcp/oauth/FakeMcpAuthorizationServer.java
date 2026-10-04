@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -33,7 +33,7 @@ import com.sun.net.httpserver.HttpServer;
  */
 final class FakeMcpAuthorizationServer implements AutoCloseable {
 
-	private static final ObjectMapper JSON = new ObjectMapper();
+	private static final JsonMapper JSON = JsonMapper.shared();
 
 	final List<Map<String, Object>> registrations = new CopyOnWriteArrayList<>();
 

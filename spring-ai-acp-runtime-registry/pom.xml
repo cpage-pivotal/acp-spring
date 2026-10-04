@@ -21,12 +21,12 @@
             <artifactId>spring-ai-acp-core</artifactId>
         </dependency>
         <!--
-          Jackson is already on the classpath through acp-core, which uses it for the wire format.
-          Declared here rather than inherited silently, because this module reads a document the
-          protocol has nothing to do with.
+          Jackson is already on the classpath through spring-ai-acp-core, which uses it for the wire
+          format. Declared here rather than inherited silently, because this module reads a document
+          the protocol has nothing to do with.
         -->
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
+            <groupId>tools.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
 

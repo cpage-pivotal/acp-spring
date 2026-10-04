@@ -25,9 +25,10 @@ import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.util.StringUtils;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Client registrations and tokens in one file, for a terminal application run by one
@@ -48,7 +49,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  */
 public final class FileMcpOAuthStore {
 
-	private static final ObjectMapper JSON = new ObjectMapper();
+	private static final JsonMapper JSON = JsonMapper.shared();
 
 	private final Path file;
 
@@ -181,7 +182,7 @@ public final class FileMcpOAuthStore {
 			JsonNode node = JSON.readTree(file.toFile());
 			return node instanceof ObjectNode object ? object : JSON.createObjectNode();
 		}
-		catch (IOException ex) {
+		catch (JacksonException ex) {
 			return JSON.createObjectNode();
 		}
 	}
@@ -266,7 +267,7 @@ public final class FileMcpOAuthStore {
 
 	private static String text(JsonNode node, String field) {
 		JsonNode value = node.get(field);
-		return value == null || value.isNull() ? null : value.asText();
+		return value == null ? null : value.asString(null);
 	}
 
 	private static Instant instant(JsonNode node, String field) {

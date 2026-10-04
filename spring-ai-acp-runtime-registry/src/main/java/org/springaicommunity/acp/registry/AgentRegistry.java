@@ -23,8 +23,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The ACP agent catalogue, read from a snapshot.
@@ -58,7 +59,7 @@ public class AgentRegistry {
 
 	private final RegistrySettings settings;
 
-	private final ObjectMapper mapper = new ObjectMapper();
+	private final JsonMapper mapper = JsonMapper.shared();
 
 	private final AtomicReference<Map<String, RegistryEntry>> entries = new AtomicReference<>();
 
@@ -236,7 +237,7 @@ public class AgentRegistry {
 		try {
 			root = mapper.readTree(json);
 		}
-		catch (IOException ex) {
+		catch (JacksonException ex) {
 			throw new IllegalArgumentException("The ACP registry is not valid JSON", ex);
 		}
 		Map<String, RegistryEntry> parsed = new LinkedHashMap<>();
@@ -292,14 +293,14 @@ public class AgentRegistry {
 
 	private static String text(JsonNode node, String field) {
 		JsonNode value = node.path(field);
-		return value.isTextual() ? value.asText() : null;
+		return value.isString() ? value.asString() : null;
 	}
 
 	private static List<String> strings(JsonNode node) {
 		List<String> values = new ArrayList<>();
 		node.forEach(element -> {
-			if (element.isTextual()) {
-				values.add(element.asText());
+			if (element.isString()) {
+				values.add(element.asString());
 			}
 		});
 		return values;
@@ -309,7 +310,7 @@ public class AgentRegistry {
 		Map<String, String> values = new LinkedHashMap<>();
 		node.properties().forEach(entry -> {
 			if (entry.getValue().isValueNode()) {
-				values.put(entry.getKey(), entry.getValue().asText());
+				values.put(entry.getKey(), entry.getValue().asString());
 			}
 		});
 		return values;

@@ -15,8 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Reads {@code GET {base-url}/models} — the listing every OpenAI-compatible endpoint
@@ -40,7 +41,7 @@ final class EndpointModelCatalog implements ModelCatalog {
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
-	private static final ObjectMapper json = new ObjectMapper();
+	private static final JsonMapper json = JsonMapper.shared();
 
 	/** Keyed by the listing's URL, so two providers onto one gateway ask once. */
 	private final Map<URI, Optional<List<String>>> cache = new ConcurrentHashMap<>();
@@ -107,14 +108,14 @@ final class EndpointModelCatalog implements ModelCatalog {
 			JsonNode entries = root.isArray() ? root : root.path("data");
 			List<String> models = new ArrayList<>();
 			entries.forEach(entry -> {
-				JsonNode id = entry.isTextual() ? entry : entry.path("id");
-				if (id.isTextual() && !id.asText().isBlank()) {
-					models.add(id.asText());
+				JsonNode id = entry.isString() ? entry : entry.path("id");
+				if (id.isString() && !id.asString().isBlank()) {
+					models.add(id.asString());
 				}
 			});
 			return models;
 		}
-		catch (IOException ex) {
+		catch (JacksonException ex) {
 			return List.of();
 		}
 	}

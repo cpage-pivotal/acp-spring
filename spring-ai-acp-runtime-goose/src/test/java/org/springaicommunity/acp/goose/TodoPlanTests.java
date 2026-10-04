@@ -6,9 +6,9 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import com.agentclientprotocol.sdk.json.AcpJsonMapper;
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 import com.agentclientprotocol.sdk.spec.AcpSchema.PlanEntryStatus;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -30,8 +30,8 @@ class TodoPlanTests {
 
 	@Test
 	void readsTheCapturedWriteAsAPlan() throws Exception {
-		AcpSchema.ToolCall call = (AcpSchema.ToolCall) new ObjectMapper().readValue(CAPTURED,
-				AcpSchema.SessionUpdate.class);
+		AcpSchema.ToolCall call = (AcpSchema.ToolCall) AcpJsonMapper.createDefault()
+			.readValue(CAPTURED, AcpSchema.SessionUpdate.class);
 
 		assertThat(new GooseRuntime().planOf(call)).hasValueSatisfying(plan -> assertThat(plan)
 			.extracting(AcpSchema.PlanEntry::content, AcpSchema.PlanEntry::status)

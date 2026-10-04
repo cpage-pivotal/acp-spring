@@ -179,6 +179,14 @@ public final class SessionConfigRecorder {
 			return delegate.protocolVersions();
 		}
 
+		// Not optional for a delegate: the interface's default never completes, so
+		// leaving
+		// this out would hide a dead transport from the SDK's client session.
+		@Override
+		public Mono<Void> awaitTermination() {
+			return delegate.awaitTermination();
+		}
+
 	}
 
 }

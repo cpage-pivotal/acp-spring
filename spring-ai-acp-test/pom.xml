@@ -39,6 +39,17 @@
             <groupId>com.agentclientprotocol</groupId>
             <artifactId>acp-test</artifactId>
             <scope>compile</scope>
+            <!--
+              acp-test brings acp-json-jackson2 so that it works on its own; spring-ai-acp-core
+              already supplies acp-json-jackson3, which would win the SDK's mapper selection anyway,
+              and Jackson 2 has no other use here.
+            -->
+            <exclusions>
+                <exclusion>
+                    <groupId>com.agentclientprotocol</groupId>
+                    <artifactId>acp-json-jackson2</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

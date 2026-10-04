@@ -5,6 +5,23 @@ All notable changes to Spring AI ACP are documented here. The project follows
 
 ## [0.4.0] - Unreleased
 
+### Changed
+
+- ACP Java SDK 0.18.0, with its Jackson 3 JSON module (`acp-json-jackson3`). The SDK no longer
+  carries a JSON implementation in `acp-core`, and this library now uses Jackson 3 throughout, as
+  Spring Boot 4 and Spring AI 2 do. **Jackson 2 no longer arrives through Spring AI ACP**: an
+  application that used `com.fasterxml.jackson.databind` without declaring it must now add it
+  itself. Jackson's annotations (`com.fasterxml.jackson.annotation`) are unchanged.
+
+### Fixed
+
+- With `goose serve`, an answer to the agent (a permission decision, a file read, a terminal
+  result) could be dropped when it was sent at the same moment as a new request, leaving that
+  turn waiting until it timed out. The SDK fixed the same race in its own WebSocket transport in
+  0.18.0.
+- With `goose serve`, a request in flight when the connection drops now fails at once instead of
+  waiting out the request timeout, so the turn ends with an error straight away.
+
 ## [0.3.1] - 2026-10-01
 
 ### Added

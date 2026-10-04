@@ -78,6 +78,8 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 
 	private final Sinks.One<Void> ready = Sinks.one();
 
+	private final Sinks.One<Void> termination = Sinks.one();
+
 	private final Scheduler outboundScheduler;
 
 	private final AtomicBoolean closing = new AtomicBoolean();
@@ -146,9 +148,25 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 	private void routeInbound(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
 		inbound.asFlux()
 			.flatMap(message -> Mono.just(message).transform(handler))
-			.doOnNext(response -> outbound.tryEmitNext(response))
+			.doOnNext(this::respond)
 			.doOnTerminate(outbound::tryEmitComplete)
 			.subscribe();
+	}
+
+	/**
+	 * Responses are emitted from the inbound thread while {@link #sendMessage} emits from
+	 * callers' threads on the same sink. Both must go through the serialising busy-loop:
+	 * a bare {@code tryEmitNext} that collides fails with {@code FAIL_NON_SERIALIZED} and
+	 * the response is lost, leaving the agent waiting on, say, a permission answer. The
+	 * SDK fixed the same race in its own WebSocket transport in 0.18.0 (its #14).
+	 */
+	private void respond(JSONRPCMessage response) {
+		try {
+			outbound.emitNext(response, Sinks.EmitFailureHandler.busyLooping(Duration.ofMillis(100)));
+		}
+		catch (Sinks.EmissionException ex) {
+			logger.error("Dropped a response to the agent at {}: {}", uri, ex.getReason());
+		}
 	}
 
 	private void startOutbound() {
@@ -191,6 +209,7 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 			}
 			inbound.tryEmitComplete();
 			outbound.tryEmitComplete();
+			termination.tryEmitEmpty();
 			WebSocket socket = webSocket;
 			if (socket != null && !socket.isOutputClosed()) {
 				socket.sendClose(WebSocket.NORMAL_CLOSURE, "client closing");
@@ -206,6 +225,16 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 		} : handler;
 	}
 
+	/**
+	 * Completes when the socket closes, errors with the cause when it fails or a
+	 * keepalive ping does. The SDK's client session fails its pending requests on this at
+	 * once, so a turn whose agent went away ends now rather than at the request timeout.
+	 */
+	@Override
+	public Mono<Void> awaitTermination() {
+		return termination.asMono();
+	}
+
 	@Override
 	public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
 		return jsonMapper.convertValue(data, typeRef);
@@ -218,6 +247,7 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 		}
 		socket.sendPing(ByteBuffer.allocate(0)).exceptionally(error -> {
 			logger.warn("ACP keepalive ping to {} failed: {}", uri, error.toString());
+			termination.tryEmitError(error);
 			dropped();
 			return null;
 		});
@@ -271,6 +301,7 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 		public CompletionStage<?> onClose(WebSocket socket, int statusCode, String reason) {
 			logger.info("ACP WebSocket to {} closed: {} {}", uri, statusCode, reason);
 			inbound.tryEmitComplete();
+			termination.tryEmitEmpty();
 			dropped();
 			return CompletableFuture.completedFuture(null);
 		}
@@ -280,8 +311,10 @@ public final class WebSocketAgentTransport implements AcpClientTransport {
 			if (!closing.get()) {
 				logger.warn("ACP WebSocket to {} failed: {}", uri, error.toString());
 				exceptionHandler.accept(error);
+				termination.tryEmitError(error);
 			}
 			inbound.tryEmitComplete();
+			termination.tryEmitEmpty();
 			dropped();
 		}
 
