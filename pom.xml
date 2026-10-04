@@ -70,7 +70,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring-boot.version>4.1.1</spring-boot.version>
         <acp.version>0.18.0</acp.version>
         <spring-ai.version>2.0.1</spring-ai.version>
         <!-- Pre-1.0 and community-maintained: pinned exactly, like acp-core. -->
