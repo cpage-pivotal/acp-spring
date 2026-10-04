@@ -3,7 +3,7 @@
 All notable changes to Spring AI ACP are documented here. The project follows
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2026-10-04
 
 ### Changed
 
@@ -12,6 +12,7 @@ All notable changes to Spring AI ACP are documented here. The project follows
   Spring Boot 4 and Spring AI 2 do. **Jackson 2 no longer arrives through Spring AI ACP**: an
   application that used `com.fasterxml.jackson.databind` without declaring it must now add it
   itself. Jackson's annotations (`com.fasterxml.jackson.annotation`) are unchanged.
+- Spring Boot 4.1.1, which brings Jackson 3.1.5, the version the SDK is built against.
 
 ### Fixed
 

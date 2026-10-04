@@ -49,7 +49,7 @@ Releases are published to a public Artifact Registry repository; no credentials 
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
-    <version>0.3.1</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
