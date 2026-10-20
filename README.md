@@ -49,7 +49,7 @@ Releases are published to a public Artifact Registry repository; no credentials 
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-acp-harness-client-boot-starter-goose</artifactId>
-    <version>0.4.0</version>
+    <version>0.5.0</version>
 </dependency>
 ```
 
