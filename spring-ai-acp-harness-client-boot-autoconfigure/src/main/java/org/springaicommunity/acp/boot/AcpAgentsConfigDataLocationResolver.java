@@ -1,7 +1,6 @@
 package org.springaicommunity.acp.boot;
 
 import java.util.List;
-import java.util.Locale;
 
 import org.springframework.boot.context.config.ConfigDataLocation;
 import org.springframework.boot.context.config.ConfigDataLocationResolver;
@@ -11,39 +10,27 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 
 /**
- * Claims {@code agents.yaml} — and anything written {@code acp:<path>} — for
- * {@link AcpAgentsConfigDataLoader}.
+ * Claims anything written {@code acp:<path>} for {@link AcpAgentsConfigDataLoader}.
  *
  * <p>
- * Two spellings because they answer two different questions. {@code optional:agents.yaml}
- * is what an operator or a buildpack writes, and it works because Boot always considers
- * custom resolvers before its own: {@code ConfigDataLocationResolvers} moves
- * {@code StandardConfigDataLocationResolver} to the end of the list on purpose, so a file
- * named {@code agents.yaml} reaches this class rather than being loaded as ordinary
- * properties with the {@code spring.acp} prefix missing.
- * {@code optional:acp:whatever.yaml} is the explicit form, for a file that has to be
- * called something else.
+ * Only the prefix, never a file name. Boot always considers custom resolvers before its
+ * own ({@code ConfigDataLocationResolvers} moves
+ * {@code StandardConfigDataLocationResolver} to the end of the list on purpose), so a
+ * resolver that claimed a bare {@code agents.yaml} would take that file from every other
+ * library that reads one, and re-key it under {@code spring.acp} where that library would
+ * never find it. The prefix is this library's own namespace, and it shows in the import
+ * line which loader reads the file.
  */
 public class AcpAgentsConfigDataLocationResolver implements ConfigDataLocationResolver<AcpAgentsConfigDataResource> {
 
-	/** The explicit form: {@code spring.config.import: optional:acp:my-agents.yaml}. */
+	/** As in {@code spring.config.import: optional:acp:agents.yaml}. */
 	static final String PREFIX = "acp:";
-
-	private static final List<String> CLAIMED_FILE_NAMES = List.of("agents.yaml", "agents.yml");
 
 	private final ResourceLoader resourceLoader = new DefaultResourceLoader();
 
 	@Override
 	public boolean isResolvable(ConfigDataLocationResolverContext context, ConfigDataLocation location) {
-		return location.hasPrefix(PREFIX) || isAgentsFile(location.toString());
-	}
-
-	private static boolean isAgentsFile(String value) {
-		String withoutOptional = value.startsWith(ConfigDataLocation.OPTIONAL_PREFIX)
-				? value.substring(ConfigDataLocation.OPTIONAL_PREFIX.length()) : value;
-		int lastSlash = withoutOptional.lastIndexOf('/');
-		String fileName = lastSlash < 0 ? withoutOptional : withoutOptional.substring(lastSlash + 1);
-		return CLAIMED_FILE_NAMES.contains(fileName.toLowerCase(Locale.ROOT));
+		return location.hasPrefix(PREFIX);
 	}
 
 	@Override

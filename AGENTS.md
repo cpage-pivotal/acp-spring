@@ -70,7 +70,8 @@ Module dependency shape: `AcpAgentClient` API → `AcpAgentClientPool` → `spri
 - **spring-ai-acp-harness-client-boot-autoconfigure / starters**: `spring-ai-acp-harness-client-boot-starter` carries no
   agent; `spring-ai-acp-harness-client-boot-starter-{goose,codex,opencode,registry}` each add one.
   `spring.acp.runtime` has no default (unset = the only adapter on the classpath).
-  `AcpProperties` binding, standalone `agents.yaml` via a `ConfigData` loader, optional HTTP
+  `AcpProperties` binding, a standalone file imported as `acp:<path>` via a `ConfigData`
+  loader (the prefix only: a bare file name is never claimed from other libraries), optional HTTP
   controller, registry/observation/ChatModel configs.
 - **spring-ai-acp-harness-client-mcp-oauth**: per-user MCP-spec OAuth (`auth: oauth` on a server).
   `OAuth2McpCredentialsProvider` bridges a session's principal to Spring Security's

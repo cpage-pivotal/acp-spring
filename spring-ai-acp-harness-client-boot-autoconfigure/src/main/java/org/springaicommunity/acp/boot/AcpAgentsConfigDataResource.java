@@ -4,7 +4,7 @@ import org.springframework.boot.context.config.ConfigDataResource;
 import org.springframework.core.io.Resource;
 
 /**
- * One {@code agents.yaml} file, resolved but not yet read.
+ * One file imported as {@code acp:<path>}, resolved but not yet read.
  */
 public class AcpAgentsConfigDataResource extends ConfigDataResource {
 

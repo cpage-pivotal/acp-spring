@@ -16,16 +16,16 @@ import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 
 /**
- * Reads a standalone {@code agents.yaml} as if every key in it had been written under
- * {@code spring.acp}.
+ * Reads a standalone file imported as {@code acp:<path>} as if every key in it had been
+ * written under {@code spring.acp}.
  *
  * <p>
  * One binding model, two entry points. An application that lives in
  * {@code application.yaml} writes {@code spring.acp.runtime: goose} and gets relaxed
  * binding, profiles and {@code ${}} resolution; a buildpack or an operator that has to
- * drop a file next to the jar writes {@code runtime: goose} in {@code agents.yaml} and
- * gets all of the same, because this loader only changes the keys and hands the result
- * back to Boot's own machinery.
+ * drop a file next to the jar writes {@code runtime: goose} in, say, {@code agents.yaml},
+ * imports it as {@code optional:acp:agents.yaml}, and gets all of the same, because this
+ * loader only changes the keys and hands the result back to Boot's own machinery.
  *
  * <pre>{@code
  * # agents.yaml
@@ -71,9 +71,8 @@ public class AcpAgentsConfigDataLoader implements ConfigDataLoader<AcpAgentsConf
 	 * <p>
 	 * The values are copied across untouched, which matters more than it looks: Boot's
 	 * YAML loader wraps each one in an {@code OriginTrackedValue} carrying the file and
-	 * line it came from, and that is what makes a validation failure in
-	 * {@code agents.yaml} point at the line in {@code agents.yaml} rather than at a
-	 * property nobody can find.
+	 * line it came from, and that is what makes a validation failure in the imported file
+	 * point at its line rather than at a property nobody can find.
 	 */
 	@SuppressWarnings("unchecked")
 	private static PropertySource<?> prefix(PropertySource<?> source) {

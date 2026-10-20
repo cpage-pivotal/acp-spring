@@ -34,11 +34,17 @@ All notable changes to Spring AI ACP Harness Client are documented here. The pro
   (`AcpAgentRuntimeContract`, `AcpAgentProbe`, `ScriptedAcpAgent`, `LiveAcpAgents`) and every
   internal type. The rule is mechanical, so replacing each `\bAgent…\b` type name with its
   `AcpAgent…` spelling migrates an application; packages, bean names, configuration properties
-  and `agents.yaml` are unchanged. Two exceptions: the transport for a supervised served agent,
+  and the standalone configuration file are unchanged. Two exceptions: the transport for a supervised served agent,
   `WebSocketAgentTransport`, becomes `SupervisedWebSocketTransport`, since the SDK's
   `*AcpAgentTransport` names are for the agent's side of the connection; and `AcpAgentSession`
   shares its simple name with the SDK's agent-side `com.agentclientprotocol.sdk.agent.AcpAgentSession`,
   a class an application using this library has no reason to import.
+- **A standalone configuration file must now be imported with the `acp:` prefix**:
+  `spring.config.import: optional:acp:agents.yaml`. A bare `optional:agents.yaml` is no longer
+  claimed by name, because Boot asks this library's resolver before its own, and claiming the
+  name took the file from any other library that reads an `agents.yaml`. Without the prefix
+  Boot now loads the file as ordinary configuration, so its keys miss `spring.acp` and are
+  silently ignored: add `acp:` to the import.
 
 ### Fixed
 
