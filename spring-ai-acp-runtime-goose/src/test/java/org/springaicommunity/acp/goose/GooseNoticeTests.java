@@ -14,12 +14,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * What goose says when it cannot load an MCP server, and where it says it.
  *
  * <p>
- * The two log lines below are captured verbatim from goose 1.51.0 by
- * {@code tools/mcp-silence-check.py} — one HTTP server that refused the connection, one
- * stdio server whose process exited. They are fixtures rather than examples: this parser
- * depends on goose's own wording, which carries no compatibility promise, so the test
- * that pins it has to be pinned to something goose actually wrote. The live contract test
- * catches the day the wording changes; this one catches the day the parser does.
+ * The log lines below are captured verbatim from goose 1.51.0 and 1.55.0, which reworded
+ * them, by {@code tools/mcp-silence-check.py} and the live contract test — per version,
+ * one HTTP server that refused the connection, one stdio server whose process exited.
+ * They are fixtures rather than examples: this parser depends on goose's own wording,
+ * which carries no compatibility promise, so the test that pins it has to be pinned to
+ * something goose actually wrote. The live contract test catches the day the wording
+ * changes; this one catches the day the parser does.
  */
 class GooseNoticeTests {
 
@@ -35,6 +36,20 @@ class GooseNoticeTests {
 			{"timestamp":"2026-09-21T01:27:37.988044Z","level":"WARN","fields":{"message":\
 			"Failed to load extension local-tools: process quit before initialization: stderr = "},\
 			"target":"goose::agents::agent"}""";
+
+	private static final String HTTP_FAILURE_1_55 = """
+			{"timestamp":"2026-10-20T13:45:39.648437Z","level":"WARN","fields":{"message":\
+			"failed to start extension","extension":"spring-ai-acp-contract-mcp","error":\
+			"failed to initialize MCP client: Send message error Transport \
+			[rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client\
+			::StreamableHttpClientWorker<reqwest::async_impl::client::Client>>] error: Client error: \
+			error sending request for url (http://127.0.0.1:9/mcp), when send discover request"},\
+			"target":"goose::agents::extension_manager"}""";
+
+	private static final String STDIO_FAILURE_1_55 = """
+			{"timestamp":"2026-10-20T13:49:24.545131Z","level":"WARN","fields":{"message":\
+			"failed to start extension","extension":"silence-probe-mcp","error":\
+			"process quit before initialization: stderr = "},"target":"goose::agents::extension_manager"}""";
 
 	private final GooseRuntime runtime = new GooseRuntime();
 
@@ -61,6 +76,33 @@ class GooseNoticeTests {
 
 		assertThat(notice.subject()).isEqualTo("local-tools");
 		assertThat(notice.detail()).contains("process quit before initialization");
+	}
+
+	@Test
+	void sinceOneFiftyFiveTheNameAndReasonArriveAsFieldsOfTheirOwn() {
+		AgentNotice notice = runtime.noticeOf(HTTP_FAILURE_1_55).orElseThrow();
+
+		assertThat(notice.severity()).isEqualTo(AgentNotice.Severity.WARNING);
+		assertThat(notice.subject()).isEqualTo("spring-ai-acp-contract-mcp");
+		assertThat(notice.detail()).contains("failed to initialize MCP client")
+			.contains("when send discover request")
+			.doesNotContain("goose::agents::extension_manager")
+			.doesNotContain("\"target\"");
+	}
+
+	@Test
+	void sinceOneFiftyFiveAStdioServerThatExitedIsReportedTheSameWay() {
+		AgentNotice notice = runtime.noticeOf(STDIO_FAILURE_1_55).orElseThrow();
+
+		assertThat(notice.subject()).isEqualTo("silence-probe-mcp");
+		assertThat(notice.detail()).contains("process quit before initialization");
+	}
+
+	@Test
+	void sinceOneFiftyFiveTheOtherExtensionManagerLinesAreNotNotices() {
+		assertThat(runtime.noticeOf("""
+				{"timestamp":"2026-10-20T13:45:39.648285Z","level":"ERROR","fields":{"message":\
+				"worker quit with fatal: Transport channel closed"},"target":"rmcp::transport::worker"}""")).isEmpty();
 	}
 
 	@Test

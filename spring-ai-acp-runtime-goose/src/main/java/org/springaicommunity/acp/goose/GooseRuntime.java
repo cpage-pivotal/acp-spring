@@ -112,17 +112,27 @@ public class GooseRuntime implements AgentRuntime {
 
 	/**
 	 * goose's own wording for an extension that did not start, with the name and the
-	 * reason.
+	 * reason, up to 1.54.0.
 	 *
 	 * <p>
-	 * The one string in this class that depends on goose's internals rather than its
-	 * interface, and it carries no compatibility promise. {@code GooseRuntimeTests} pins
-	 * it against captured lines and the live contract test catches the day it changes;
-	 * between releases a goose that reworded this goes quiet again, which is worth
-	 * knowing and is why the upstream fix — the warning arriving over ACP — is the one
-	 * that ends this.
+	 * The strings in this class that depend on goose's internals rather than its
+	 * interface, and they carry no compatibility promise. {@code GooseNoticeTests} pins
+	 * them against captured lines and the live contract test catches the day they change
+	 * (1.55.0 was such a day); between releases a goose that reworded this goes quiet
+	 * again, which is worth knowing and is why the upstream fix — the warning arriving
+	 * over ACP — is the one that ends this.
 	 */
 	private static final Pattern EXTENSION_FAILURE = Pattern.compile("Failed to load extension ([^:]+): (.*)");
+
+	/**
+	 * The same event from 1.55.0 on: a fixed message, with the name and the reason in
+	 * fields of their own.
+	 */
+	private static final Pattern EXTENSION_START_FAILURE = Pattern.compile("\"message\":\"failed to start extension\"");
+
+	private static final Pattern EXTENSION_FIELD = Pattern.compile("\"extension\":\"((?:[^\"\\\\]|\\\\.)*)\"");
+
+	private static final Pattern ERROR_FIELD = Pattern.compile("\"error\":\"(.*)");
 
 	private static final String DEFAULT_SERVE_HOST = "127.0.0.1";
 
@@ -281,8 +291,8 @@ public class GooseRuntime implements AgentRuntime {
 	 * Reads the one thing in that log a client cannot learn any other way.
 	 *
 	 * <p>
-	 * goose logs JSON lines. An extension it could not start produces, at WARN from
-	 * {@code goose::agents::agent}:
+	 * goose logs JSON lines. An extension it could not start produces, at WARN, from
+	 * {@code goose::agents::agent} up to 1.54.0:
 	 *
 	 * <pre>{@code
 	 * {"timestamp":"…","level":"WARN","fields":{"message":
@@ -290,10 +300,18 @@ public class GooseRuntime implements AgentRuntime {
 	 * }</pre>
 	 *
 	 * <p>
+	 * and from {@code goose::agents::extension_manager} since 1.55.0:
+	 *
+	 * <pre>{@code
+	 * {"timestamp":"…","level":"WARN","fields":{"message":"failed to start extension",
+	 *     "extension":"finops-mcp","error":"failed to initialize MCP client: …"}}
+	 * }</pre>
+	 *
+	 * <p>
 	 * and nothing at all on stdout, on stderr, or over ACP — the session opens normally
-	 * and the model simply has no tools. Matched on the message prefix rather than parsed
-	 * as JSON, because the interesting part is one sentence and a brittle dependency on
-	 * one field's path buys nothing over a brittle dependency on one sentence's wording.
+	 * and the model simply has no tools. Matched on the wording rather than parsed as
+	 * JSON, because the interesting part is one sentence and a brittle dependency on one
+	 * field's path buys nothing over a brittle dependency on one sentence's wording.
 	 *
 	 * <p>
 	 * Only this line is reported. goose's log carries plenty else that is none of a
@@ -306,20 +324,32 @@ public class GooseRuntime implements AgentRuntime {
 			return Optional.empty();
 		}
 		Matcher matcher = EXTENSION_FAILURE.matcher(logLine);
-		if (!matcher.find()) {
+		if (matcher.find()) {
+			return Optional.of(notice(matcher.group(1).strip(), matcher.group(2)));
+		}
+		if (!EXTENSION_START_FAILURE.matcher(logLine).find()) {
 			return Optional.empty();
 		}
-		String name = matcher.group(1).strip();
-		String detail = unescape(untilEndOfMessage(matcher.group(2)));
-		return Optional.of(AgentNotice.warning(name, "could not load MCP server '" + name + "': " + detail));
+		Matcher extension = EXTENSION_FIELD.matcher(logLine);
+		Matcher error = ERROR_FIELD.matcher(logLine);
+		if (!extension.find() || !error.find()) {
+			return Optional.empty();
+		}
+		return Optional.of(notice(unescape(extension.group(1)), error.group(1)));
+	}
+
+	private static AgentNotice notice(String name, String rest) {
+		String detail = unescape(untilEndOfMessage(rest));
+		return AgentNotice.warning(name, "could not load MCP server '" + name + "': " + detail);
 	}
 
 	/**
-	 * The message without the rest of the JSON record around it.
+	 * The message (or, since 1.55.0, the error field) without the rest of the JSON record
+	 * around it.
 	 *
 	 * <p>
-	 * The message is a JSON string, so it ends at the first quote the agent did not
-	 * escape — whether what follows is another field or the end of the line.
+	 * It is a JSON string, so it ends at the first quote the agent did not escape —
+	 * whether what follows is another field or the end of the line.
 	 */
 	private static String untilEndOfMessage(String rest) {
 		for (int i = 0; i < rest.length(); i++) {

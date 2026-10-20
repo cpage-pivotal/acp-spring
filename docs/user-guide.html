@@ -1229,7 +1229,8 @@ and logs under that root too, so set <code>log-dir</code> to <code>&lt;root&gt;/
 
 <div class="admonition note"><span class="label">Note</span>
 <p>A misspelled name does not stop goose. It writes <code>Failed to load extension &lt;name&gt;: … Unknown extension</code>
-to its log and carries on. Spring AI ACP reads that log for agents it started, so the mistake appears as a WARN line and in
+(since 1.55.0, <code>failed to start extension</code> with the name and <code>Unknown extension</code> in fields of their
+own) to its log and carries on. Spring AI ACP reads that log for agents it started, so the mistake appears as a WARN line and in
 <code>AgentClient.notices()</code>, worded as a server that could not be loaded.</p>
 </div>
 <p>For tools that are not built in, declare an MCP server under <code>spring.acp.mcp-servers</code> rather than a goose

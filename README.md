@@ -69,8 +69,8 @@ choices until it is.
 
 ## Status
 
-**All four milestones are done.** One unchanged application runs against goose 1.54.0, codex-acp
-2.2.2 and opencode 1.19.1 with `spring.acp.runtime` as the only difference — the completion test,
+**All four milestones are done.** One unchanged application runs against goose 1.55.0, codex-acp
+2.2.2 and opencode 1.19.3 with `spring.acp.runtime` as the only difference — the completion test,
 and the reason the abstraction is worth having. Since M4 it also runs against Gemini CLI, which this
 library has never had a line of code about: no adapter, just a catalogue entry.
 
@@ -214,9 +214,9 @@ why `sessions().supports(...)` is part of the API rather than a convenience:
 
 | | `list` | `load` | `resume` | `delete` | `close` |
 | --- | --- | --- | --- | --- | --- |
-| goose 1.54.0 | yes | yes | **no** | yes | yes |
+| goose 1.55.0 | yes | yes | **no** | yes | yes |
 | codex-acp 2.2.2 | yes | yes | yes | yes | yes |
-| opencode 1.19.1 | yes | yes | yes | **no** | yes |
+| opencode 1.19.3 | yes | yes | yes | **no** | yes |
 
 ```java
 if (agentClient.sessions().supports(Operation.LOAD)) {
