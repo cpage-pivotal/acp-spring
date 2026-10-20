@@ -1,4 +1,4 @@
-# spring-ai-acp
+# spring-ai-acp-harness-client
 
 [![CI](https://github.com/cpage-pivotal/acp-spring/actions/workflows/ci.yml/badge.svg)](https://github.com/cpage-pivotal/acp-spring/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -6,7 +6,7 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.x-6DB33F.svg)](https://docs.spring.io/spring-boot/)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-2.x-6DB33F.svg)](https://docs.spring.io/spring-ai/reference/)
 
-**Documentation:** https://spring-ai-acp-docs.web.app/
+**Documentation:** https://spring-ai-acp-harness-client-docs.web.app/
 
 A Spring library that talks to **any** [Agent Client Protocol](https://agentclientprotocol.com)
 coding agent — Goose, Codex, OpenCode, and others — behind one programming model and one
@@ -41,27 +41,27 @@ Releases are published to a public Artifact Registry repository; no credentials 
 ```xml
 <repositories>
     <repository>
-        <id>spring-ai-acp</id>
+        <id>spring-ai-acp-harness-client</id>
         <url>https://us-central1-maven.pkg.dev/cf-mcp/maven-public</url>
     </repository>
 </repositories>
 
 <dependency>
     <groupId>org.springaicommunity</groupId>
-    <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
+    <artifactId>spring-ai-acp-harness-client-boot-starter-goose</artifactId>
     <version>0.4.0</version>
 </dependency>
 ```
 
-Add one runtime starter. Each brings `spring-ai-acp-boot-starter` (core and auto-configuration, no
+Add one runtime starter. Each brings `spring-ai-acp-harness-client-boot-starter` (core and auto-configuration, no
 agent) plus one adapter:
 
 | Starter | Agent |
 | --- | --- |
-| `spring-ai-acp-boot-starter-goose` | Goose |
-| `spring-ai-acp-boot-starter-codex` | Codex (`codex-acp`) |
-| `spring-ai-acp-boot-starter-opencode` | OpenCode |
-| `spring-ai-acp-boot-starter-registry` | Any agent the ACP registry publishes, named by `spring.acp.runtime` |
+| `spring-ai-acp-harness-client-boot-starter-goose` | Goose |
+| `spring-ai-acp-harness-client-boot-starter-codex` | Codex (`codex-acp`) |
+| `spring-ai-acp-harness-client-boot-starter-opencode` | OpenCode |
+| `spring-ai-acp-harness-client-boot-starter-registry` | Any agent the ACP registry publishes, named by `spring.acp.runtime` |
 
 With exactly one adapter on the classpath, `spring.acp.runtime` can be left out. There is no default
 agent: with several adapters, or only the registry, it must be set, and startup fails naming the
@@ -230,7 +230,7 @@ method, rather than failing on the wire with a code the caller has to interpret.
 ## An agent nobody wrote an adapter for
 
 Set `spring.acp.runtime` to any of the 41 agents the ACP registry publishes, add
-`spring-ai-acp-boot-starter-registry`, and the agent is resolved from a cached catalogue snapshot,
+`spring-ai-acp-harness-client-boot-starter-registry`, and the agent is resolved from a cached catalogue snapshot,
 downloaded, checked against its published SHA-256 and launched:
 
 ```
@@ -255,7 +255,7 @@ ChatResponse response = chatModel.call(new Prompt("Review the pending changes",
         AcpChatOptions.builder().session("review-123").mode("plan").build()));
 ```
 
-Add `spring-ai-acp-ai` and the agent appears wherever a Spring AI application already looks for
+Add `spring-ai-acp-harness-client-ai` and the agent appears wherever a Spring AI application already looks for
 a model. It is an adapter rather than a wrapper, because the two models disagree about who owns the
 conversation: a chat completion is stateless and resends the history every call, while an ACP session
 holds it — along with a file tree, a plan and tool results no message list can carry. So a named
@@ -264,7 +264,7 @@ memory or the other, not both.
 
 ## MCP servers that need each user's own sign-in
 
-Add `spring-ai-acp-mcp-oauth`, mark the server, and add one line to your `SecurityFilterChain`:
+Add `spring-ai-acp-harness-client-mcp-oauth`, mark the server, and add one line to your `SecurityFilterChain`:
 
 ```yaml
 spring:
@@ -288,7 +288,7 @@ credentials" in `docs/user-guide.html`.
 
 ## A terminal chat, for prototyping the agent
 
-Add `spring-ai-acp-console` and run the application from a terminal: it becomes a chat with its agent.
+Add `spring-ai-acp-harness-client-console` and run the application from a terminal: it becomes a chat with its agent.
 There is no code to write. Turns stream as they happen, with tool calls, plans and failures shown as
 they occur. It has line editing and history, and Ctrl-C cancels a turn without ending the
 conversation. `/new`, `/sessions` and `/resume` manage conversations, where the agent supports them.
@@ -330,4 +330,4 @@ it.
 
 ## License
 
-Spring AI ACP is available under the [Apache License 2.0](LICENSE).
+Spring AI ACP Harness Client is available under the [Apache License 2.0](LICENSE).

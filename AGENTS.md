@@ -5,7 +5,7 @@ repository. `CLAUDE.md` imports this file; keep project guidance here.
 
 ## What this is
 
-`spring-ai-acp`: a Spring Boot 4 / Java 21 library that drives any Agent Client Protocol (ACP)
+`spring-ai-acp-harness-client`: a Spring Boot 4 / Java 21 library that drives any Agent Client Protocol (ACP)
 coding agent (Goose, Codex, OpenCode, or any of the ~41 in the ACP registry) behind one API,
 selected by `spring.acp.runtime`. Successor to the `java-wrapper` module of `../goose-buildpack`.
 Built on the official `com.agentclientprotocol:acp-core` (pre-1.0, pinned exactly) with its
@@ -20,23 +20,23 @@ Java 21 is required. Use the Maven wrapper:
 ```bash
 ./mvnw install                                  # build + all tests except the live-agent ones (also needed before running the sample)
 ./mvnw test                                     # all tests; live-agent suites are opt-in and skip by default
-./mvnw test -Dspring-ai-acp.test.live=true      # also run the live-agent suites (spends real tokens)
-./mvnw -pl spring-ai-acp-core test                                    # one module
-./mvnw -pl spring-ai-acp-core test -Dtest=ConfigResolverTests            # one class
-./mvnw -pl spring-ai-acp-core test -Dtest=ConfigResolverTests#someMethod # one method
+./mvnw test -Dspring-ai-acp-harness-client.test.live=true      # also run the live-agent suites (spends real tokens)
+./mvnw -pl spring-ai-acp-harness-client-core test                                    # one module
+./mvnw -pl spring-ai-acp-harness-client-core test -Dtest=ConfigResolverTests            # one class
+./mvnw -pl spring-ai-acp-harness-client-core test -Dtest=ConfigResolverTests#someMethod # one method
 ./mvnw spring-javaformat:apply                  # format; the build fails on unformatted code
 ./mvnw -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.acp.runtime=codex   # goose|codex|opencode|gemini
 ```
 
-- **Live-agent suites cost real tokens, so they are opt-in: `-Dspring-ai-acp.test.live=true`**
+- **Live-agent suites cost real tokens, so they are opt-in: `-Dspring-ai-acp-harness-client.test.live=true`**
   (`LiveAgents`, honoured by `AgentProbe.isUsable`, which every live suite gates on). Without it
   nothing is probed and no agent is started. Run them when an adapter changes and before a
   release; `ScriptedAgent`'s wire tests are the always-on gate against protocol regressions.
   They still skip per runtime when the agent is absent or has no credentials.
-- Live contract tests pick the model via `-Dspring-ai-acp.test.<runtimeId>.model=...`
+- Live contract tests pick the model via `-Dspring-ai-acp-harness-client.test.<runtimeId>.model=...`
   (otherwise `AgentProbe` chooses).
 - Opt-in tests that download ~24 MB from the real registry:
-  `-Dspring-ai-acp.test.registry.live=true`.
+  `-Dspring-ai-acp-harness-client.test.registry.live=true`.
 - spring-javaformat validates every module in the `validate` phase, so run
   `./mvnw spring-javaformat:apply` after editing Java. JaCoCo writes coverage to
   `target/site/jacoco` during `verify`.
@@ -48,38 +48,38 @@ Java 21 is required. Use the Maven wrapper:
   `config`, `permission`, `mcp`, `workspace`, `process`, `transport`, `protocol`,
   `observation`, `executor`, `runtime`, `skill`.
 - Core and application code must not name a specific agent; vendor knowledge lives only in its
-  runtime adapter under `spring-ai-acp-runtime-*`.
+  runtime adapter under `spring-ai-acp-harness-client-runtime-*`.
 
 ## Architecture
 
-Module dependency shape: `AgentClient` API → `AgentClientPool` → `spring-ai-acp-core` →
+Module dependency shape: `AgentClient` API → `AgentClientPool` → `spring-ai-acp-harness-client-core` →
 `acp-core` SDK → agent subprocess (stdio) or supervised `goose serve` (our own
 `WebSocketAgentTransport`).
 
-- **spring-ai-acp-core**: `client` (fluent `AgentClient`, pool), `session` (optional session
+- **spring-ai-acp-harness-client-core**: `client` (fluent `AgentClient`, pool), `session` (optional session
   ops, gated by capability), `turn` + `event` (demultiplexing session updates into
   `AgentEvent`; exactly one terminal event per turn), `config` (`ConfigResolver`),
   `permission`, `mcp` (credential-holding loopback proxy), `workspace` (jail for fs/terminal),
   `process`, `protocol` (version negotiation), `observation`, `executor` (legacy
   `GooseExecutor`-shaped facade), `skill` (installs configured skills into the workspace).
-- **Runtime adapters** (`spring-ai-acp-runtime-goose|codex|opencode`) implement the
+- **Runtime adapters** (`spring-ai-acp-harness-client-runtime-goose|codex|opencode`) implement the
   `AgentRuntime` SPI (launch spec, provisioning, candidate option ids).
-  `spring-ai-acp-runtime-registry` implements `AgentRuntimeProvider`: launches any registry
+  `spring-ai-acp-harness-client-runtime-registry` implements `AgentRuntimeProvider`: launches any registry
   agent from catalogue data with SHA-256-verified downloads. A compiled adapter always wins
   over the registry for the same id.
-- **spring-ai-acp-boot-autoconfigure / starters**: `spring-ai-acp-boot-starter` carries no
-  agent; `spring-ai-acp-boot-starter-{goose,codex,opencode,registry}` each add one.
+- **spring-ai-acp-harness-client-boot-autoconfigure / starters**: `spring-ai-acp-harness-client-boot-starter` carries no
+  agent; `spring-ai-acp-harness-client-boot-starter-{goose,codex,opencode,registry}` each add one.
   `spring.acp.runtime` has no default (unset = the only adapter on the classpath).
   `AcpProperties` binding, standalone `agents.yaml` via a `ConfigData` loader, optional HTTP
   controller, registry/observation/ChatModel configs.
-- **spring-ai-acp-mcp-oauth**: per-user MCP-spec OAuth (`auth: oauth` on a server).
+- **spring-ai-acp-harness-client-mcp-oauth**: per-user MCP-spec OAuth (`auth: oauth` on a server).
   `OAuth2McpCredentialsProvider` bridges a session's principal to Spring Security's
   `OAuth2AuthorizedClientService`; discovery/DCR/`resource=` come from mcp-security (pinned,
-  Spring AI excluded). Carries its own auto-configuration, unlike `spring-ai-acp-ai`, so Spring
+  Spring AI excluded). Carries its own auto-configuration, unlike `spring-ai-acp-harness-client-ai`, so Spring
   Security stays out of apps that don't add it. `mode: web` redirects via Spring Security;
   `mode: local` (terminal apps) runs a loopback browser sign-in (`LoopbackSignIn`) and keeps
   state in a mode-600 file.
-- **spring-ai-acp-console**: terminal chat over the application's `AgentClient` (JLine 3), with
+- **spring-ai-acp-harness-client-console**: terminal chat over the application's `AgentClient` (JLine 3), with
   its own auto-configuration like mcp-oauth so JLine stays out of other apps. Registers nothing
   unless the console will run: `spring.acp.console.enabled` unset means only when
   `System.console()` is a real terminal, so tests and CI never block on stdin. `ConsoleChat`
@@ -87,9 +87,9 @@ Module dependency shape: `AgentClient` API → `AgentClientPool` → `spring-ai-
   leaves; Ctrl-C during a turn disposes the subscription (= `session/cancel`). Also the
   `PermissionPrompt` behind `permissions.policy: ask`. Tests use JLine's `DumbTerminal`
   directly: `TerminalBuilder` over streams opens a pty whose output is pumped asynchronously.
-- **spring-ai-acp-ai**: `AcpChatModel` adapter (a named session sends only unheard messages;
+- **spring-ai-acp-harness-client-ai**: `AcpChatModel` adapter (a named session sends only unheard messages;
   unnamed sends full history).
-- **spring-ai-acp-test**: `AgentRuntimeContract` (the real definition of the abstraction,
+- **spring-ai-acp-harness-client-test**: `AgentRuntimeContract` (the real definition of the abstraction,
   extended once per adapter), `AgentProbe` (gates suites on a real session, not `--version`),
   `ScriptedAgent` (fake agent speaking raw JSON-RPC over the SDK's in-memory transport).
 

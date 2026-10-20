@@ -4,12 +4,12 @@
 An MCP server an agent fails to connect to is invisible to an ACP client: the session opens
 normally, no session/update arrives, and the only symptom is the model later saying it has no
 tools. This script measures exactly where that silence holds, across the two axes that differ
-between spring-ai-acp and the goose-buildpack java-wrapper:
+between spring-ai-acp-harness-client and the goose-buildpack java-wrapper:
 
-  transport  stdio       `goose acp` on a pipe          -- spring-ai-acp's default
+  transport  stdio       `goose acp` on a pipe          -- spring-ai-acp-harness-client's default
              serve       `goose serve` over WebSocket   -- the wrapper's only mode, and
-                                                           spring-ai-acp's tier-3 serve.transport
-  declared   session-new MCP servers in session/new     -- spring-ai-acp's portable mcp-servers
+                                                           spring-ai-acp-harness-client's tier-3 serve.transport
+  declared   session-new MCP servers in session/new     -- spring-ai-acp-harness-client's portable mcp-servers
              config-yaml extensions in config.yaml      -- the wrapper's route (it always sends
                                                            an empty mcpServers array on purpose)
 

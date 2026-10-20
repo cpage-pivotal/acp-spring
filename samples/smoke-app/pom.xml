@@ -7,13 +7,13 @@
 
     <parent>
         <groupId>org.springaicommunity</groupId>
-        <artifactId>spring-ai-acp</artifactId>
+        <artifactId>spring-ai-acp-harness-client</artifactId>
         <version>0.4.1-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>spring-ai-acp-smoke-app</artifactId>
-    <name>Spring AI ACP Smoke App</name>
+    <artifactId>spring-ai-acp-harness-client-smoke-app</artifactId>
+    <name>Spring AI ACP Harness Client Smoke App</name>
     <description>Minimal Boot application proving the stack end to end against a real agent</description>
 
     <properties>
@@ -29,19 +29,19 @@
         -->
         <dependency>
             <groupId>org.springaicommunity</groupId>
-            <artifactId>spring-ai-acp-boot-starter-goose</artifactId>
+            <artifactId>spring-ai-acp-harness-client-boot-starter-goose</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springaicommunity</groupId>
-            <artifactId>spring-ai-acp-boot-starter-codex</artifactId>
+            <artifactId>spring-ai-acp-harness-client-boot-starter-codex</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springaicommunity</groupId>
-            <artifactId>spring-ai-acp-boot-starter-opencode</artifactId>
+            <artifactId>spring-ai-acp-harness-client-boot-starter-opencode</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springaicommunity</groupId>
-            <artifactId>spring-ai-acp-boot-starter-registry</artifactId>
+            <artifactId>spring-ai-acp-harness-client-boot-starter-registry</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -54,7 +54,7 @@
         -->
         <dependency>
             <groupId>org.springaicommunity</groupId>
-            <artifactId>spring-ai-acp-ai</artifactId>
+            <artifactId>spring-ai-acp-harness-client-ai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

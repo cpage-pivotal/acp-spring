@@ -1,21 +1,39 @@
 # Changelog
 
-All notable changes to Spring AI ACP are documented here. The project follows
+All notable changes to Spring AI ACP Harness Client are documented here. The project follows
 [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH).
 
 ## [0.4.1] - Unreleased
 
+### Changed
+
+- Renamed from Spring AI ACP to **Spring AI ACP Harness Client**, ahead of moving to the Spring AI
+  Community organisation. Every artifact moves from `spring-ai-acp-*` to
+  `spring-ai-acp-harness-client-*` (for example `spring-ai-acp-boot-starter-goose` becomes
+  `spring-ai-acp-harness-client-boot-starter-goose`) under the same `org.springaicommunity`
+  groupId; update your dependencies. Java packages (`org.springaicommunity.acp.*`) and
+  configuration properties (`spring.acp.*`) are unchanged.
+- The live-test switches follow the new name: `-Dspring-ai-acp-harness-client.test.live=true`,
+  `-Dspring-ai-acp-harness-client.test.<runtimeId>.model` and
+  `-Dspring-ai-acp-harness-client.test.registry.live=true`.
+- The agent now sees the client as `spring-ai-acp-harness-client` in ACP `initialize`, as does
+  an MCP authorization server registering it when `spring.application.name` is unset. State kept on
+  disk keeps the former name so an upgrade finds it: the registry cache
+  (`~/.spring-ai-acp/agents`), the `.spring-ai-acp-skill` marker, and the MCP sign-in file of an
+  application without a `spring.application.name`. Such an application's console does take the
+  new name, for its title and for its input history, which therefore starts afresh.
+
 ### Fixed
 
-- `spring-ai-acp-mcp-oauth`: a sign-in that had lapsed — its refresh token no longer honoured —
-  was never cleared, so the user was never asked to sign in again and every session after failed
-  to load the server (with goose, "discover and legacy initialize both failed"). The authorization
+- `spring-ai-acp-harness-client-mcp-oauth`: a sign-in that had lapsed — its refresh token no
+  longer honoured — was never cleared, so the user was never asked to sign in again and every
+  session after failed to load the server (with goose, "discover and legacy initialize both failed"). The authorization
   server behind the Tanzu MCP gateway refuses such a refresh with a 401, which Spring Security
   reads as `invalid_token_response` instead of `invalid_grant`; an OAuth error in a 401 from the
   token endpoint is now read as what it says.
-- `spring-ai-acp-mcp-oauth`: an expired token is now refreshed as the session opens, so a refresh
-  the server refuses leads straight to signing in again (a browser in `mode: local`, a redirect in
-  `mode: web`) instead of failing the session's first request. A refresh that fails without a
+- `spring-ai-acp-harness-client-mcp-oauth`: an expired token is now refreshed as the session
+  opens, so a refresh the server refuses leads straight to signing in again (a browser in
+  `mode: local`, a redirect in `mode: web`) instead of failing the session's first request. A refresh that fails without a
   refusal, such as an authorization server that is down, still keeps the token for next time.
 
 ## [0.4.0] - 2026-10-04

@@ -1,5 +1,5 @@
 name: Question
-description: Ask a question about Spring AI ACP behavior or usage
+description: Ask a question about Spring AI ACP Harness Client behavior or usage
 labels: [question]
 body:
   - type: textarea

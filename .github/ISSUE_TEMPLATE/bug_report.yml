@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a reproducible bug in Spring AI ACP
+description: Report a reproducible bug in Spring AI ACP Harness Client
 labels: [bug]
 body:
   - type: markdown
@@ -23,7 +23,7 @@ body:
       label: Steps to Reproduce
       description: Minimal, concrete steps. A small code snippet or test is ideal.
       placeholder: |
-        1. Add spring-ai-acp-boot-starter-goose
+        1. Add spring-ai-acp-harness-client-boot-starter-goose
         2. Configure spring.acp.runtime=goose
         3. Call agentClient.prompt().user("...").call()
     validations:
@@ -31,7 +31,7 @@ body:
   - type: input
     attributes:
       label: Version
-      description: spring-ai-acp version (e.g., 0.4.0) and, if relevant, the agent version (goose, codex, opencode).
+      description: spring-ai-acp-harness-client version (e.g., 0.4.0) and, if relevant, the agent version (goose, codex, opencode).
     validations:
       required: true
   - type: textarea

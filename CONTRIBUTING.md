@@ -1,4 +1,4 @@
-# Contributing to Spring AI ACP
+# Contributing to Spring AI ACP Harness Client
 
 Thank you for contributing to the Spring AI Community. Contributions are governed by
 the organization-wide [Code of Conduct](https://github.com/spring-ai-community/.github/blob/main/CODE_OF_CONDUCT.md).
@@ -36,7 +36,7 @@ The always-on suite is fast; the live-agent suites that spend real tokens are op
 skip by default:
 
 ```bash
-./mvnw test -Dspring-ai-acp.test.live=true
+./mvnw test -Dspring-ai-acp-harness-client.test.live=true
 ```
 
 Keep changes focused, add tests for changed behavior, and update documentation when a

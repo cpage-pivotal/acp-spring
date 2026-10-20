@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springaicommunity</groupId>
+        <artifactId>spring-ai-acp-harness-client</artifactId>
+        <version>0.4.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spring-ai-acp-harness-client-runtime-registry</artifactId>
+    <name>Spring AI ACP Harness Client Registry Runtime</name>
+    <description>Generic AgentRuntime driven by the ACP agent registry: any published agent, no adapter</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-harness-client-core</artifactId>
+        </dependency>
+        <!--
+          Jackson is already on the classpath through spring-ai-acp-harness-client-core, which uses it for the wire
+          format. Declared here rather than inherited silently, because this module reads a document
+          the protocol has nothing to do with.
+        -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springaicommunity</groupId>
+            <artifactId>spring-ai-acp-harness-client-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

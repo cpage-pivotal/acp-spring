@@ -1,5 +1,5 @@
 name: Feature Request
-description: Propose a new feature or behavior change for Spring AI ACP
+description: Propose a new feature or behavior change for Spring AI ACP Harness Client
 labels: [enhancement]
 body:
   - type: markdown

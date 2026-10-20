@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to Spring AI ACP. Before submitting, please:
+Thanks for contributing to Spring AI ACP Harness Client. Before submitting, please:
 - Read CONTRIBUTING.md and follow the Spring AI Community Code of Conduct.
 - Sign your commit and keep history linear.
 - Run ./mvnw spring-javaformat:apply and ./mvnw clean test.
