@@ -98,28 +98,39 @@ class MultiInstanceRefreshTests {
 				jdbc);
 	}
 
-	/**
-	 * Alice signed in through the first instance an hour and more ago; her access token
-	 * has expired.
-	 */
-	private void aliceSignedInLongAgo(Instance through) {
+	/** Alice signs in through the first instance. */
+	private void aliceSignsIn(Instance through) {
 		assertThatThrownBy(() -> through.provider().credentialsFor(finops, ALICE))
 			.isInstanceOf(ClientAuthorizationRequiredException.class);
+		saveAlicesToken(through, Instant.now());
+	}
+
+	/**
+	 * An hour and more on: the access token Alice's open sessions hold has expired.
+	 */
+	private void anHourPasses(Instance through) {
+		saveAlicesToken(through, Instant.now().minusSeconds(7200));
+	}
+
+	private void saveAlicesToken(Instance through, Instant issuedAt) {
 		String[] tokens = fake.issueTokens();
-		Instant now = Instant.now();
 		through.tokens()
 			.saveAuthorizedClient(
 					new OAuth2AuthorizedClient(through.registrations().findByRegistrationId("finops-mcp"), "alice",
-							new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, tokens[0], now.minusSeconds(7200),
-									now.minusSeconds(3600)),
-							new OAuth2RefreshToken(tokens[1], now.minusSeconds(7200))),
+							new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, tokens[0], issuedAt,
+									issuedAt.plusSeconds(3600)),
+							new OAuth2RefreshToken(tokens[1], issuedAt)),
 					new TestingAuthenticationToken("alice", null));
 	}
 
-	/** Four tool calls on each instance at once, all needing Alice's token. */
+	/**
+	 * A session on each instance, then, once the token has expired, four tool calls on
+	 * each at once, all needing Alice's token.
+	 */
 	private Race race(Instance first, Instance second) throws InterruptedException {
 		McpCredentials a = first.provider().credentialsFor(finops, ALICE).orElseThrow();
 		McpCredentials b = second.provider().credentialsFor(finops, ALICE).orElseThrow();
+		anHourPasses(first);
 		fake.delayTokens(Duration.ofMillis(300));
 		List<String> tokens = new CopyOnWriteArrayList<>();
 		List<Throwable> failures = new CopyOnWriteArrayList<>();
@@ -157,7 +168,7 @@ class MultiInstanceRefreshTests {
 		// The failure this class exists for, shown rather than asserted about in prose.
 		Instance first = instance(jdbc -> RefreshLock.inProcess());
 		Instance second = instance(jdbc -> RefreshLock.inProcess());
-		aliceSignedInLongAgo(first);
+		aliceSignsIn(first);
 
 		Race race = race(first, second);
 
@@ -174,7 +185,7 @@ class MultiInstanceRefreshTests {
 	void withTheDatabaseLockTheInstancesRefreshOnceBetweenThem() throws Exception {
 		Instance first = instance(MultiInstanceRefreshTests::databaseLock);
 		Instance second = instance(MultiInstanceRefreshTests::databaseLock);
-		aliceSignedInLongAgo(first);
+		aliceSignsIn(first);
 
 		Race race = race(first, second);
 
@@ -191,8 +202,9 @@ class MultiInstanceRefreshTests {
 	void aRefusalUnderTheDatabaseLockStillSendsTheUserBackToSignIn() {
 		Instance first = instance(MultiInstanceRefreshTests::databaseLock);
 		Instance second = instance(MultiInstanceRefreshTests::databaseLock);
-		aliceSignedInLongAgo(first);
+		aliceSignsIn(first);
 		McpCredentials credentials = first.provider().credentialsFor(finops, ALICE).orElseThrow();
+		anHourPasses(first);
 		fake.revokeRefreshTokens();
 
 		assertThatThrownBy(credentials::headers).hasMessageContaining("invalid_grant");

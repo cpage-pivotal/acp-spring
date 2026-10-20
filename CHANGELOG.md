@@ -5,6 +5,19 @@ All notable changes to Spring AI ACP are documented here. The project follows
 
 ## [0.4.1] - Unreleased
 
+### Fixed
+
+- `spring-ai-acp-mcp-oauth`: a sign-in that had lapsed — its refresh token no longer honoured —
+  was never cleared, so the user was never asked to sign in again and every session after failed
+  to load the server (with goose, "discover and legacy initialize both failed"). The authorization
+  server behind the Tanzu MCP gateway refuses such a refresh with a 401, which Spring Security
+  reads as `invalid_token_response` instead of `invalid_grant`; an OAuth error in a 401 from the
+  token endpoint is now read as what it says.
+- `spring-ai-acp-mcp-oauth`: an expired token is now refreshed as the session opens, so a refresh
+  the server refuses leads straight to signing in again (a browser in `mode: local`, a redirect in
+  `mode: web`) instead of failing the session's first request. A refresh that fails without a
+  refusal, such as an authorization server that is down, still keeps the token for next time.
+
 ## [0.4.0] - 2026-10-04
 
 ### Changed

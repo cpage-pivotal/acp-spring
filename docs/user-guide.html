@@ -1907,7 +1907,8 @@ With <code>store: jdbc</code>, registrations and tokens are shared across instan
 <h4>Terminal applications</h4>
 <p><code>mode: local</code> needs no filter chain. The first run opens a browser for each server (a loopback redirect on
 <code>127.0.0.1</code>); the operating-system user is the principal, and sign-ins are kept in
-<code>~/.config/&lt;spring.application.name&gt;/acp-mcp-oauth.json</code> (mode 600), so later runs refresh silently.</p>
+<code>~/.config/&lt;spring.application.name&gt;/acp-mcp-oauth.json</code> (mode 600), so later runs refresh silently.
+A sign-in the server will no longer refresh opens the browser again when the next session opens.</p>
 
 <h3 id="mcp-goose">Goose and MCP gateways</h3>
 <p>Goose 1.51 opens an HTTP MCP connection with a <code>server/discover</code> probe. Some gateways answer it with an

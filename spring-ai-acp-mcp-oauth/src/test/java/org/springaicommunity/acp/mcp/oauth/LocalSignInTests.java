@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -20,6 +21,9 @@ import org.springaicommunity.mcp.security.client.sync.oauth2.metadata.McpMetadat
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DefaultMcpOAuth2DcrClientManager;
 import org.springaicommunity.mcp.security.client.sync.oauth2.registration.DynamicClientRegistrationService;
 import org.springaicommunity.mcp.security.common.url.DefaultUrlValidator;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.session.SessionPrincipal;
 
@@ -139,6 +143,28 @@ class LocalSignInTests {
 		assertThat(callMcp(afterRestart)).isEqualTo(200);
 		assertThat(reopened.permissions()).isEqualTo(PosixFilePermissions.fromString("rw-------"));
 		assertThat(reopened.location()).isEqualTo(home.resolve("meridian").resolve("mcp-oauth.json"));
+	}
+
+	@Test
+	void aSignInThatHasLapsedSinceTheLastRunOpensTheBrowserAgain() throws Exception {
+		FileMcpOAuthStore store = store();
+		bearer(provider(store, browser, Duration.ofSeconds(10)));
+		// Weeks on: the access token has expired and the server has stopped honouring
+		// the refresh token, which it says with a 401.
+		OAuth2AuthorizedClient signedIn = store.tokens().loadAuthorizedClient("finops-mcp", me.name());
+		Instant longAgo = Instant.now().minus(Duration.ofDays(17));
+		store.tokens()
+			.saveAuthorizedClient(new OAuth2AuthorizedClient(signedIn.getClientRegistration(), me.name(),
+					new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, signedIn.getAccessToken().getTokenValue(),
+							longAgo, longAgo.plusSeconds(3600)),
+					signedIn.getRefreshToken()), new TestingAuthenticationToken(me.name(), null));
+		fake.revokeRefreshTokens();
+
+		String afterRestart = bearer(provider(store(), browser, Duration.ofSeconds(10)));
+
+		assertThat(opened).hasSize(2);
+		assertThat(fake.refreshCount()).isOne();
+		assertThat(callMcp(afterRestart)).isEqualTo(200);
 	}
 
 	@Test

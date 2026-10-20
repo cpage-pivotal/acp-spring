@@ -178,6 +178,7 @@ public final class LoopbackSignIn implements McpSignIn {
 	private static OAuth2AccessTokenResponse exchange(ClientRegistration registration, String resource,
 			OAuth2AuthorizationRequest request, String code) {
 		RestClientAuthorizationCodeTokenResponseClient client = new RestClientAuthorizationCodeTokenResponseClient();
+		client.setRestClient(TokenEndpointClient.restClient());
 		if (resource != null) {
 			client.addParametersConverter(grant -> {
 				LinkedMultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();

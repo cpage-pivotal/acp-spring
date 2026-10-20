@@ -22,7 +22,9 @@ import org.springframework.util.LinkedMultiValueMap;
  * <p>
  * Refreshes carry {@code resource=}, the RFC 8707 indicator the MCP authorization spec
  * requires on every token request. Measured against the Tanzu MCP gateway: tokens come
- * back with {@code aud} set to the server's URL, and a new refresh token each time.
+ * back with {@code aud} set to the server's URL, and a new refresh token each time. A
+ * refused refresh comes back as a 401, which {@link TokenEndpointClient} reads as the
+ * refusal it is.
  */
 public final class McpAuthorizedClientManagers {
 
@@ -32,6 +34,7 @@ public final class McpAuthorizedClientManagers {
 	public static OAuth2AuthorizedClientManager create(McpClientRegistrationRepository registrations,
 			OAuth2AuthorizedClientService authorizedClients) {
 		RestClientRefreshTokenTokenResponseClient refresh = new RestClientRefreshTokenTokenResponseClient();
+		refresh.setRestClient(TokenEndpointClient.restClient());
 		refresh.addParametersConverter(request -> {
 			var parameters = new LinkedMultiValueMap<String, String>();
 			String resource = registrations

@@ -43,8 +43,9 @@ import org.springaicommunity.acp.session.SessionPrincipal;
  *
  * <p>
  * Asked when a session opens, it refuses rather than guesses. A session on nobody's
- * behalf is refused outright: these tokens are a person's. A user with no token for a
- * server is handed to the {@link McpSignIn}: in a web application that throws
+ * behalf is refused outright: these tokens are a person's. An expired token is refreshed
+ * there and then. A user with no token for a server — or whose token the server would not
+ * refresh — is handed to the {@link McpSignIn}: in a web application that throws
  * {@link ClientAuthorizationRequiredException}, which Spring Security's
  * {@code OAuth2AuthorizationRequestRedirectFilter} turns into the redirect to sign in,
  * provided it is thrown on a request thread — hence {@link #requireAuthorized}, for a
@@ -176,7 +177,7 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 					+ "configure a SessionPrincipalResolver");
 		}
 		register(server);
-		if (authorizedClients.loadAuthorizedClient(server.name(), principal.name()) != null) {
+		if (signedIn(server.name(), principal.name())) {
 			return;
 		}
 		// One sign-in at a time per (server, user): two sessions opening together must
@@ -198,6 +199,34 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 		if (authorized == null) {
 			throw new ClientAuthorizationRequiredException(server.name());
 		}
+	}
+
+	/**
+	 * Whether the user holds a token for the server, refreshing it first if it has
+	 * expired.
+	 *
+	 * <p>
+	 * A refresh the server refuses removes the token, and the user is then signed in
+	 * again here, while the session opens — where a terminal application can open a
+	 * browser and a web one can redirect — rather than on the session's first request,
+	 * where the refusal could only fail the agent's connection to the server. A refresh
+	 * that fails without removing the token (the authorization server was unreachable,
+	 * say) leaves it to be tried again on that first request.
+	 */
+	private boolean signedIn(String registrationId, String principalName) {
+		OAuth2AuthorizedClient stored = authorizedClients.loadAuthorizedClient(registrationId, principalName);
+		if (stored == null) {
+			return false;
+		}
+		if (isFresh(stored.getAccessToken())) {
+			return true;
+		}
+		Refresh refresh = refreshLock.whileLocked(registrationId, principalName,
+				() -> refresh(registrationId, principalName));
+		if (refresh.refusal() != null) {
+			logRefusal(registrationId, principalName, refresh.refusal());
+		}
+		return authorizedClients.loadAuthorizedClient(registrationId, principalName) != null;
 	}
 
 	/**
@@ -249,9 +278,7 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 		Refresh refresh = refreshLock.whileLocked(registrationId, principalName,
 				() -> refresh(registrationId, principalName));
 		if (refresh.refusal() != null) {
-			// Never the exception's own message: some servers echo the grant back in it.
-			logger.warn("MCP server '{}' refused to refresh a user's token ({}); they will be asked to sign in again",
-					registrationId, refresh.refusal());
+			logRefusal(registrationId, principalName, refresh.refusal());
 			throw new IllegalStateException(
 					"The token for MCP server '" + registrationId + "' could not be refreshed: " + refresh.refusal());
 		}
@@ -283,6 +310,22 @@ public final class OAuth2McpCredentialsProvider implements McpCredentialsProvide
 		}
 		catch (ClientAuthorizationException ex) {
 			return new Refresh(null, ex.getError().getErrorCode());
+		}
+	}
+
+	/**
+	 * Logs a failed refresh, saying whether the user must sign in again: only a refusal
+	 * Spring Security removes the token on means that.
+	 */
+	private void logRefusal(String registrationId, String principalName, String refusal) {
+		// Never the exception's own message: some servers echo the grant back in it.
+		if (authorizedClients.loadAuthorizedClient(registrationId, principalName) == null) {
+			logger.warn("MCP server '{}' refused to refresh a user's token ({}); they will be asked to sign in again",
+					registrationId, refusal);
+		}
+		else {
+			logger.warn("MCP server '{}' could not refresh a user's token ({}); it is kept and tried again",
+					registrationId, refusal);
 		}
 	}
 

@@ -28,8 +28,9 @@ import com.sun.net.httpserver.HttpServer;
  * The MCP endpoint answers an unauthenticated request with a 401 naming its
  * protected-resource metadata; the authorization server registers clients dynamically,
  * requires PKCE, and rotates refresh tokens — a refresh token works once, which is what
- * makes a refresh race visible. Every registration and token request is recorded, form
- * fields and all, for the tests to inspect.
+ * makes a refresh race visible. A refresh token it no longer honours is refused with a
+ * 401, not the 400 RFC 6749 asks for. Every registration and token request is recorded,
+ * form fields and all, for the tests to inspect.
  */
 final class FakeMcpAuthorizationServer implements AutoCloseable {
 
@@ -59,6 +60,12 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 	private final HttpServer server;
 
 	private volatile Duration tokenDelay = Duration.ZERO;
+
+	/** What a refused refresh is answered with. */
+	private volatile int refreshRefusalStatus = 401;
+
+	/** What every token request is answered with when non-zero, OAuth error or not. */
+	private volatile int tokenOutageStatus;
 
 	FakeMcpAuthorizationServer() {
 		try {
@@ -125,6 +132,19 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 	/** Revokes every refresh token, as a server does when a user's grant is withdrawn. */
 	void revokeRefreshTokens() {
 		validRefreshTokens.clear();
+	}
+
+	/** Refuses a refresh with this status instead of the gateway's 401. */
+	void refuseRefreshesWith(int status) {
+		this.refreshRefusalStatus = status;
+	}
+
+	/**
+	 * Makes the token endpoint fail every request with this status and no OAuth error, as
+	 * it does when it is down.
+	 */
+	void failTokens(int status) {
+		this.tokenOutageStatus = status;
 	}
 
 	/** Slows the token endpoint, to widen the window two refreshes would race in. */
@@ -199,14 +219,20 @@ final class FakeMcpAuthorizationServer implements AutoCloseable {
 		Map<String, String> form = form(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
 		tokenRequests.add(form);
 		sleep(tokenDelay);
-		boolean granted = switch (form.getOrDefault("grant_type", "")) {
+		if (tokenOutageStatus != 0) {
+			json(exchange, tokenOutageStatus, Map.of("message", "Service Unavailable"));
+			return;
+		}
+		String grantType = form.getOrDefault("grant_type", "");
+		boolean granted = switch (grantType) {
 			case "authorization_code" -> validCodes.remove(form.get("code")) && form.containsKey("code_verifier")
 					&& verifierMatches(form.get("code"), form.get("code_verifier"));
 			case "refresh_token" -> validRefreshTokens.remove(form.get("refresh_token"));
 			default -> false;
 		};
 		if (!granted) {
-			json(exchange, 400, Map.of("error", "invalid_grant"));
+			json(exchange, "refresh_token".equals(grantType) ? refreshRefusalStatus : 400,
+					Map.of("error", "invalid_grant", "error_description", "Invalid refresh token"));
 			return;
 		}
 		String[] tokens = issueTokens();

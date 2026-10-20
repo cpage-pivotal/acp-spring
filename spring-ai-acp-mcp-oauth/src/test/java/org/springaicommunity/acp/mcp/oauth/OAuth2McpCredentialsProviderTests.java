@@ -85,6 +85,14 @@ class OAuth2McpCredentialsProviderTests {
 				new TestingAuthenticationToken(user.name(), null));
 	}
 
+	/**
+	 * An hour on: the access token the user's open session holds has expired, and the
+	 * next request has to refresh it.
+	 */
+	private void anHourPasses(SessionPrincipal user) {
+		signIn(user, true);
+	}
+
 	private static String token(McpCredentials credentials) {
 		return credentials.headers().get("Authorization");
 	}
@@ -190,8 +198,9 @@ class OAuth2McpCredentialsProviderTests {
 	void concurrentRequestsWithAnExpiredTokenRefreshItOnce() throws Exception {
 		OAuth2McpCredentialsProvider provider = provider();
 		register(provider);
-		signIn(ALICE, true);
+		signIn(ALICE, false);
 		McpCredentials credentials = provider.credentialsFor(finops, ALICE).orElseThrow();
+		anHourPasses(ALICE);
 		fake.delayTokens(Duration.ofMillis(200));
 		List<String> seen = new CopyOnWriteArrayList<>();
 		List<Throwable> failures = new CopyOnWriteArrayList<>();
@@ -230,10 +239,12 @@ class OAuth2McpCredentialsProviderTests {
 	void aRefusedRefreshFailsTheRequestAndSendsTheUserBackToSignIn() {
 		OAuth2McpCredentialsProvider provider = provider();
 		register(provider);
-		signIn(ALICE, true);
+		signIn(ALICE, false);
 		McpCredentials credentials = provider.credentialsFor(finops, ALICE).orElseThrow();
+		anHourPasses(ALICE);
 		fake.revokeRefreshTokens();
 
+		// Refused with a 401, as the gateway does: still read as the invalid_grant it is.
 		assertThatThrownBy(() -> token(credentials)).isInstanceOf(IllegalStateException.class)
 			.hasMessageContaining("invalid_grant")
 			.hasMessageNotContaining("refresh-");
@@ -241,6 +252,53 @@ class OAuth2McpCredentialsProviderTests {
 		assertThat(authorizedClients.<OAuth2AuthorizedClient>loadAuthorizedClient("finops-mcp", "alice")).isNull();
 		assertThatThrownBy(() -> provider.credentialsFor(finops, ALICE))
 			.isInstanceOf(ClientAuthorizationRequiredException.class);
+	}
+
+	@Test
+	void aRefreshRefusedWithTheSpecs400IsReadTheSameWay() {
+		OAuth2McpCredentialsProvider provider = provider();
+		register(provider);
+		signIn(ALICE, false);
+		McpCredentials credentials = provider.credentialsFor(finops, ALICE).orElseThrow();
+		anHourPasses(ALICE);
+		fake.refuseRefreshesWith(400);
+		fake.revokeRefreshTokens();
+
+		assertThatThrownBy(() -> token(credentials)).hasMessageContaining("invalid_grant");
+		assertThat(authorizedClients.<OAuth2AuthorizedClient>loadAuthorizedClient("finops-mcp", "alice")).isNull();
+	}
+
+	@Test
+	void anExpiredTokenTheServerWillNotRefreshSendsTheUserToSignInAsTheSessionOpens() {
+		OAuth2McpCredentialsProvider provider = provider();
+		register(provider);
+		signIn(ALICE, true);
+		fake.revokeRefreshTokens();
+
+		assertThatThrownBy(() -> provider.credentialsFor(finops, ALICE))
+			.isInstanceOf(ClientAuthorizationRequiredException.class);
+
+		assertThat(fake.refreshCount()).isOne();
+		assertThat(authorizedClients.<OAuth2AuthorizedClient>loadAuthorizedClient("finops-mcp", "alice")).isNull();
+	}
+
+	@Test
+	void anAuthorizationServerThatIsDownSignsNobodyOut() {
+		OAuth2McpCredentialsProvider provider = provider();
+		register(provider);
+		signIn(ALICE, true);
+		fake.failTokens(503);
+
+		McpCredentials credentials = provider.credentialsFor(finops, ALICE).orElseThrow();
+
+		assertThatThrownBy(() -> token(credentials)).isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("invalid_token_response");
+		assertThat(authorizedClients.<OAuth2AuthorizedClient>loadAuthorizedClient("finops-mcp", "alice")).isNotNull();
+
+		fake.failTokens(0);
+
+		assertThat(token(credentials)).isEqualTo("Bearer "
+				+ authorizedClients.loadAuthorizedClient("finops-mcp", "alice").getAccessToken().getTokenValue());
 	}
 
 	@Test
