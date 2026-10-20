@@ -560,7 +560,7 @@ a:hover { color: var(--link-hover-color); text-decoration: underline; }
 		<li><a href="#overview">Introduction</a></li>
 		<li><a href="#getting-started">Getting Started</a></li>
 		<li class="nav-caption">Reference</li>
-		<li><a href="#agent-client">AgentClient API</a></li>
+		<li><a href="#agent-client">AcpAgentClient API</a></li>
 		<li><a href="#runtimes">Agent Runtimes</a></li>
 		<li><a href="#runtime-config">Runtime Configuration</a></li>
 		<li><a href="#models">Models and Providers</a></li>
@@ -598,7 +598,7 @@ behind one API and one configuration model.</p>
 
 <p>Spring AI ACP Harness Client relates to coding agents the way Spring Data relates to databases:</p>
 <ul>
-	<li>application code talks to one abstraction, <code>AgentClient</code>;</li>
+	<li>application code talks to one abstraction, <code>AcpAgentClient</code>;</li>
 	<li>configuration carries options that work on <strong>every</strong> agent, plus a per-agent escape hatch;</li>
 	<li>the agent behind it is chosen by one property, <code>spring.acp.runtime</code>.</li>
 </ul>
@@ -639,10 +639,10 @@ conversation, Spring AI ACP Harness Client configures the things that make an ag
 
 <div class="figure">
 	<div class="stack">
-		<div class="layer app"><b>Your application</b><span>AgentClient · AgentSessions · AcpChatModel (Spring AI) · optional HTTP endpoint</span></div>
+		<div class="layer app"><b>Your application</b><span>AcpAgentClient · AcpAgentSessions · AcpChatModel (Spring AI) · optional HTTP endpoint</span></div>
 		<div class="arrow">▼</div>
 		<div class="layer"><b>spring-ai-acp-harness-client-core</b><span>connection pool · session registry · config negotiation · permission policy · MCP credential proxy · skill installer · workspace jail · observations</span></div>
-		<div class="arrow">▼ <code>AgentRuntime</code> SPI</div>
+		<div class="arrow">▼ <code>AcpAgentRuntime</code> SPI</div>
 		<div class="agents">
 			<div class="layer"><b>goose</b><span>stdio or WebSocket</span></div>
 			<div class="layer"><b>codex</b><span>codex-acp via npx</span></div>
@@ -678,11 +678,11 @@ of three tiers, and the tier tells you how portable it is:</p>
 <tr><td><code>spring-ai-acp-harness-client-boot-starter-codex</code></td><td>Starter plus the Codex adapter (<code>@agentclientprotocol/codex-acp</code>)</td></tr>
 <tr><td><code>spring-ai-acp-harness-client-boot-starter-opencode</code></td><td>Starter plus the OpenCode adapter</td></tr>
 <tr><td><code>spring-ai-acp-harness-client-boot-starter-registry</code></td><td>Starter plus the registry runtime: any agent the ACP registry publishes</td></tr>
-<tr><td><code>spring-ai-acp-harness-client-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AgentRuntime</code>)</td></tr>
+<tr><td><code>spring-ai-acp-harness-client-boot-starter</code></td><td>Core and auto-configuration with <em>no</em> agent (for bringing your own <code>AcpAgentRuntime</code>)</td></tr>
 <tr><td><code>spring-ai-acp-harness-client-ai</code></td><td><code>AcpChatModel</code>: the agent as a Spring AI <code>ChatModel</code></td></tr>
 <tr><td><code>spring-ai-acp-harness-client-mcp-oauth</code></td><td>Per-user OAuth sign-in to MCP servers (Spring Security)</td></tr>
 <tr><td><code>spring-ai-acp-harness-client-console</code></td><td>A terminal chat over the agent, for prototyping it (JLine); answers <code>policy: ask</code></td></tr>
-<tr><td><code>spring-ai-acp-harness-client-test</code></td><td><code>ScriptedAgent</code>, <code>AgentProbe</code>, and the <code>AgentRuntimeContract</code> conformance suite</td></tr>
+<tr><td><code>spring-ai-acp-harness-client-test</code></td><td><code>ScriptedAcpAgent</code>, <code>AcpAgentProbe</code>, and the <code>AcpAgentRuntimeContract</code> conformance suite</td></tr>
 </tbody>
 </table></div>
 </section>
@@ -770,14 +770,14 @@ public class ReviewApplication {
     }
 
     @Bean
-    ApplicationRunner demo(AgentClient agent) {
+    ApplicationRunner demo(AcpAgentClient agent) {
         return args -&gt; System.out.println(
                 agent.prompt("Summarize what is in this directory").call().content());
     }
 }</code></pre></div>
 </div>
 
-<p><code>AgentClient</code> is a thread-safe singleton. The agent process is started on the <strong>first
+<p><code>AcpAgentClient</code> is a thread-safe singleton. The agent process is started on the <strong>first
 prompt</strong>, not at context refresh: an application whose agent is misconfigured still starts, and reports
 the problem the first time it is used. The process is stopped when the context closes.</p>
 
@@ -793,7 +793,7 @@ mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.a
 
 <!-- ============================================================ -->
 <section id="agent-client">
-<h2>AgentClient API</h2>
+<h2>AcpAgentClient API</h2>
 
 <p>Every call starts with <code>prompt()</code> and describes one <em>turn</em>. Nothing is sent until
 <code>call()</code> or <code>stream()</code>.</p>
@@ -801,7 +801,7 @@ mvn -pl samples/smoke-app spring-boot:run -Dspring-boot.run.arguments=--spring.a
 <h3 id="ac-call">Blocking and streaming</h3>
 <div class="listing">
 <div class="content"><pre><code class="language-java">// Blocking: wait for the finished answer.
-AgentClient.AgentResponse response = agent.prompt()
+AcpAgentClient.AcpAgentResponse response = agent.prompt()
         .session("review-123")                          // a named, reusable conversation
         .user("Inspect the pending change")
         .options(o -&gt; o.timeout(Duration.ofMinutes(10)))
@@ -811,7 +811,7 @@ String text = response.content();                        // assistant text only
 AcpSchema.StopReason why = response.completion().reason();
 
 // Streaming: every event as it happens.
-Flux&lt;AgentEvent&gt; events = agent.prompt()
+Flux&lt;AcpAgentEvent&gt; events = agent.prompt()
         .session("review-123")
         .user("Now focus on security")
         .stream()
@@ -826,7 +826,7 @@ Flux&lt;String&gt; text = agent.prompt("Explain the build").stream().content();<
 <tbody>
 <tr><td><code>session(name)</code></td><td>Runs in a named conversation; repeat calls with the same name keep context. Without it the turn runs in a throwaway session closed when the turn ends. Names match <code>[A-Za-z0-9][A-Za-z0-9._-]{0,127}</code>.</td></tr>
 <tr><td><code>user(text)</code></td><td>Appends user text; call more than once to build up a prompt. <code>prompt(text)</code> is shorthand.</td></tr>
-<tr><td><code>options(…)</code></td><td>Per-turn overrides of <code>timeout</code>, <code>model</code>, <code>mode</code> and <code>provider</code>, as an <code>AgentOptions</code> or a builder lambda.</td></tr>
+<tr><td><code>options(…)</code></td><td>Per-turn overrides of <code>timeout</code>, <code>model</code>, <code>mode</code> and <code>provider</code>, as an <code>AcpAgentOptions</code> or a builder lambda.</td></tr>
 <tr><td><code>principal(p)</code></td><td>Runs on behalf of a user: their MCP credentials, their session (see <a href="#mcp-oauth">per-user OAuth</a>).</td></tr>
 <tr><td><code>call()</code></td><td>Blocks and returns the finished turn.</td></tr>
 <tr><td><code>stream()</code></td><td>A <code>Flux</code> ending in exactly one terminal event. Cancelling the subscription cancels the turn on the agent.</td></tr>
@@ -839,21 +839,21 @@ process starts, so a per-request override would silently do nothing.</p>
 </div>
 
 <h3 id="ac-events">Events</h3>
-<p><code>AgentEvent</code> is a sealed interface of records, so a <code>switch</code> over it can be exhaustive:</p>
+<p><code>AcpAgentEvent</code> is a sealed interface of records, so a <code>switch</code> over it can be exhaustive:</p>
 <div class="listing">
 <div class="content"><pre><code class="language-java">agent.prompt().session("review-123").user("Review the diff").stream().events()
         .doOnNext(event -&gt; {
             switch (event) {
-                case AgentEvent.Text t            -&gt; ui.append(t.text());
-                case AgentEvent.Thought t         -&gt; log.debug("thinking: {}", t.text());
-                case AgentEvent.ToolCallStarted s -&gt; ui.toolStarted(s.id(), s.title(), s.kind());
-                case AgentEvent.ToolCallUpdated u -&gt; ui.toolProgress(u.id(), u.status());
-                case AgentEvent.PlanUpdated p     -&gt; ui.replacePlan(p.entries());
-                case AgentEvent.ConfigChanged c   -&gt; log.info("agent reconfigured: {}", c.options());
-                case AgentEvent.ModeChanged m     -&gt; log.info("mode is now {}", m.modeId());
-                case AgentEvent.UsageUpdated u    -&gt; meter.context(u.contextUsed(), u.contextSize());
-                case AgentEvent.Completed c       -&gt; ui.done(c.reason());
-                case AgentEvent.Failed f          -&gt; ui.error(f.cause());
+                case AcpAgentEvent.Text t            -&gt; ui.append(t.text());
+                case AcpAgentEvent.Thought t         -&gt; log.debug("thinking: {}", t.text());
+                case AcpAgentEvent.ToolCallStarted s -&gt; ui.toolStarted(s.id(), s.title(), s.kind());
+                case AcpAgentEvent.ToolCallUpdated u -&gt; ui.toolProgress(u.id(), u.status());
+                case AcpAgentEvent.PlanUpdated p     -&gt; ui.replacePlan(p.entries());
+                case AcpAgentEvent.ConfigChanged c   -&gt; log.info("agent reconfigured: {}", c.options());
+                case AcpAgentEvent.ModeChanged m     -&gt; log.info("mode is now {}", m.modeId());
+                case AcpAgentEvent.UsageUpdated u    -&gt; meter.context(u.contextUsed(), u.contextSize());
+                case AcpAgentEvent.Completed c       -&gt; ui.done(c.reason());
+                case AcpAgentEvent.Failed f          -&gt; ui.error(f.cause());
             }
         })
         .blockLast();</code></pre></div>
@@ -889,7 +889,7 @@ turn runs in a session at a time.</p>
 <p><code>openSession(name)</code> opens a session without spending a turn. It is how to learn what the
 negotiated tier actually achieved before the first prompt:</p>
 <div class="listing">
-<div class="content"><pre><code class="language-java">import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
+<div class="content"><pre><code class="language-java">import org.springaicommunity.acp.runtime.AcpAgentRuntime.PortableOption;
 
 SessionConfiguration config = agent.openSession("review-123").configuration();
 config.applied(PortableOption.MODEL);          // Optional: the model this session is really using
@@ -902,11 +902,11 @@ config.resolutions().values().forEach(r -&gt;     // requested, applied, and by 
 <p><code>agent.sessions()</code> manages the conversations the agent keeps. Every operation is optional in
 ACP, and the runtimes implement different subsets, so ask first:</p>
 <div class="listing">
-<div class="content"><pre><code class="language-java">AgentSessions sessions = agent.sessions();
-if (sessions.supports(AgentSessions.Operation.LIST)) {
+<div class="content"><pre><code class="language-java">AcpAgentSessions sessions = agent.sessions();
+if (sessions.supports(AcpAgentSessions.Operation.LIST)) {
     List&lt;StoredSession&gt; stored = sessions.list();
 }
-if (sessions.supports(AgentSessions.Operation.LOAD)) {
+if (sessions.supports(AcpAgentSessions.Operation.LOAD)) {
     sessions.load("review-123", storedId);      // reattach and replay history under this name
 }
 sessions.close("review-123");                   // always succeeds, told or not</code></pre></div>
@@ -920,7 +920,7 @@ sessions.close("review-123");                   // always succeeds, told or not<
 <tr><td>opencode 1.18</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">no</td><td class="yes">yes</td></tr>
 </tbody>
 </table></div>
-<p>An operation the agent does not advertise throws <code>UnsupportedAgentOperationException</code> naming the
+<p>An operation the agent does not advertise throws <code>UnsupportedAcpAgentOperationException</code> naming the
 ACP method, rather than failing on the wire.</p>
 
 <h3 id="ac-other">Other methods</h3>
@@ -936,9 +936,9 @@ ACP method, rather than failing on the wire.</p>
 </table></div>
 
 <div class="admonition tip"><span class="label">Tip</span>
-<p>Migrating from the <code>goose-buildpack</code> <code>java-wrapper</code>? An <code>AgentExecutor</code> bean
+<p>Migrating from the <code>goose-buildpack</code> <code>java-wrapper</code>? An <code>AcpAgentExecutor</code> bean
 offers the old <code>GooseExecutor</code> method signatures and newline-delimited JSON events, with
-<code>AgentOptions</code> in place of <code>GooseOptions</code>.</p>
+<code>AcpAgentOptions</code> in place of <code>GooseOptions</code>.</p>
 </div>
 </section>
 
@@ -1192,7 +1192,7 @@ agent's own.</p>
 <h4 id="goose-todo">The todo list as the agent's plan</h4>
 <p>Goose sends no ACP <code>plan</code> updates. Its task list is the <code>todo</code> extension, and each change to it is
 an ordinary tool call, <code>todo__todo_write</code>, carrying the whole list as markdown. The adapter reads that call as
-the plan: it arrives as <code>AgentEvent.PlanUpdated</code>, and neither the call nor its update is reported as a tool
+the plan: it arrives as <code>AcpAgentEvent.PlanUpdated</code>, and neither the call nor its update is reported as a tool
 call. A UI that renders the plan for Codex or OpenCode renders goose's task list the same way.</p>
 <ul>
 	<li><code>- [x]</code> is completed, <code>- [ ]</code> is pending, and <code>- [-]</code>, <code>- [~]</code>,
@@ -1231,7 +1231,7 @@ and logs under that root too, so set <code>log-dir</code> to <code>&lt;root&gt;/
 <p>A misspelled name does not stop goose. It writes <code>Failed to load extension &lt;name&gt;: … Unknown extension</code>
 (since 1.55.0, <code>failed to start extension</code> with the name and <code>Unknown extension</code> in fields of their
 own) to its log and carries on. Spring AI ACP Harness Client reads that log for agents it started, so the mistake appears as a WARN line and in
-<code>AgentClient.notices()</code>, worded as a server that could not be loaded.</p>
+<code>AcpAgentClient.notices()</code>, worded as a server that could not be loaded.</p>
 </div>
 <p>For tools that are not built in, declare an MCP server under <code>spring.acp.mcp-servers</code> rather than a goose
 extension. It is the same thing to goose, and it stays portable.</p>
@@ -1605,7 +1605,7 @@ accept an unknown model id and fail later, inside the turn.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Value</th><th>Behaviour</th></tr></thead>
 <tbody>
-<tr><td><code>fail</code></td><td>Throws <code>UnsupportedAgentOptionException</code> when the session opens. Use in production when a wrong model is worse than a failed request.</td></tr>
+<tr><td><code>fail</code></td><td>Throws <code>UnsupportedAcpAgentOptionException</code> when the session opens. Use in production when a wrong model is worse than a failed request.</td></tr>
 <tr><td><code>warn</code></td><td>Logs once per option per runtime, naming what the agent <em>does</em> offer, and continues on the agent's default.</td></tr>
 <tr><td><code>ignore</code></td><td>Continues silently.</td></tr>
 </tbody>
@@ -1830,7 +1830,7 @@ given <code>http://127.0.0.1:&lt;port&gt;/&lt;random-token&gt;/&lt;server&gt;</c
 every forwarded request (so a token refresh lands between two tool calls) and drops the agent's own
 <code>Authorization</code>. Each session gets its own unguessable route, released when the session ends. A provider that
 throws refuses the session before the agent hears of it.</p>
-<p>An agent that shares MCP servers across its sessions changes that (<code>AgentRuntime.mcpScope()</code> returns
+<p>An agent that shares MCP servers across its sessions changes that (<code>AcpAgentRuntime.mcpScope()</code> returns
 <code>PROCESS</code>; OpenCode does). Such an agent keeps one client per server name for the whole process, and every
 <code>session/new</code> replaces it, so all of its sessions call through the route declared last. The client
 therefore keeps each agent process to one principal at a time and gives that principal a single route, shared by all
@@ -2099,7 +2099,7 @@ component that runs during context startup is always in time:</p>
 class InstructionsInstaller {
 
     /** Copies classpath:agent/AGENTS.md to the workspace root before the agent is launched. */
-    InstructionsInstaller(AgentSettings settings,
+    InstructionsInstaller(AcpAgentSettings settings,
             @Value("classpath:agent/AGENTS.md") Resource instructions) throws IOException {
         try (InputStream in = instructions.getInputStream()) {
             Files.copy(in, settings.workspace().resolve("AGENTS.md"), StandardCopyOption.REPLACE_EXISTING);
@@ -2107,7 +2107,7 @@ class InstructionsInstaller {
     }
 }</code></pre></div>
 </div>
-<p><code>AgentSettings</code> is the auto-configured bean carrying the resolved, absolute workspace. The same component
+<p><code>AcpAgentSettings</code> is the auto-configured bean carrying the resolved, absolute workspace. The same component
 is the natural place to render the file from a template if it must vary per deployment.</p>
 
 <h3 id="agents-md-compare">AGENTS.md, skills or prompt?</h3>
@@ -2364,7 +2364,7 @@ to the console-only profile it runs locally.</p>
 <h3 id="console-custom">Customizing</h3>
 <ul>
 	<li><strong>How turns look</strong>: register a subclass of <code>ConsoleRenderer</code> as a bean. Every method is
-	an override point, and <code>render(AgentEvent)</code> is the one each event goes through.</li>
+	an override point, and <code>render(AcpAgentEvent)</code> is the one each event goes through.</li>
 	<li><strong>Who answers <code>ask</code></strong>: register your own <code>PermissionPrompt</code> bean, and the
 	console's backs off. <code>PermissionQuestion</code> carries the tool name, the agent's title for the call, its kind
 	and the options.</li>
@@ -2715,12 +2715,12 @@ spring:
 class ReviewControllerTests {
 
     @MockitoBean
-    AgentClient agent;
+    AcpAgentClient agent;
 
     @Test
     void summarizes() {
-        AgentClient.PromptSpec spec = mock(AgentClient.PromptSpec.class, RETURNS_SELF);
-        AgentClient.AgentResponse response = mock(AgentClient.AgentResponse.class);
+        AcpAgentClient.PromptSpec spec = mock(AcpAgentClient.PromptSpec.class, RETURNS_SELF);
+        AcpAgentClient.AcpAgentResponse response = mock(AcpAgentClient.AcpAgentResponse.class);
         given(agent.prompt()).willReturn(spec);
         given(agent.prompt(anyString())).willReturn(spec);   // prompt(text) is a default method
         given(spec.call()).willReturn(response);
@@ -2733,9 +2733,9 @@ class ReviewControllerTests {
 so a developer's local agent config cannot change the outcome.</p>
 
 <h3 id="testing-adapters">Testing a runtime adapter</h3>
-<p><code>spring-ai-acp-harness-client-test</code> is for adapter authors. <code>AgentRuntimeContract</code> is the conformance suite every
-compiled adapter extends; it asserts only what ACP standardizes. <code>ScriptedAgent</code> is a fake agent speaking raw
-JSON-RPC over an in-memory transport, and <code>AgentProbe</code> skips live suites when an agent is absent or has no
+<p><code>spring-ai-acp-harness-client-test</code> is for adapter authors. <code>AcpAgentRuntimeContract</code> is the conformance suite every
+compiled adapter extends; it asserts only what ACP standardizes. <code>ScriptedAcpAgent</code> is a fake agent speaking raw
+JSON-RPC over an in-memory transport, and <code>AcpAgentProbe</code> skips live suites when an agent is absent or has no
 credentials. Live suites cost real tokens, so they only run with <code>-Dspring-ai-acp-harness-client.test.live=true</code>.</p>
 </section>
 
@@ -2746,7 +2746,7 @@ credentials. Live suites cost real tokens, so they only run with <code>-Dspring-
 <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
 <tbody>
 <tr><td>Startup fails: <em>spring.acp.runtime is not set and more than one runtime adapter is on the classpath</em></td><td>Set <code>spring.acp.runtime</code> to one of the listed ids.</td></tr>
-<tr><td>Startup fails: <em>No AgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>spring-ai-acp-harness-client-boot-starter-registry</code> for a registry id.</td></tr>
+<tr><td>Startup fails: <em>No AcpAgentRuntime registered for spring.acp.runtime='…'</em></td><td>Add that runtime's starter, or <code>spring-ai-acp-harness-client-boot-starter-registry</code> for a registry id.</td></tr>
 <tr><td>Startup fails: <em>spring.acp.runtimes has options for unregistered runtime(s)</em></td><td>A tier-3 block names a runtime nothing supplies; usually a typo.</td></tr>
 <tr><td><em>workspace '…' is not an existing directory</em></td><td>Create it first; Spring AI ACP Harness Client will not. A relative path is resolved against the JVM's working directory.</td></tr>
 <tr><td>The first prompt fails with <em>Could not install skill …</em></td><td>A skill failed to fetch or check. Pin a <code>ref</code> that exists, check <code>path</code>, make sure <code>git</code> is installed, and remove any symlinks from the skill.</td></tr>

@@ -26,8 +26,8 @@ import java.util.regex.Pattern;
  * <p>
  * Fixed when the agent process starts, never per request. An HTTP endpoint and a
  * credential that could change per call would mean a pool of processes with different
- * credentials and no way to tell them apart; see {@link AgentOptions} for what a caller
- * genuinely may vary.
+ * credentials and no way to tell them apart; see {@link AcpAgentOptions} for what a
+ * caller genuinely may vary.
  */
 public record ProviderSpec(String id, String apiType, URI baseUrl, String apiKey, Map<String, String> headers) {
 

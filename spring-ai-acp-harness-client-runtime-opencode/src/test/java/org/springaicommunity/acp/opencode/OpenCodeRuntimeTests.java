@@ -7,11 +7,11 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.config.ProviderSpec;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
-import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.McpScope;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.PortableOption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,8 +25,8 @@ class OpenCodeRuntimeTests {
 
 	private final OpenCodeRuntime runtime = new OpenCodeRuntime("opencode");
 
-	private AgentSettings.Builder settings() {
-		return AgentSettings.builder(OpenCodeRuntime.ID, workspace).runtimeHome(home);
+	private AcpAgentSettings.Builder settings() {
+		return AcpAgentSettings.builder(OpenCodeRuntime.ID, workspace).runtimeHome(home);
 	}
 
 	@Test
@@ -36,7 +36,7 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void launchesTheBinaryInAcpMode() {
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().build());
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime.launch(settings().build());
 
 		assertThat(spec.command()).isEqualTo("opencode");
 		assertThat(spec.args()).containsExactly("acp");
@@ -44,7 +44,7 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void aTierThreeCommandOverridesTheBinaryButNotTheSubcommand() {
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime
 			.launch(settings().runtimeOptions(Map.of("command", "/opt/opencode/bin/opencode")).build());
 
 		assertThat(spec.command()).isEqualTo("/opt/opencode/bin/opencode");
@@ -53,10 +53,10 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void writesOpencodeJsonAndPointsTheProcessAtIt() throws Exception {
-		AgentSettings settings = settings().runtimeOptions(Map.of("config", Map.of("theme", "system"))).build();
+		AcpAgentSettings settings = settings().runtimeOptions(Map.of("config", Map.of("theme", "system"))).build();
 
 		runtime.provision(settings);
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime.launch(settings);
 
 		Path file = home.resolve("opencode.json");
 		assertThat(spec.env()).containsEntry(OpenCodeRuntime.CONFIG_ENV, file.toString());
@@ -65,10 +65,10 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void nothingIsWrittenAndNothingIsRedirectedWithoutTierThreeConfig() {
-		AgentSettings settings = settings().build();
+		AcpAgentSettings settings = settings().build();
 
 		runtime.provision(settings);
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime.launch(settings);
 
 		assertThat(home.resolve("opencode.json")).doesNotExist();
 		assertThat(spec.env()).doesNotContainKey(OpenCodeRuntime.CONFIG_ENV);
@@ -95,7 +95,8 @@ class OpenCodeRuntimeTests {
 	@Test
 	void providerCredentialsReachTheProcessAsEnvironment() {
 		ProviderSpec provider = new ProviderSpec("openai", "openai", null, "sk-x", Map.of());
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings().provider(provider).build());
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime
+			.launch(settings().provider(provider).build());
 
 		assertThat(spec.env()).containsEntry("OPENAI_API_KEY", "sk-x");
 	}
@@ -104,10 +105,10 @@ class OpenCodeRuntimeTests {
 	void anEndpointOfTheApplicationsOwnBecomesAProviderOpenCodeCanLoad() throws Exception {
 		ProviderSpec provider = new ProviderSpec("acme", "openai",
 				java.net.URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
-		AgentSettings settings = settings().provider(provider).model("llm-1").build();
+		AcpAgentSettings settings = settings().provider(provider).model("llm-1").build();
 
 		runtime.provision(settings);
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime.launch(settings);
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime.launch(settings);
 
 		Path file = home.resolve("opencode.json");
 		assertThat(spec.env()).containsEntry(OpenCodeRuntime.CONFIG_ENV, file.toString());
@@ -131,7 +132,7 @@ class OpenCodeRuntimeTests {
 		// sdk.responses() — which the compatible package lacks, so every turn failed.
 		ProviderSpec provider = new ProviderSpec("openai", "openai",
 				java.net.URI.create("https://gateway.example.com/team-x/openai"), "sk-x", Map.of());
-		AgentSettings settings = settings().provider(provider).model("vendor/llm-1").build();
+		AcpAgentSettings settings = settings().provider(provider).model("vendor/llm-1").build();
 
 		runtime.provision(settings);
 
@@ -146,7 +147,7 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void aVendorOpenCodeAlreadyKnowsIsLeftToTheWire() {
-		AgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
+		AcpAgentSettings settings = settings().provider(new ProviderSpec("openai", "openai", null, "sk-x", Map.of()))
 			.model("gpt-5.4-mini")
 			.build();
 
@@ -158,7 +159,7 @@ class OpenCodeRuntimeTests {
 
 	@Test
 	void extraArgumentsAreAppended() {
-		AgentLaunchSpec.Stdio spec = (AgentLaunchSpec.Stdio) runtime
+		AcpAgentLaunchSpec.Stdio spec = (AcpAgentLaunchSpec.Stdio) runtime
 			.launch(settings().runtimeOptions(Map.of("args", List.of("--print-logs"))).build());
 
 		assertThat(spec.args()).containsExactly("acp", "--print-logs");

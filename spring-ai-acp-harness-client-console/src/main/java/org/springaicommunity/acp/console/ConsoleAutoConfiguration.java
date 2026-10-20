@@ -20,12 +20,12 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springaicommunity.acp.boot.AcpAutoConfiguration;
-import org.springaicommunity.acp.client.AgentClient;
+import org.springaicommunity.acp.client.AcpAgentClient;
 import org.springaicommunity.acp.permission.PermissionPrompt;
 
 /**
- * A terminal chat over the application's {@link AgentClient}: add the dependency, run the
- * application, talk to the agent.
+ * A terminal chat over the application's {@link AcpAgentClient}: add the dependency, run
+ * the application, talk to the agent.
  *
  * <p>
  * For prototyping an agent — its {@code AGENTS.md}, its skills, its MCP servers — before
@@ -39,7 +39,7 @@ import org.springaicommunity.acp.permission.PermissionPrompt;
  * permission requests to the person at the keyboard.
  */
 @AutoConfiguration(after = AcpAutoConfiguration.class)
-@ConditionalOnBean(AgentClient.class)
+@ConditionalOnBean(AcpAgentClient.class)
 @Conditional(ConsoleAutoConfiguration.OnConsole.class)
 @EnableConfigurationProperties(ConsoleProperties.class)
 public class ConsoleAutoConfiguration {
@@ -68,7 +68,7 @@ public class ConsoleAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	ConsoleChat acpConsoleChat(AgentClient agent, Terminal terminal, ConsoleRenderer renderer,
+	ConsoleChat acpConsoleChat(AcpAgentClient agent, Terminal terminal, ConsoleRenderer renderer,
 			ConsoleProperties properties, Environment environment, ConfigurableApplicationContext context) {
 		String application = environment.getProperty("spring.application.name", "spring-ai-acp-harness-client");
 		String title = properties.getTitle() != null ? properties.getTitle() : application;

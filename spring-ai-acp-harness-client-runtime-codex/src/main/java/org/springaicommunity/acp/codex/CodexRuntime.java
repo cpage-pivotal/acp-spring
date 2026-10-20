@@ -13,13 +13,13 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.config.ProviderEnvironment;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
-import org.springaicommunity.acp.runtime.AgentEnvironment;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentEnvironment;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 import org.springaicommunity.acp.runtime.Executables;
 import org.springaicommunity.acp.runtime.ToolNames;
 
@@ -59,7 +59,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * env: { RUST_LOG: warn }
  * }</pre>
  */
-public class CodexRuntime implements AgentRuntime {
+public class CodexRuntime implements AcpAgentRuntime {
 
 	public static final String ID = "codex";
 
@@ -118,7 +118,7 @@ public class CodexRuntime implements AgentRuntime {
 	}
 
 	@Override
-	public AgentLaunchSpec launch(AgentSettings settings) {
+	public AcpAgentLaunchSpec launch(AcpAgentSettings settings) {
 		RuntimeOptions options = settings.runtimeOptions();
 		// An application that names a package asked for npx; only the default gives way
 		// to a local adapter.
@@ -134,7 +134,7 @@ public class CodexRuntime implements AgentRuntime {
 		}
 		args.addAll(options.textList("args"));
 
-		return new AgentLaunchSpec.Stdio(command.orElse("npx"), args, environment(settings));
+		return new AcpAgentLaunchSpec.Stdio(command.orElse("npx"), args, environment(settings));
 	}
 
 	/**
@@ -164,7 +164,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * same reason.
 	 */
 	@Override
-	public void provision(AgentSettings settings) {
+	public void provision(AcpAgentSettings settings) {
 		Map<String, Object> config = configFor(settings);
 		if (config.isEmpty()) {
 			return;
@@ -220,7 +220,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * Tier 3 is applied last and therefore wins, as everywhere else — including
 	 * wholesale, if an application would rather describe its providers itself.
 	 */
-	private static Map<String, Object> configFor(AgentSettings settings) {
+	private static Map<String, Object> configFor(AcpAgentSettings settings) {
 		Map<String, Object> config = new LinkedHashMap<>(credentialConfig(settings));
 		config.putAll(endpointConfig(settings));
 		config.putAll(settings.runtimeOptions().section("config-toml"));
@@ -238,7 +238,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * 1.12 and 1.13, the key is then held in memory for the life of the process and no
 	 * {@code auth.json} appears at all.
 	 */
-	private static Map<String, Object> credentialConfig(AgentSettings settings) {
+	private static Map<String, Object> credentialConfig(AcpAgentSettings settings) {
 		return signsInWithKey(settings) ? Map.of("cli_auth_credentials_store", "ephemeral") : Map.of();
 	}
 
@@ -251,12 +251,12 @@ public class CodexRuntime implements AgentRuntime {
 	 * needs no sign-in at all — codex-acp reports it as a "Custom model gateway" and
 	 * opens sessions straight away.
 	 */
-	private static boolean signsInWithKey(AgentSettings settings) {
+	private static boolean signsInWithKey(AcpAgentSettings settings) {
 		ProviderSpec provider = settings.provider();
 		return !provider.isByo() && isOpenAiCompatible(provider) && provider.findApiKey().isPresent();
 	}
 
-	private static Map<String, Object> endpointConfig(AgentSettings settings) {
+	private static Map<String, Object> endpointConfig(AcpAgentSettings settings) {
 		ProviderSpec provider = settings.provider();
 		if (!provider.isByo() || !isOpenAiCompatible(provider)) {
 			return Map.of();
@@ -341,7 +341,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * it.
 	 */
 	@Override
-	public Optional<String> authMethod(AgentSettings settings) {
+	public Optional<String> authMethod(AcpAgentSettings settings) {
 		return signsInWithKey(settings) ? Optional.of(API_KEY_METHOD) : Optional.empty();
 	}
 
@@ -363,7 +363,7 @@ public class CodexRuntime implements AgentRuntime {
 	 * model in {@code config.toml} as well.
 	 */
 	@Override
-	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+	public boolean appliedOutOfBand(PortableOption option, AcpAgentSettings settings) {
 		return switch (option) {
 			case PROVIDER -> settings.provider().hasCredentials();
 			case MODEL -> !endpointConfig(settings).isEmpty() && settings.findModel().isPresent();
@@ -377,20 +377,20 @@ public class CodexRuntime implements AgentRuntime {
 		return ToolNames.fromRawInput(toolCall);
 	}
 
-	private Map<String, String> environment(AgentSettings settings) {
+	private Map<String, String> environment(AcpAgentSettings settings) {
 		Map<String, String> home = homeFor(settings).map(path -> Map.of(HOME_ENV, path.toString())).orElse(Map.of());
-		return AgentEnvironment.layered(home, ProviderEnvironment.of(settings.provider()), settings);
+		return AcpAgentEnvironment.layered(home, ProviderEnvironment.of(settings.provider()), settings);
 	}
 
 	/**
 	 * The home to point Codex at, or empty to inherit whatever the process already has.
 	 */
-	private Optional<Path> homeFor(AgentSettings settings) {
+	private Optional<Path> homeFor(AcpAgentSettings settings) {
 		boolean relocated = settings.runtimeOptions().text("home").isPresent() || !configFor(settings).isEmpty();
 		return relocated ? Optional.of(managedHome(settings)) : Optional.empty();
 	}
 
-	private Path managedHome(AgentSettings settings) {
+	private Path managedHome(AcpAgentSettings settings) {
 		return settings.runtimeOptions()
 			.text("home")
 			.map(Path::of)

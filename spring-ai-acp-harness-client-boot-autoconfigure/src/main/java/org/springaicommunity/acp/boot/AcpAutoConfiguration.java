@@ -15,26 +15,26 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.client.AgentClientPool;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.client.AcpAgentClientPool;
 import org.springaicommunity.acp.codex.CodexRuntime;
-import org.springaicommunity.acp.config.AgentSettings;
-import org.springaicommunity.acp.executor.AgentExecutor;
-import org.springaicommunity.acp.executor.DefaultAgentExecutor;
+import org.springaicommunity.acp.config.AcpAgentSettings;
+import org.springaicommunity.acp.executor.AcpAgentExecutor;
+import org.springaicommunity.acp.executor.DefaultAcpAgentExecutor;
 import org.springaicommunity.acp.goose.GooseRuntime;
 import org.springaicommunity.acp.mcp.McpCredentialsProvider;
 import org.springaicommunity.acp.opencode.OpenCodeRuntime;
-import org.springaicommunity.acp.observation.AgentObservations;
+import org.springaicommunity.acp.observation.AcpAgentObservations;
 import org.springaicommunity.acp.permission.PermissionPrompt;
-import org.springaicommunity.acp.runtime.AgentRuntime;
-import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentRuntimeProvider;
 import org.springaicommunity.acp.session.SessionPrincipalResolver;
 
 /**
- * Wires an {@link AgentClient} from {@code spring.acp.*}.
+ * Wires an {@link AcpAgentClient} from {@code spring.acp.*}.
  *
  * <p>
- * Registering a runtime means contributing an {@link AgentRuntime} bean; the one whose
+ * Registering a runtime means contributing an {@link AcpAgentRuntime} bean; the one whose
  * {@code id()} matches {@code spring.acp.runtime} is selected. Each first-party adapter
  * registers itself when it is on the classpath, so an application chooses its agents by
  * dependency and then picks one of them by property — and an application that wants its
@@ -42,7 +42,7 @@ import org.springaicommunity.acp.session.SessionPrincipalResolver;
  * registration backs off by name.
  */
 @AutoConfiguration
-@ConditionalOnClass(AgentClient.class)
+@ConditionalOnClass(AcpAgentClient.class)
 @ConditionalOnProperty(prefix = "spring.acp", name = "enabled", matchIfMissing = true)
 @EnableConfigurationProperties(AcpProperties.class)
 @Import({ AcpAutoConfiguration.GooseRuntimeConfiguration.class, AcpAutoConfiguration.CodexRuntimeConfiguration.class,
@@ -71,7 +71,7 @@ public class AcpAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean(name = "gooseAgentRuntime")
-		AgentRuntime gooseAgentRuntime() {
+		AcpAgentRuntime gooseAgentRuntime() {
 			return new GooseRuntime();
 		}
 
@@ -83,7 +83,7 @@ public class AcpAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean(name = "codexAgentRuntime")
-		AgentRuntime codexAgentRuntime() {
+		AcpAgentRuntime codexAgentRuntime() {
 			return new CodexRuntime();
 		}
 
@@ -95,7 +95,7 @@ public class AcpAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean(name = "openCodeAgentRuntime")
-		AgentRuntime openCodeAgentRuntime() {
+		AcpAgentRuntime openCodeAgentRuntime() {
 			return new OpenCodeRuntime();
 		}
 
@@ -103,7 +103,7 @@ public class AcpAutoConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	SelectedRuntime acpSelectedRuntime(List<AgentRuntime> runtimes, List<AgentRuntimeProvider> providers,
+	SelectedRuntime acpSelectedRuntime(List<AcpAgentRuntime> runtimes, List<AcpAgentRuntimeProvider> providers,
 			AcpProperties properties) {
 		return SelectedRuntime.from(runtimes, providers, properties);
 	}
@@ -121,7 +121,7 @@ public class AcpAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	AgentSettings acpAgentSettings(AcpProperties properties, SelectedRuntime selected,
+	AcpAgentSettings acpAgentSettings(AcpProperties properties, SelectedRuntime selected,
 			ObjectProvider<McpCredentialsProvider> credentials, ObjectProvider<SessionPrincipalResolver> principals,
 			ObjectProvider<PermissionPrompt> prompts) {
 		Path workspace = properties.workspace() == null ? Paths.get("").toAbsolutePath()
@@ -129,7 +129,7 @@ public class AcpAutoConfiguration {
 		warnAboutUncredentialedServers(properties, credentials);
 		String runtime = selected.runtime().id();
 
-		return AgentSettings.builder(runtime, workspace)
+		return AcpAgentSettings.builder(runtime, workspace)
 			.runtimeHome(properties.runtimeHome())
 			.timeout(properties.timeout())
 			.model(properties.model())
@@ -199,15 +199,15 @@ public class AcpAutoConfiguration {
 	 */
 	@Bean(destroyMethod = "close")
 	@ConditionalOnMissingBean
-	AgentClient acpAgentClient(SelectedRuntime selected, AgentSettings settings,
-			ObjectProvider<AgentObservations> observations) {
+	AcpAgentClient acpAgentClient(SelectedRuntime selected, AcpAgentSettings settings,
+			ObjectProvider<AcpAgentObservations> observations) {
 		logger.info("ACP runtime '{}' selected, workspace {}, up to {} process(es)", selected.runtime().id(),
 				settings.workspace(), settings.pool().maxProcesses());
 		// ObjectProvider rather than an optional parameter: the observations bean only
 		// exists when
 		// Micrometer does, and this bean must be constructible either way.
-		return new AgentClientPool(selected.runtime(), settings,
-				observations.getIfAvailable(() -> AgentObservations.NONE));
+		return new AcpAgentClientPool(selected.runtime(), settings,
+				observations.getIfAvailable(() -> AcpAgentObservations.NONE));
 	}
 
 	/**
@@ -217,8 +217,8 @@ public class AcpAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	AgentExecutor acpAgentExecutor(AgentClient client) {
-		return new DefaultAgentExecutor(client);
+	AcpAgentExecutor acpAgentExecutor(AcpAgentClient client) {
+		return new DefaultAcpAgentExecutor(client);
 	}
 
 }

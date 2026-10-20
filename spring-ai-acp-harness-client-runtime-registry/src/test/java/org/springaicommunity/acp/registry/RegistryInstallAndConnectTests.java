@@ -10,10 +10,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.client.AgentClientFactory;
-import org.springaicommunity.acp.config.AgentSettings;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.client.AcpAgentClientFactory;
+import org.springaicommunity.acp.config.AcpAgentSettings;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,8 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * checked, the archive unpacks, the launch spec is right. None of them proves the chain
  * holds, and the chain is what "any ACP agent" means. So this builds an archive,
  * publishes it through a {@code file:} registry, and then goes through the ordinary
- * {@link AgentClientFactory#create(AgentRuntime, AgentSettings)} path: resolve, verify,
- * unpack, chmod, spawn, handshake, prompt.
+ * {@link AcpAgentClientFactory#create(AcpAgentRuntime, AcpAgentSettings)} path: resolve,
+ * verify, unpack, chmod, spawn, handshake, prompt.
  *
  * <p>
  * The agent is fifteen lines of shell rather than a real vendor's binary, and
@@ -77,17 +77,18 @@ class RegistryInstallAndConnectTests {
 	@Test
 	@DisplayName("an agent nobody wrote an adapter for: catalogue entry to finished turn")
 	void installsAnAgentFromTheRegistryAndTalksToIt() throws Exception {
-		Path archive = AgentInstallerTests.tarGz(temp.resolve("house-agent.tar.gz"),
+		Path archive = AcpAgentInstallerTests.tarGz(temp.resolve("house-agent.tar.gz"),
 				Map.of("house-agent", SHELL_AGENT));
-		AgentRegistry registry = registryPublishing(archive, AgentInstallerTests.sha256(archive));
+		AcpAgentRegistry registry = registryPublishing(archive, AcpAgentInstallerTests.sha256(archive));
 
-		AgentRuntime runtime = new RegistryAgentRuntimeProvider(registry, new AgentInstaller(registry.settings()))
+		AcpAgentRuntime runtime = new RegistryAcpAgentRuntimeProvider(registry,
+				new AcpAgentInstaller(registry.settings()))
 			.forId("house-agent")
 			.orElseThrow();
 		Path workspace = Files.createDirectories(temp.resolve("workspace"));
 
-		try (AgentClient client = AgentClientFactory.create(runtime,
-				AgentSettings.builder("house-agent", workspace).timeout(Duration.ofSeconds(30)).build())) {
+		try (AcpAgentClient client = AcpAgentClientFactory.create(runtime,
+				AcpAgentSettings.builder("house-agent", workspace).timeout(Duration.ofSeconds(30)).build())) {
 
 			assertThat(client.agentInfo()).get().extracting(info -> info.name()).isEqualTo("house-agent");
 			assertThat(client.protocolVersion()).isEqualTo(1);
@@ -101,25 +102,25 @@ class RegistryInstallAndConnectTests {
 		// The scenario this whole class exists to make safe: the catalogue is trusted,
 		// the release
 		// host is not, and the difference is one comparison made before exec.
-		Path archive = AgentInstallerTests.tarGz(temp.resolve("house-agent.tar.gz"),
+		Path archive = AcpAgentInstallerTests.tarGz(temp.resolve("house-agent.tar.gz"),
 				Map.of("house-agent", SHELL_AGENT.replace("house-agent", "not-what-was-published")));
-		AgentRegistry registry = registryPublishing(archive,
+		AcpAgentRegistry registry = registryPublishing(archive,
 				"0000000000000000000000000000000000000000000000000000000000000000");
 
-		AgentRuntime runtime = new RegistryAgentRuntimeProvider(registry, new AgentInstaller(registry.settings()))
+		AcpAgentRuntime runtime = new RegistryAcpAgentRuntimeProvider(registry,
+				new AcpAgentInstaller(registry.settings()))
 			.forId("house-agent")
 			.orElseThrow();
 		Path workspace = Files.createDirectories(temp.resolve("workspace"));
 
-		org.assertj.core.api.Assertions
-			.assertThatThrownBy(
-					() -> AgentClientFactory.create(runtime, AgentSettings.builder("house-agent", workspace).build()))
-			.isInstanceOf(AgentInstaller.AgentInstallException.class)
+		org.assertj.core.api.Assertions.assertThatThrownBy(
+				() -> AcpAgentClientFactory.create(runtime, AcpAgentSettings.builder("house-agent", workspace).build()))
+			.isInstanceOf(AcpAgentInstaller.AcpAgentInstallException.class)
 			.hasMessageContaining("refusing to run it");
 	}
 
 	/** A one-agent catalogue on disk, pinned with a {@code file:} URL. */
-	private AgentRegistry registryPublishing(Path archive, String sha256) throws Exception {
+	private AcpAgentRegistry registryPublishing(Path archive, String sha256) throws Exception {
 		Path catalogue = temp.resolve("registry.json");
 		Files.writeString(catalogue, """
 				{"agents": [{
@@ -128,7 +129,7 @@ class RegistryInstallAndConnectTests {
 				     "archive": "%s", "cmd": "./house-agent", "args": ["acp"], "sha256": "%s"}}}
 				}]}
 				""".formatted(Platform.current().id(), archive.toUri(), sha256));
-		return new AgentRegistry(
+		return new AcpAgentRegistry(
 				new RegistrySettings(catalogue.toUri(), temp.resolve("cache"), Duration.ZERO, false, true, null));
 	}
 

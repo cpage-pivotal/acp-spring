@@ -15,14 +15,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.client.AgentInfo;
-import org.springaicommunity.acp.config.AgentOptions;
-import org.springaicommunity.acp.event.AgentEvent;
-import org.springaicommunity.acp.session.AgentSession;
-import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.client.AcpAgentInfo;
+import org.springaicommunity.acp.config.AcpAgentOptions;
+import org.springaicommunity.acp.event.AcpAgentEvent;
+import org.springaicommunity.acp.session.AcpAgentSession;
+import org.springaicommunity.acp.session.AcpAgentSessions;
 import org.springaicommunity.acp.session.StoredSession;
-import org.springaicommunity.acp.session.UnsupportedAgentOperationException;
+import org.springaicommunity.acp.session.UnsupportedAcpAgentOperationException;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -43,7 +43,7 @@ class AcpControllerTests {
 	private final ReactiveWebApplicationContextRunner runner = new ReactiveWebApplicationContextRunner()
 		.withConfiguration(AutoConfigurations.of(CodecsAutoConfiguration.class, WebFluxAutoConfiguration.class,
 				AcpWebFluxAutoConfiguration.class))
-		.withUserConfiguration(StubAgent.class)
+		.withUserConfiguration(StubAcpAgent.class)
 		.withPropertyValues("spring.acp.controller.enabled=true");
 
 	@Test
@@ -51,7 +51,7 @@ class AcpControllerTests {
 	void offByDefault() {
 		new ReactiveWebApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(AcpWebFluxAutoConfiguration.class))
-			.withUserConfiguration(StubAgent.class)
+			.withUserConfiguration(StubAcpAgent.class)
 			.run(context -> assertThat(context).doesNotHaveBean(AcpController.class));
 	}
 
@@ -189,10 +189,10 @@ class AcpControllerTests {
 
 	@Configuration(proxyBeanMethods = false)
 	@EnableConfigurationProperties(AcpProperties.class)
-	static class StubAgent {
+	static class StubAcpAgent {
 
 		@Bean
-		AgentClient acpAgentClient() {
+		AcpAgentClient acpAgentClient() {
 			return new FakeClient();
 		}
 
@@ -202,7 +202,7 @@ class AcpControllerTests {
 	 * Answers every turn with "ok" and implements none of the optional session
 	 * operations.
 	 */
-	private static final class FakeClient implements AgentClient {
+	private static final class FakeClient implements AcpAgentClient {
 
 		@Override
 		public PromptSpec prompt() {
@@ -215,22 +215,22 @@ class AcpControllerTests {
 		}
 
 		@Override
-		public Optional<AgentInfo> agentInfo() {
-			return Optional.of(new AgentInfo("fake", "1.0"));
+		public Optional<AcpAgentInfo> agentInfo() {
+			return Optional.of(new AcpAgentInfo("fake", "1.0"));
 		}
 
 		@Override
-		public AgentSessions sessions() {
+		public AcpAgentSessions sessions() {
 			return new FakeSessions();
 		}
 
 		@Override
-		public Optional<AgentSession> session(String name) {
+		public Optional<AcpAgentSession> session(String name) {
 			return Optional.empty();
 		}
 
 		@Override
-		public AgentSession openSession(String name) {
+		public AcpAgentSession openSession(String name) {
 			throw new UnsupportedOperationException();
 		}
 
@@ -251,18 +251,18 @@ class AcpControllerTests {
 			}
 
 			@Override
-			public PromptSpec options(AgentOptions options) {
+			public PromptSpec options(AcpAgentOptions options) {
 				return this;
 			}
 
 			@Override
-			public PromptSpec options(java.util.function.Consumer<AgentOptions.Builder> customizer) {
+			public PromptSpec options(java.util.function.Consumer<AcpAgentOptions.Builder> customizer) {
 				return this;
 			}
 
 			@Override
-			public AgentResponse call() {
-				return new AgentResponse() {
+			public AcpAgentResponse call() {
+				return new AcpAgentResponse() {
 
 					@Override
 					public String content() {
@@ -270,25 +270,25 @@ class AcpControllerTests {
 					}
 
 					@Override
-					public AgentEvent.Completed completion() {
-						return new AgentEvent.Completed(AcpSchema.StopReason.END_TURN);
+					public AcpAgentEvent.Completed completion() {
+						return new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN);
 					}
 				};
 			}
 
 			@Override
-			public AgentStream stream() {
-				return () -> Flux.just(new AgentEvent.Text("ok"),
-						new AgentEvent.Completed(AcpSchema.StopReason.END_TURN));
+			public AcpAgentStream stream() {
+				return () -> Flux.just(new AcpAgentEvent.Text("ok"),
+						new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN));
 			}
 
 		}
 
-		private static final class FakeSessions implements AgentSessions {
+		private static final class FakeSessions implements AcpAgentSessions {
 
 			@Override
 			public List<StoredSession> list() {
-				throw new UnsupportedAgentOperationException("fake", Operation.LIST);
+				throw new UnsupportedAcpAgentOperationException("fake", Operation.LIST);
 			}
 
 			@Override
@@ -297,18 +297,18 @@ class AcpControllerTests {
 			}
 
 			@Override
-			public AgentSession load(String name, String sessionId) {
-				throw new UnsupportedAgentOperationException("fake", Operation.LOAD);
+			public AcpAgentSession load(String name, String sessionId) {
+				throw new UnsupportedAcpAgentOperationException("fake", Operation.LOAD);
 			}
 
 			@Override
-			public AgentSession resume(String name, String sessionId) {
-				throw new UnsupportedAgentOperationException("fake", Operation.RESUME);
+			public AcpAgentSession resume(String name, String sessionId) {
+				throw new UnsupportedAcpAgentOperationException("fake", Operation.RESUME);
 			}
 
 			@Override
 			public void delete(String sessionId) {
-				throw new UnsupportedAgentOperationException("fake", Operation.DELETE);
+				throw new UnsupportedAcpAgentOperationException("fake", Operation.DELETE);
 			}
 
 			@Override
@@ -316,12 +316,12 @@ class AcpControllerTests {
 			}
 
 			@Override
-			public List<AgentSession> open() {
+			public List<AcpAgentSession> open() {
 				return List.of();
 			}
 
 			@Override
-			public Optional<AgentSession> find(String name) {
+			public Optional<AcpAgentSession> find(String name) {
 				return Optional.empty();
 			}
 

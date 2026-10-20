@@ -13,7 +13,7 @@
 
     <artifactId>spring-ai-acp-harness-client-runtime-opencode</artifactId>
     <name>Spring AI ACP Harness Client OpenCode Runtime</name>
-    <description>AgentRuntime adapter for OpenCode</description>
+    <description>AcpAgentRuntime adapter for OpenCode</description>
 
     <dependencies>
         <dependency>

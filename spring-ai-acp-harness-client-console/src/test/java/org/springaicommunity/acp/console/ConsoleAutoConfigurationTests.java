@@ -10,8 +10,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springaicommunity.acp.boot.AcpAutoConfiguration;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.permission.PermissionPrompt;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -90,7 +90,8 @@ class ConsoleAutoConfigurationTests {
 			.withPropertyValues("spring.acp.console.enabled=true", "spring.acp.permissions.policy=ask")
 			.run(context -> {
 				assertThat(context).doesNotHaveBean(TerminalPermissionPrompt.class);
-				assertThat(context.getBean(AgentSettings.class).permissions().decide(Optional.of("t"), List.of(allow)))
+				assertThat(
+						context.getBean(AcpAgentSettings.class).permissions().decide(Optional.of("t"), List.of(allow)))
 					.contains(allow);
 			});
 	}
@@ -99,8 +100,8 @@ class ConsoleAutoConfigurationTests {
 	static class StubClient {
 
 		@Bean
-		AgentClient acpAgentClient() {
-			return mock(AgentClient.class);
+		AcpAgentClient acpAgentClient() {
+			return mock(AcpAgentClient.class);
 		}
 
 	}

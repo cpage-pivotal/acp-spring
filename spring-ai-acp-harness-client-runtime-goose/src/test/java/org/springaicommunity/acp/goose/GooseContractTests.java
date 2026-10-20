@@ -1,9 +1,9 @@
 package org.springaicommunity.acp.goose;
 
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.springaicommunity.acp.runtime.AgentRuntime;
-import org.springaicommunity.acp.test.AgentProbe;
-import org.springaicommunity.acp.test.AgentRuntimeContract;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
+import org.springaicommunity.acp.test.AcpAgentProbe;
+import org.springaicommunity.acp.test.AcpAgentRuntimeContract;
 
 /**
  * The portable contract, against a real {@code goose acp} subprocess.
@@ -13,14 +13,14 @@ import org.springaicommunity.acp.test.AgentRuntimeContract;
  * stays green on a machine that has never installed it.
  */
 @EnabledIf("usable")
-class GooseContractTests extends AgentRuntimeContract {
+class GooseContractTests extends AcpAgentRuntimeContract {
 
 	static boolean usable() {
-		return AgentProbe.isUsable(new GooseRuntime());
+		return AcpAgentProbe.isUsable(new GooseRuntime());
 	}
 
 	@Override
-	protected AgentRuntime runtime() {
+	protected AcpAgentRuntime runtime() {
 		return new GooseRuntime();
 	}
 

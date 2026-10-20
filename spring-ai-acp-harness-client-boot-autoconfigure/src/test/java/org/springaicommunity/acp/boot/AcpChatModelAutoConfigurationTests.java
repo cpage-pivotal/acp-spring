@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springaicommunity.acp.ai.AcpChatModel;
 import org.springaicommunity.acp.ai.AcpChatOptions;
-import org.springaicommunity.acp.client.AgentClient;
+import org.springaicommunity.acp.client.AcpAgentClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -62,7 +62,7 @@ class AcpChatModelAutoConfigurationTests {
 	void doesNothingWithoutSpringAiOnTheClasspath() {
 		runner.withClassLoader(new FilteredClassLoader(ChatModel.class)).run(context -> {
 			assertThat(context).hasNotFailed();
-			assertThat(context).hasSingleBean(AgentClient.class);
+			assertThat(context).hasSingleBean(AcpAgentClient.class);
 		});
 	}
 
@@ -70,8 +70,8 @@ class AcpChatModelAutoConfigurationTests {
 	static class StubClient {
 
 		@Bean
-		AgentClient acpAgentClient() {
-			return mock(AgentClient.class);
+		AcpAgentClient acpAgentClient() {
+			return mock(AcpAgentClient.class);
 		}
 
 	}
@@ -80,7 +80,7 @@ class AcpChatModelAutoConfigurationTests {
 	static class OwnChatModel {
 
 		@Bean
-		AcpChatModel acpChatModel(AgentClient client) {
+		AcpChatModel acpChatModel(AcpAgentClient client) {
 			return new AcpChatModel(client, AcpChatOptions.builder().session("house").build());
 		}
 

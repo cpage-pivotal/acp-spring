@@ -11,9 +11,9 @@ import java.util.stream.Stream;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
-import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.event.AcpAgentEvent;
 import org.springaicommunity.acp.permission.PermissionQuestion;
-import org.springaicommunity.acp.runtime.AgentNotice;
+import org.springaicommunity.acp.runtime.AcpAgentNotice;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
 
@@ -58,7 +58,7 @@ public class ConsoleRenderer {
 	 * The latest accounting of the turn, shown once when it ends rather than every time
 	 * it moves.
 	 */
-	private AgentEvent.UsageUpdated usage;
+	private AcpAgentEvent.UsageUpdated usage;
 
 	public ConsoleRenderer(Terminal terminal, boolean showThoughts) {
 		this.terminal = terminal;
@@ -96,35 +96,35 @@ public class ConsoleRenderer {
 	}
 
 	/** One event of a turn, as it arrives. */
-	public synchronized void render(AgentEvent event) {
+	public synchronized void render(AcpAgentEvent event) {
 		switch (event) {
-			case AgentEvent.Text text -> text(text.text());
-			case AgentEvent.Thought thought -> {
+			case AcpAgentEvent.Text text -> text(text.text());
+			case AcpAgentEvent.Thought thought -> {
 				if (showThoughts) {
 					line(styled("  · " + firstLine(thought.text()), DIM));
 				}
 			}
-			case AgentEvent.ToolCallStarted call -> {
+			case AcpAgentEvent.ToolCallStarted call -> {
 				String title = call.title() == null || call.title().isBlank() ? "tool call" : call.title().strip();
 				toolTitles.put(call.id(), title);
 				line(styled("  → " + title, DIM));
 			}
-			case AgentEvent.ToolCallUpdated update -> {
+			case AcpAgentEvent.ToolCallUpdated update -> {
 				if (update.status() == AcpSchema.ToolCallStatus.FAILED) {
 					line(styled("  ✗ " + toolTitles.getOrDefault(update.id(), "tool call") + " failed", WARNING));
 				}
 			}
-			case AgentEvent.PlanUpdated plan -> plan(plan.entries());
-			case AgentEvent.UsageUpdated update -> usage = update;
-			case AgentEvent.Completed completed -> {
+			case AcpAgentEvent.PlanUpdated plan -> plan(plan.entries());
+			case AcpAgentEvent.UsageUpdated update -> usage = update;
+			case AcpAgentEvent.Completed completed -> {
 				if (completed.reason() != null && completed.reason() != AcpSchema.StopReason.END_TURN) {
 					line(styled("  [turn ended: " + completed.reason() + "]", DIM));
 				}
 			}
-			case AgentEvent.Failed failed -> error(messageOf(failed.cause()));
-			case AgentEvent.ConfigChanged changed -> {
+			case AcpAgentEvent.Failed failed -> error(messageOf(failed.cause()));
+			case AcpAgentEvent.ConfigChanged changed -> {
 			}
-			case AgentEvent.ModeChanged mode -> line(styled("  ⋯ mode: " + mode.modeId(), DIM));
+			case AcpAgentEvent.ModeChanged mode -> line(styled("  ⋯ mode: " + mode.modeId(), DIM));
 		}
 	}
 
@@ -142,8 +142,8 @@ public class ConsoleRenderer {
 		line(styled("  [cancelled]", DIM));
 	}
 
-	public synchronized void notice(AgentNotice notice) {
-		AttributedStyle style = notice.severity() == AgentNotice.Severity.ERROR ? ERROR : WARNING;
+	public synchronized void notice(AcpAgentNotice notice) {
+		AttributedStyle style = notice.severity() == AcpAgentNotice.Severity.ERROR ? ERROR : WARNING;
 		line(styled("  ! agent: " + notice, style));
 	}
 
@@ -238,7 +238,7 @@ public class ConsoleRenderer {
 		};
 	}
 
-	static String describe(AgentEvent.UsageUpdated usage) {
+	static String describe(AcpAgentEvent.UsageUpdated usage) {
 		StringBuilder text = new StringBuilder("context ").append(tokens(usage.contextUsed()));
 		if (usage.contextSize() > 0) {
 			text.append(" / ")

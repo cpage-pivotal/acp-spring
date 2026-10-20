@@ -7,9 +7,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.config.AgentSettings;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.config.AcpAgentSettings;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,12 +48,13 @@ class RegistryLiveInstallTests {
 	@Test
 	@DisplayName("an agent from the published catalogue installs and verifies against its own sha256")
 	void installsARealAgentFromTheRealRegistry() throws Exception {
-		AgentRegistry registry = new AgentRegistry(
+		AcpAgentRegistry registry = new AcpAgentRegistry(
 				new RegistrySettings(null, temp.resolve("cache"), null, false, true, null));
 		RegistryEntry entry = registry.find(AGENT).orElseThrow();
 		assertThat(entry.distribution()).isInstanceOf(RegistryEntry.Distribution.Binary.class);
 
-		AgentRuntime runtime = new RegistryAgentRuntimeProvider(registry, new AgentInstaller(registry.settings()))
+		AcpAgentRuntime runtime = new RegistryAcpAgentRuntimeProvider(registry,
+				new AcpAgentInstaller(registry.settings()))
 			.forId(AGENT)
 			.orElseThrow();
 		Path workspace = Files.createDirectories(temp.resolve("workspace"));
@@ -63,9 +64,9 @@ class RegistryLiveInstallTests {
 		// moment an agent is needed, which is why a misconfigured one does not stop a
 		// context
 		// refreshing.
-		AgentLaunchSpec spec = runtime.launch(AgentSettings.builder(AGENT, workspace).build());
+		AcpAgentLaunchSpec spec = runtime.launch(AcpAgentSettings.builder(AGENT, workspace).build());
 
-		assertThat(spec).isInstanceOfSatisfying(AgentLaunchSpec.Stdio.class, stdio -> {
+		assertThat(spec).isInstanceOfSatisfying(AcpAgentLaunchSpec.Stdio.class, stdio -> {
 			assertThat(Path.of(stdio.command())).isRegularFile().isExecutable();
 			assertThat(stdio.args()).isNotNull();
 		});
@@ -74,10 +75,10 @@ class RegistryLiveInstallTests {
 	@Test
 	@DisplayName("a second install of the same version is a cache hit, not a second download")
 	void doesNotDownloadAnAgentItAlreadyHas() throws Exception {
-		AgentRegistry registry = new AgentRegistry(
+		AcpAgentRegistry registry = new AcpAgentRegistry(
 				new RegistrySettings(null, temp.resolve("cache"), null, false, true, null));
 		RegistryEntry entry = registry.find(AGENT).orElseThrow();
-		AgentInstaller installer = new AgentInstaller(registry.settings());
+		AcpAgentInstaller installer = new AcpAgentInstaller(registry.settings());
 		RegistryEntry.Artifact artifact = ((RegistryEntry.Distribution.Binary) entry.distribution())
 			.forPlatform(Platform.current())
 			.orElseThrow();
@@ -85,7 +86,7 @@ class RegistryLiveInstallTests {
 		Path first = installer.install(entry, artifact);
 		// A fresh installer, so the answer comes off the disk rather than out of the memo
 		// table.
-		Path second = new AgentInstaller(registry.settings()).install(entry, artifact);
+		Path second = new AcpAgentInstaller(registry.settings()).install(entry, artifact);
 
 		assertThat(second).isEqualTo(first);
 	}

@@ -13,7 +13,7 @@
 
     <artifactId>spring-ai-acp-harness-client-runtime-codex</artifactId>
     <name>Spring AI ACP Harness Client Codex Runtime</name>
-    <description>AgentRuntime adapter for the Codex ACP adapter</description>
+    <description>AcpAgentRuntime adapter for the Codex ACP adapter</description>
 
     <dependencies>
         <dependency>

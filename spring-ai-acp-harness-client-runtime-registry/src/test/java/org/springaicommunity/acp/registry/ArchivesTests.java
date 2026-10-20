@@ -29,7 +29,7 @@ class ArchivesTests {
 
 	@Test
 	void unpacksATarGz() throws Exception {
-		Path archive = AgentInstallerTests.tarGz(temp.resolve("a.tar.gz"),
+		Path archive = AcpAgentInstallerTests.tarGz(temp.resolve("a.tar.gz"),
 				Map.of("bin/agent", "hello", "README", "ignore me"));
 		Path target = Files.createDirectories(temp.resolve("out"));
 
@@ -41,7 +41,7 @@ class ArchivesTests {
 
 	@Test
 	void unpacksAZip() throws Exception {
-		Path archive = AgentInstallerTests.zip(temp.resolve("a.zip"), Map.of("agent", "hello"));
+		Path archive = AcpAgentInstallerTests.zip(temp.resolve("a.zip"), Map.of("agent", "hello"));
 		Path target = Files.createDirectories(temp.resolve("out"));
 
 		Archives.extract(archive, target, "a.zip");
@@ -82,7 +82,7 @@ class ArchivesTests {
 	@Test
 	@DisabledOnOs(OS.WINDOWS)
 	void keepsTheExecutableBitATarRecorded() throws Exception {
-		Path archive = AgentInstallerTests.tarGz(temp.resolve("a.tar.gz"), Map.of("agent", "#!/bin/sh\n"));
+		Path archive = AcpAgentInstallerTests.tarGz(temp.resolve("a.tar.gz"), Map.of("agent", "#!/bin/sh\n"));
 		Path target = Files.createDirectories(temp.resolve("out"));
 
 		Archives.extract(archive, target, "a.tar.gz");

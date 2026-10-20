@@ -9,11 +9,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.client.AgentClientFactory;
-import org.springaicommunity.acp.config.AgentSettings;
-import org.springaicommunity.acp.event.AgentEvent;
-import org.springaicommunity.acp.test.AgentProbe;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.client.AcpAgentClientFactory;
+import org.springaicommunity.acp.config.AcpAgentSettings;
+import org.springaicommunity.acp.event.AcpAgentEvent;
+import org.springaicommunity.acp.test.AcpAgentProbe;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,14 +34,14 @@ class GooseServeTests {
 	private static final Duration LIMIT = Duration.ofMinutes(3);
 
 	static boolean usable() {
-		return AgentProbe.isUsable(new GooseRuntime());
+		return AcpAgentProbe.isUsable(new GooseRuntime());
 	}
 
 	@TempDir
 	Path workspace;
 
-	private AgentSettings served() {
-		return AgentSettings.builder("goose", workspace)
+	private AcpAgentSettings served() {
+		return AcpAgentSettings.builder("goose", workspace)
 			.timeout(LIMIT)
 			.runtimeOptions(Map.of("serve", Map.of("transport", "websocket")))
 			.build();
@@ -50,25 +50,25 @@ class GooseServeTests {
 	@Test
 	@DisplayName("a served agent handshakes and runs a turn that terminates exactly once")
 	void aTurnOverWebSocket() {
-		try (AgentClient client = AgentClientFactory.create(new GooseRuntime(), served())) {
+		try (AcpAgentClient client = AcpAgentClientFactory.create(new GooseRuntime(), served())) {
 			assertThat(client.agentInfo()).get().extracting(info -> info.name()).isEqualTo("goose");
 
-			List<AgentEvent> events = client.prompt("Reply with exactly the word READY. Do not use tools.")
+			List<AcpAgentEvent> events = client.prompt("Reply with exactly the word READY. Do not use tools.")
 				.stream()
 				.events()
 				.collectList()
 				.block(LIMIT);
 
 			assertThat(events).isNotNull();
-			assertThat(events.stream().filter(AgentEvent::terminal)).hasSize(1);
-			assertThat(events.get(events.size() - 1)).isInstanceOf(AgentEvent.Completed.class);
+			assertThat(events.stream().filter(AcpAgentEvent::terminal)).hasSize(1);
+			assertThat(events.get(events.size() - 1)).isInstanceOf(AcpAgentEvent.Completed.class);
 		}
 	}
 
 	@Test
 	@DisplayName("a named session keeps context over the socket, as it does over the pipe")
 	void namedSessionsOverWebSocket() {
-		try (AgentClient client = AgentClientFactory.create(new GooseRuntime(), served())) {
+		try (AcpAgentClient client = AcpAgentClientFactory.create(new GooseRuntime(), served())) {
 			client.prompt()
 				.session("served-memory")
 				.user("Remember the number 8675309. Reply with just OK. Do not use tools.")
@@ -91,7 +91,7 @@ class GooseServeTests {
 	@Test
 	@DisplayName("closing the client stops the server it started")
 	void closingStopsTheServer() {
-		AgentClient client = AgentClientFactory.create(new GooseRuntime(), served());
+		AcpAgentClient client = AcpAgentClientFactory.create(new GooseRuntime(), served());
 		assertThat(client.isAlive()).isTrue();
 
 		client.close();

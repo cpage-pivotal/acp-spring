@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.PortableOption;
 
 /**
  * The negotiated tier's outcome for one session: one {@link OptionResolution} per

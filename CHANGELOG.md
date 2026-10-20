@@ -22,6 +22,23 @@ All notable changes to Spring AI ACP Harness Client are documented here. The pro
   (`~/.spring-ai-acp/agents`), the `.spring-ai-acp-skill` marker, and the MCP sign-in file of an
   application without a `spring.application.name`. Such an application's console does take the
   new name, for its title and for its input history, which therefore starts afresh.
+- Every type named for the agent now says **`AcpAgent`**, so that it no longer reads as one of
+  Spring AI's own agent types beside it: `AgentClient` becomes `AcpAgentClient` (and its nested
+  `AgentResponse` and `AgentStream`, `AcpAgentResponse` and `AcpAgentStream`),
+  `AgentSession`/`AgentSessions` become
+  `AcpAgentSession`/`AcpAgentSessions`, `AgentEvent` becomes `AcpAgentEvent`, and likewise
+  `AcpAgentOptions`, `AcpAgentSettings`, `AcpAgentInfo`, `AcpAgentNotice`, `AcpAgentExecutor`,
+  `AcpAgentClientException`, `UnsupportedAcpAgentOperationException` and
+  `UnsupportedAcpAgentOptionException`. The adapter SPI follows (`AcpAgentRuntime`,
+  `AcpAgentRuntimeProvider`, `AcpAgentLaunchSpec`, `AcpAgentEnvironment`), as does the test kit
+  (`AcpAgentRuntimeContract`, `AcpAgentProbe`, `ScriptedAcpAgent`, `LiveAcpAgents`) and every
+  internal type. The rule is mechanical, so replacing each `\bAgent…\b` type name with its
+  `AcpAgent…` spelling migrates an application; packages, bean names, configuration properties
+  and `agents.yaml` are unchanged. Two exceptions: the transport for a supervised served agent,
+  `WebSocketAgentTransport`, becomes `SupervisedWebSocketTransport`, since the SDK's
+  `*AcpAgentTransport` names are for the agent's side of the connection; and `AcpAgentSession`
+  shares its simple name with the SDK's agent-side `com.agentclientprotocol.sdk.agent.AcpAgentSession`,
+  a class an application using this library has no reason to import.
 
 ### Fixed
 

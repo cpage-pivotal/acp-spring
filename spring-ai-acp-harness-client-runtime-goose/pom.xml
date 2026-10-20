@@ -13,7 +13,7 @@
 
     <artifactId>spring-ai-acp-harness-client-runtime-goose</artifactId>
     <name>Spring AI ACP Harness Client Goose Runtime</name>
-    <description>AgentRuntime adapter for Goose (stdio and WebSocket)</description>
+    <description>AcpAgentRuntime adapter for Goose (stdio and WebSocket)</description>
 
     <dependencies>
         <dependency>

@@ -18,7 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.mcp.McpAccess;
 import org.springaicommunity.acp.mcp.McpCredentialsProvider;
@@ -93,7 +93,7 @@ class DiscoverProbeFilterTests {
 	@Test
 	void isOffUnlessTheApplicationAsksForIt() {
 		GooseRuntime goose = new GooseRuntime();
-		AgentSettings.Builder settings = AgentSettings.builder("goose", workspace);
+		AcpAgentSettings.Builder settings = AcpAgentSettings.builder("goose", workspace);
 
 		assertThat(goose.mcpRequestFilters(settings.build())).isEmpty();
 		assertThat(goose.mcpRequestFilters(settings.runtimeOptions(Map.of("mcp.answer-discover", "false")).build()))

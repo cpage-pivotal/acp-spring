@@ -5,11 +5,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springaicommunity.acp.registry.AgentInstaller;
-import org.springaicommunity.acp.registry.AgentRegistry;
-import org.springaicommunity.acp.registry.RegistryAgentRuntimeProvider;
+import org.springaicommunity.acp.registry.AcpAgentInstaller;
+import org.springaicommunity.acp.registry.AcpAgentRegistry;
+import org.springaicommunity.acp.registry.RegistryAcpAgentRuntimeProvider;
 import org.springaicommunity.acp.registry.RegistrySettings;
-import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
+import org.springaicommunity.acp.runtime.AcpAgentRuntimeProvider;
 
 /**
  * Registers the registry-driven runtime, when
@@ -24,12 +24,12 @@ import org.springaicommunity.acp.runtime.AgentRuntimeProvider;
  * condition here has to hold when the class is genuinely missing.
  *
  * <p>
- * Nothing is fetched at refresh. {@link AgentRegistry} reads its snapshot the first time
- * an id is looked up, and {@link AgentInstaller} downloads the first time a runtime is
- * launched.
+ * Nothing is fetched at refresh. {@link AcpAgentRegistry} reads its snapshot the first
+ * time an id is looked up, and {@link AcpAgentInstaller} downloads the first time a
+ * runtime is launched.
  */
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnClass(AgentRegistry.class)
+@ConditionalOnClass(AcpAgentRegistry.class)
 @ConditionalOnProperty(prefix = "spring.acp.registry", name = "enabled", matchIfMissing = true)
 class AcpRegistryConfiguration {
 
@@ -43,20 +43,20 @@ class AcpRegistryConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean
-	AgentRegistry acpAgentRegistry(RegistrySettings settings) {
-		return new AgentRegistry(settings);
+	AcpAgentRegistry acpAgentRegistry(RegistrySettings settings) {
+		return new AcpAgentRegistry(settings);
 	}
 
 	@Bean
 	@ConditionalOnMissingBean
-	AgentInstaller acpAgentInstaller(RegistrySettings settings) {
-		return new AgentInstaller(settings);
+	AcpAgentInstaller acpAgentInstaller(RegistrySettings settings) {
+		return new AcpAgentInstaller(settings);
 	}
 
 	@Bean
 	@ConditionalOnMissingBean(name = "registryAgentRuntimeProvider")
-	AgentRuntimeProvider registryAgentRuntimeProvider(AgentRegistry registry, AgentInstaller installer) {
-		return new RegistryAgentRuntimeProvider(registry, installer);
+	AcpAgentRuntimeProvider registryAgentRuntimeProvider(AcpAgentRegistry registry, AcpAgentInstaller installer) {
+		return new RegistryAcpAgentRuntimeProvider(registry, installer);
 	}
 
 }

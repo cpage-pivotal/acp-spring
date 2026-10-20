@@ -10,10 +10,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springaicommunity.acp.config.OptionResolution.Mechanism;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
-import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
-import org.springaicommunity.acp.session.AgentSession;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.PortableOption;
+import org.springaicommunity.acp.session.AcpAgentSession;
 import org.springaicommunity.acp.session.SessionRegistry;
 
 import com.agentclientprotocol.sdk.capabilities.NegotiatedCapabilities;
@@ -40,14 +40,14 @@ class ConfigResolverTests {
 
 	private final AcpAsyncClient client = mock(AcpAsyncClient.class);
 
-	private final AgentSession session = new SessionRegistry().resolve("s", name -> "sid-1");
+	private final AcpAgentSession session = new SessionRegistry().resolve("s", name -> "sid-1");
 
-	private AgentSettings settings() {
-		return AgentSettings.builder("fake", workspace).build();
+	private AcpAgentSettings settings() {
+		return AcpAgentSettings.builder("fake", workspace).build();
 	}
 
-	private AgentSettings settings(java.util.function.Consumer<AgentSettings.Builder> customizer) {
-		AgentSettings.Builder builder = AgentSettings.builder("fake", workspace);
+	private AcpAgentSettings settings(java.util.function.Consumer<AcpAgentSettings.Builder> customizer) {
+		AcpAgentSettings.Builder builder = AcpAgentSettings.builder("fake", workspace);
 		customizer.accept(builder);
 		return builder.build();
 	}
@@ -61,11 +61,11 @@ class ConfigResolverTests {
 			.thenReturn(Mono.just(new AcpSchema.SetSessionConfigOptionResponse(List.of())));
 	}
 
-	private SessionConfiguration resolve(AgentRuntime runtime, AgentSettings settings) {
+	private SessionConfiguration resolve(AcpAgentRuntime runtime, AcpAgentSettings settings) {
 		return resolve(runtime, settings, ModelCatalog.none());
 	}
 
-	private SessionConfiguration resolve(AgentRuntime runtime, AgentSettings settings, ModelCatalog catalog) {
+	private SessionConfiguration resolve(AcpAgentRuntime runtime, AcpAgentSettings settings, ModelCatalog catalog) {
 		return new ConfigResolver(runtime, settings.onUnsupported(), catalog).apply(client, session, settings)
 			.block(Duration.ofSeconds(5));
 	}
@@ -112,7 +112,7 @@ class ConfigResolverTests {
 				select("collaboration_mode", "collaboration_mode", "default", "default", "plan"));
 		acceptsConfigOption();
 
-		AgentRuntime codexLike = new FakeRuntime() {
+		AcpAgentRuntime codexLike = new FakeRuntime() {
 			@Override
 			public List<String> configIdsFor(PortableOption option) {
 				return option == PortableOption.MODE ? List.of("mode", "collaboration_mode")
@@ -196,9 +196,9 @@ class ConfigResolverTests {
 
 	@Test
 	void anAdapterThatCarriedTheOptionAtLaunchIsNotReportedUnsupported() {
-		AgentRuntime envMapping = new FakeRuntime() {
+		AcpAgentRuntime envMapping = new FakeRuntime() {
 			@Override
-			public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+			public boolean appliedOutOfBand(PortableOption option, AcpAgentSettings settings) {
 				return option == PortableOption.PROVIDER;
 			}
 		};
@@ -214,9 +214,10 @@ class ConfigResolverTests {
 
 	@Test
 	void onUnsupportedFailThrows() {
-		AgentSettings strict = settings(b -> b.model("nope").onUnsupported(OnUnsupported.FAIL));
+		AcpAgentSettings strict = settings(b -> b.model("nope").onUnsupported(OnUnsupported.FAIL));
 
-		assertThatThrownBy(() -> resolve(new FakeRuntime(), strict)).isInstanceOf(UnsupportedAgentOptionException.class)
+		assertThatThrownBy(() -> resolve(new FakeRuntime(), strict))
+			.isInstanceOf(UnsupportedAcpAgentOptionException.class)
 			.hasMessageContaining("model='nope'");
 	}
 
@@ -260,9 +261,9 @@ class ConfigResolverTests {
 		when(client.getAgentCapabilities()).thenReturn(NegotiatedCapabilities.fromAgent(
 				new AcpSchema.AgentCapabilities(false, null, null, null, new AcpSchema.ProvidersCapabilities(), null)));
 		when(client.setProvider(any())).thenReturn(Mono.error(new IllegalStateException("Invalid params")));
-		AgentRuntime carriedAtLaunch = new FakeRuntime() {
+		AcpAgentRuntime carriedAtLaunch = new FakeRuntime() {
 			@Override
-			public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+			public boolean appliedOutOfBand(PortableOption option, AcpAgentSettings settings) {
 				return option == PortableOption.PROVIDER;
 			}
 		};
@@ -344,10 +345,11 @@ class ConfigResolverTests {
 	void anEndpointThatRefusesAModelStillFailsUnderOnUnsupportedFail() {
 		advertise(select("provider", "provider", "acme", "acme"), select("model", "model", "gpt-4o", "gpt-4o"));
 		acceptsConfigOption();
-		AgentSettings strict = settings(b -> b.provider(byo()).model("acme/llm-2").onUnsupported(OnUnsupported.FAIL));
+		AcpAgentSettings strict = settings(
+				b -> b.provider(byo()).model("acme/llm-2").onUnsupported(OnUnsupported.FAIL));
 
 		assertThatThrownBy(() -> resolve(new FakeRuntime(), strict, serving("acme/llm-1")))
-			.isInstanceOf(UnsupportedAgentOptionException.class)
+			.isInstanceOf(UnsupportedAcpAgentOptionException.class)
 			.hasMessageContaining("acme/llm-1");
 	}
 
@@ -383,7 +385,7 @@ class ConfigResolverTests {
 	 * A runtime with no vendor behavior at all, so each test adds only the one thing it
 	 * is about.
 	 */
-	private static class FakeRuntime implements AgentRuntime {
+	private static class FakeRuntime implements AcpAgentRuntime {
 
 		@Override
 		public String id() {
@@ -391,8 +393,8 @@ class ConfigResolverTests {
 		}
 
 		@Override
-		public AgentLaunchSpec launch(AgentSettings settings) {
-			return new AgentLaunchSpec.Stdio("true", List.of(), Map.of());
+		public AcpAgentLaunchSpec launch(AcpAgentSettings settings) {
+			return new AcpAgentLaunchSpec.Stdio("true", List.of(), Map.of());
 		}
 
 	}

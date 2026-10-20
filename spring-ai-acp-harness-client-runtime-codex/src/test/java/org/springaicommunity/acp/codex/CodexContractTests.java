@@ -1,9 +1,9 @@
 package org.springaicommunity.acp.codex;
 
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.springaicommunity.acp.runtime.AgentRuntime;
-import org.springaicommunity.acp.test.AgentProbe;
-import org.springaicommunity.acp.test.AgentRuntimeContract;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
+import org.springaicommunity.acp.test.AcpAgentProbe;
+import org.springaicommunity.acp.test.AcpAgentRuntimeContract;
 
 /**
  * The portable contract, against the real Codex ACP adapter.
@@ -13,14 +13,14 @@ import org.springaicommunity.acp.test.AgentRuntimeContract;
  * first run downloads the package, which is why the probe's timeout is generous.
  */
 @EnabledIf("usable")
-class CodexContractTests extends AgentRuntimeContract {
+class CodexContractTests extends AcpAgentRuntimeContract {
 
 	static boolean usable() {
-		return AgentProbe.isUsable(new CodexRuntime());
+		return AcpAgentProbe.isUsable(new CodexRuntime());
 	}
 
 	@Override
-	protected AgentRuntime runtime() {
+	protected AcpAgentRuntime runtime() {
 		return new CodexRuntime();
 	}
 

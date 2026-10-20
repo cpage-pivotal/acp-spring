@@ -28,7 +28,7 @@ public enum AcpObservationDocumentation implements ObservationDocumentation {
 	TURN {
 		@Override
 		public Class<? extends ObservationConvention<? extends Observation.Context>> getDefaultConvention() {
-			return DefaultAgentTurnObservationConvention.class;
+			return DefaultAcpAgentTurnObservationConvention.class;
 		}
 
 		@Override

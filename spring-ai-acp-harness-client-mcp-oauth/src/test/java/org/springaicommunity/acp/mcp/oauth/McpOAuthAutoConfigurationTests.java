@@ -19,11 +19,11 @@ import org.springframework.security.oauth2.client.JdbcOAuth2AuthorizedClientServ
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springaicommunity.acp.boot.AcpAutoConfiguration;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.mcp.McpCredentialsProvider;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 import org.springaicommunity.acp.session.SessionPrincipalResolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +36,7 @@ class McpOAuthAutoConfigurationTests {
 	private ApplicationContextRunner runner() {
 		return new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(AcpAutoConfiguration.class, McpOAuthAutoConfiguration.class))
-			.withUserConfiguration(NoAgent.class)
+			.withUserConfiguration(NoAcpAgent.class)
 			.withPropertyValues("spring.acp.runtime=test", "spring.acp.workspace=" + workspace);
 	}
 
@@ -53,7 +53,7 @@ class McpOAuthAutoConfigurationTests {
 				assertThat(context).hasNotFailed();
 				assertThat(context).doesNotHaveBean(McpCredentialsProvider.class);
 				assertThat(context).doesNotHaveBean(ClientRegistrationRepository.class);
-				assertThat(context.getBean(AgentSettings.class).mcp().credentials())
+				assertThat(context.getBean(AcpAgentSettings.class).mcp().credentials())
 					.isSameAs(McpCredentialsProvider.none());
 			});
 	}
@@ -61,7 +61,7 @@ class McpOAuthAutoConfigurationTests {
 	@Test
 	void wiresTheProviderResolverAndSpringSecurityBeansForAnOAuthServer() {
 		runner().withPropertyValues(OAUTH_SERVER).run(context -> {
-			AgentSettings settings = context.getBean(AgentSettings.class);
+			AcpAgentSettings settings = context.getBean(AcpAgentSettings.class);
 			assertThat(settings.mcp().credentials()).isInstanceOf(OAuth2McpCredentialsProvider.class);
 			assertThat(settings.mcp().principals()).isInstanceOf(SecurityContextPrincipalResolver.class);
 			assertThat(context.getBean(OAuth2McpCredentialsProvider.class).serverNames()).containsExactly("finops-mcp");
@@ -119,7 +119,7 @@ class McpOAuthAutoConfigurationTests {
 		SessionPrincipalResolver own = SessionPrincipalResolver.none();
 		runner().withPropertyValues(OAUTH_SERVER)
 			.withBean(SessionPrincipalResolver.class, () -> own)
-			.run(context -> assertThat(context.getBean(AgentSettings.class).mcp().principals()).isSameAs(own));
+			.run(context -> assertThat(context.getBean(AcpAgentSettings.class).mcp().principals()).isSameAs(own));
 	}
 
 	@Test
@@ -132,7 +132,7 @@ class McpOAuthAutoConfigurationTests {
 				assertThat(context.getBean(McpSignIn.class)).isInstanceOf(LoopbackSignIn.class);
 				assertThat(context.getBean(McpClientRegistrationRepository.class))
 					.isSameAs(context.getBean(FileMcpOAuthStore.class).registrations());
-				assertThat(context.getBean(AgentSettings.class).mcp().principals())
+				assertThat(context.getBean(AcpAgentSettings.class).mcp().principals())
 					.isInstanceOf(LocalPrincipalResolver.class);
 			});
 	}
@@ -148,26 +148,26 @@ class McpOAuthAutoConfigurationTests {
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	static class NoAgent {
+	static class NoAcpAgent {
 
 		@Bean
-		AgentRuntime testRuntime() {
-			return new AgentRuntime() {
+		AcpAgentRuntime testRuntime() {
+			return new AcpAgentRuntime() {
 				@Override
 				public String id() {
 					return "test";
 				}
 
 				@Override
-				public AgentLaunchSpec launch(AgentSettings settings) {
+				public AcpAgentLaunchSpec launch(AcpAgentSettings settings) {
 					throw new UnsupportedOperationException("no agent in this test");
 				}
 			};
 		}
 
 		@Bean
-		AgentClient acpAgentClient() {
-			return org.mockito.Mockito.mock(AgentClient.class);
+		AcpAgentClient acpAgentClient() {
+			return org.mockito.Mockito.mock(AcpAgentClient.class);
 		}
 
 	}

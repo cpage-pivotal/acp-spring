@@ -11,12 +11,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springaicommunity.acp.client.AgentClient;
+import org.springaicommunity.acp.client.AcpAgentClient;
 import org.springaicommunity.acp.config.SessionConfiguration;
-import org.springaicommunity.acp.event.AgentEvent;
-import org.springaicommunity.acp.runtime.AgentNotice;
-import org.springaicommunity.acp.session.AgentSession;
-import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.event.AcpAgentEvent;
+import org.springaicommunity.acp.runtime.AcpAgentNotice;
+import org.springaicommunity.acp.session.AcpAgentSession;
+import org.springaicommunity.acp.session.AcpAgentSessions;
 import org.springaicommunity.acp.session.StoredSession;
 
 import com.agentclientprotocol.sdk.spec.AcpSchema;
@@ -40,19 +40,19 @@ class ConsoleChatTests {
 	@TempDir
 	Path temp;
 
-	private final AgentClient agent = mock(AgentClient.class);
+	private final AcpAgentClient agent = mock(AcpAgentClient.class);
 
-	private final AgentClient.PromptSpec prompt = mock(AgentClient.PromptSpec.class, RETURNS_SELF);
+	private final AcpAgentClient.PromptSpec prompt = mock(AcpAgentClient.PromptSpec.class, RETURNS_SELF);
 
-	private final AgentClient.AgentStream stream = mock(AgentClient.AgentStream.class);
+	private final AcpAgentClient.AcpAgentStream stream = mock(AcpAgentClient.AcpAgentStream.class);
 
-	private final AgentSessions sessions = mock(AgentSessions.class);
+	private final AcpAgentSessions sessions = mock(AcpAgentSessions.class);
 
 	private final AtomicBoolean exited = new AtomicBoolean();
 
 	@BeforeEach
 	void stubTheAgent() {
-		AgentSession session = mock(AgentSession.class);
+		AcpAgentSession session = mock(AcpAgentSession.class);
 		when(session.configuration()).thenReturn(SessionConfiguration.empty());
 		when(agent.runtimeId()).thenReturn("scripted");
 		when(agent.openSession(anyString())).thenReturn(session);
@@ -60,15 +60,15 @@ class ConsoleChatTests {
 		when(agent.notices()).thenReturn(List.of());
 		when(agent.prompt()).thenReturn(prompt);
 		when(prompt.stream()).thenReturn(stream);
-		when(stream.events()).thenReturn(Flux.just(new AgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
+		when(stream.events()).thenReturn(Flux.just(new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
 	}
 
 	@Test
 	void streamsATurnInTheConfiguredSessionAndLeavesOnExit() {
-		when(stream.events())
-			.thenReturn(Flux.just(new AgentEvent.ToolCallStarted("1", "Read the cost report", AcpSchema.ToolKind.READ),
-					new AgentEvent.Text("Spend is "), new AgentEvent.Text("up 4%."),
-					new AgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
+		when(stream.events()).thenReturn(
+				Flux.just(new AcpAgentEvent.ToolCallStarted("1", "Read the cost report", AcpSchema.ToolKind.READ),
+						new AcpAgentEvent.Text("Spend is "), new AcpAgentEvent.Text("up 4%."),
+						new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("what changed?\n/exit\n");
 
 		chat(terminal, "Meridian", "Ask about costs.").run();
@@ -101,9 +101,9 @@ class ConsoleChatTests {
 
 	@Test
 	void aFailedToolCallIsReportedByItsTitle() {
-		when(stream.events()).thenReturn(Flux.just(new AgentEvent.ToolCallStarted("t1", "Query FinOps", null),
-				new AgentEvent.ToolCallUpdated("t1", AcpSchema.ToolCallStatus.FAILED, List.of()),
-				new AgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
+		when(stream.events()).thenReturn(Flux.just(new AcpAgentEvent.ToolCallStarted("t1", "Query FinOps", null),
+				new AcpAgentEvent.ToolCallUpdated("t1", AcpSchema.ToolCallStatus.FAILED, List.of()),
+				new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("go\n");
 
 		chat(terminal).run();
@@ -113,9 +113,10 @@ class ConsoleChatTests {
 
 	@Test
 	void aTurnThatFailsIsReportedAndTheConversationCarriesOn() {
-		when(stream.events()).thenReturn(Flux.just(new AgentEvent.Failed(new IllegalStateException("agent went away"))))
-			.thenReturn(
-					Flux.just(new AgentEvent.Text("back"), new AgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
+		when(stream.events())
+			.thenReturn(Flux.just(new AcpAgentEvent.Failed(new IllegalStateException("agent went away"))))
+			.thenReturn(Flux.just(new AcpAgentEvent.Text("back"),
+					new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("one\ntwo\n");
 
 		chat(terminal).run();
@@ -137,7 +138,7 @@ class ConsoleChatTests {
 	void cancellingDisposesTheTurnInFlight() throws Exception {
 		CountDownLatch subscribed = new CountDownLatch(1);
 		AtomicBoolean cancelled = new AtomicBoolean();
-		when(stream.events()).thenReturn(Flux.<AgentEvent>never()
+		when(stream.events()).thenReturn(Flux.<AcpAgentEvent>never()
 			.doOnSubscribe(s -> subscribed.countDown())
 			.doOnCancel(() -> cancelled.set(true)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("take your time\n");
@@ -160,8 +161,9 @@ class ConsoleChatTests {
 		// narrowest window a Ctrl-C can land in, and one a slow machine widens.
 		AtomicReference<ConsoleChat> chat = new AtomicReference<>();
 		AtomicBoolean cancelled = new AtomicBoolean();
-		when(stream.events()).thenReturn(
-				Flux.<AgentEvent>never().doOnSubscribe(s -> chat.get().cancel()).doOnCancel(() -> cancelled.set(true)));
+		when(stream.events()).thenReturn(Flux.<AcpAgentEvent>never()
+			.doOnSubscribe(s -> chat.get().cancel())
+			.doOnCancel(() -> cancelled.set(true)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("take your time\n");
 		chat.set(chat(terminal));
 
@@ -176,7 +178,7 @@ class ConsoleChatTests {
 
 	@Test
 	void newStartsAFreshNamedSessionAndClosesTheOldOneWhereTheAgentCan() {
-		when(sessions.supports(AgentSessions.Operation.CLOSE)).thenReturn(true);
+		when(sessions.supports(AcpAgentSessions.Operation.CLOSE)).thenReturn(true);
 		TestTerminals.Scripted terminal = TestTerminals.typing("/new\nhello again\n");
 
 		ConsoleChat chat = chat(terminal);
@@ -199,7 +201,7 @@ class ConsoleChatTests {
 
 	@Test
 	void sessionsListsWhatTheAgentStored() {
-		when(sessions.supports(AgentSessions.Operation.LIST)).thenReturn(true);
+		when(sessions.supports(AcpAgentSessions.Operation.LIST)).thenReturn(true);
 		when(sessions.list()).thenReturn(List.of(new StoredSession("sess-42", temp, "Q3 capacity review", null)));
 		when(agent.session("console")).thenReturn(Optional.empty());
 		TestTerminals.Scripted terminal = TestTerminals.typing("/sessions\n");
@@ -211,7 +213,7 @@ class ConsoleChatTests {
 
 	@Test
 	void resumeLoadsWhenTheAgentCannotResume() {
-		when(sessions.supports(AgentSessions.Operation.LOAD)).thenReturn(true);
+		when(sessions.supports(AcpAgentSessions.Operation.LOAD)).thenReturn(true);
 		TestTerminals.Scripted terminal = TestTerminals.typing("/resume sess-42\nwhere were we?\n");
 
 		chat(terminal).run();
@@ -242,7 +244,7 @@ class ConsoleChatTests {
 
 	@Test
 	void eachNoticeFromTheAgentIsShownOnce() {
-		when(agent.notices()).thenReturn(List.of(AgentNotice.error("finops-mcp", "could not connect")));
+		when(agent.notices()).thenReturn(List.of(AcpAgentNotice.error("finops-mcp", "could not connect")));
 		TestTerminals.Scripted terminal = TestTerminals.typing("one\ntwo\n");
 
 		chat(terminal).run();
@@ -254,9 +256,9 @@ class ConsoleChatTests {
 
 	@Test
 	void usageIsSummarisedOnceWhenTheTurnEnds() {
-		when(stream.events()).thenReturn(Flux.just(new AgentEvent.UsageUpdated(1000, 200_000, null, null),
-				new AgentEvent.UsageUpdated(12_345, 200_000, 0.0123, "USD"), new AgentEvent.Text("done"),
-				new AgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
+		when(stream.events()).thenReturn(Flux.just(new AcpAgentEvent.UsageUpdated(1000, 200_000, null, null),
+				new AcpAgentEvent.UsageUpdated(12_345, 200_000, 0.0123, "USD"), new AcpAgentEvent.Text("done"),
+				new AcpAgentEvent.Completed(AcpSchema.StopReason.END_TURN)));
 		TestTerminals.Scripted terminal = TestTerminals.typing("go\n");
 
 		chat(terminal).run();

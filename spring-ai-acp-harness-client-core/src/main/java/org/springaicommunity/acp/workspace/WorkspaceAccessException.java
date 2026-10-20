@@ -1,6 +1,6 @@
 package org.springaicommunity.acp.workspace;
 
-import org.springaicommunity.acp.client.AgentClientException;
+import org.springaicommunity.acp.client.AcpAgentClientException;
 
 /**
  * An agent asked this client to touch something outside the workspace, or something it
@@ -13,7 +13,7 @@ import org.springaicommunity.acp.client.AgentClientException;
  * message names the path it asked for and never the path it resolved to — a jail that
  * reports where the boundary is has told an agent how to probe it.
  */
-public class WorkspaceAccessException extends AgentClientException {
+public class WorkspaceAccessException extends AcpAgentClientException {
 
 	public WorkspaceAccessException(String message) {
 		super(message);

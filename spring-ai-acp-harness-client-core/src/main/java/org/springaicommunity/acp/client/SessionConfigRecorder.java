@@ -41,9 +41,9 @@ import reactor.core.publisher.Mono;
  * {@code LoadSessionResponse} and {@code ResumeSessionResponse} have the same gap and one
  * extra difficulty: neither response carries the session id, so there is nothing to key
  * the options on. Those are stashed unattributed and claimed by the caller that just made
- * the call, which is only sound because {@code AgentSessions} serializes load and resume.
- * Best effort by construction — an agent that returns no options there costs a fallback
- * to {@code modes}/{@code models}, not a failure.
+ * the call, which is only sound because {@code AcpAgentSessions} serializes load and
+ * resume. Best effort by construction — an agent that returns no options there costs a
+ * fallback to {@code modes}/{@code models}, not a failure.
  *
  * <p>
  * Delete this when {@code NewSessionResponse} models the field. The only things outside

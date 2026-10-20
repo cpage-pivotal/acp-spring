@@ -7,9 +7,9 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.event.AgentEvent;
-import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.event.AcpAgentEvent;
+import org.springaicommunity.acp.session.AcpAgentSessions;
 
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -17,7 +17,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * Everything an application needs to talk to an ACP agent: a dependency, a property, and
- * an injected {@link AgentClient}.
+ * an injected {@link AcpAgentClient}.
  *
  * <p>
  * Nothing in this file names an agent. Goose, Codex and OpenCode are all on the
@@ -50,7 +50,7 @@ public class SmokeApplication {
 	}
 
 	@Bean
-	ApplicationRunner demo(AgentClient agent, ChatModel chatModel, MeterRegistry meters) {
+	ApplicationRunner demo(AcpAgentClient agent, ChatModel chatModel, MeterRegistry meters) {
 		return args -> {
 			logger.info("Runtime: {}", agent.runtimeId());
 
@@ -71,7 +71,7 @@ public class SmokeApplication {
 			// that cares
 			// asks rather than finding out from an error.
 			agent.agentInfo().ifPresent(info -> logger.info("Agent: {}", info));
-			for (AgentSessions.Operation operation : AgentSessions.Operation.values()) {
+			for (AcpAgentSessions.Operation operation : AcpAgentSessions.Operation.values()) {
 				logger.info("Supports {}: {}", operation.method(), agent.sessions().supports(operation));
 			}
 
@@ -84,7 +84,7 @@ public class SmokeApplication {
 				.stream()
 				.events()
 				.doOnNext(event -> {
-					if (event instanceof AgentEvent.Text text) {
+					if (event instanceof AcpAgentEvent.Text text) {
 						logger.info("Streamed: {}", text.text().strip());
 					}
 					else if (event.terminal()) {

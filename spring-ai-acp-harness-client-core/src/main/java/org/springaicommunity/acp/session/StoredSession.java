@@ -12,10 +12,10 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * A conversation the agent has kept, as reported by {@code session/list}.
  *
  * <p>
- * Not an {@link AgentSession}: this one is not open, has no turn permit and belongs to
- * the agent rather than to this client. It becomes an {@code AgentSession} only by being
- * loaded or resumed, which is the distinction {@link AgentSessions} exists to make
- * explicit.
+ * Not an {@link AcpAgentSession}: this one is not open, has no turn permit and belongs to
+ * the agent rather than to this client. It becomes an {@code AcpAgentSession} only by
+ * being loaded or resumed, which is the distinction {@link AcpAgentSessions} exists to
+ * make explicit.
  */
 public record StoredSession(String sessionId, Path cwd, String title, Instant updatedAt) {
 

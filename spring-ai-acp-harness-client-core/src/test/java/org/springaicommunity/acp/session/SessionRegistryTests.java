@@ -19,7 +19,7 @@ class SessionRegistryTests {
 	void createsASessionOnceAndReusesItAfterwards() {
 		AtomicInteger created = new AtomicInteger();
 		registry.resolve("review", name -> "sid-" + created.incrementAndGet());
-		AgentSession second = registry.resolve("review", name -> "sid-" + created.incrementAndGet());
+		AcpAgentSession second = registry.resolve("review", name -> "sid-" + created.incrementAndGet());
 
 		assertThat(created).hasValue(1);
 		assertThat(second.sessionId()).isEqualTo("sid-1");
@@ -64,11 +64,11 @@ class SessionRegistryTests {
 
 	@Test
 	void evictsIdleSessionsButNotOnesMidTurn() throws Exception {
-		AgentSession idle = registry.resolve("idle", name -> "sid-idle");
-		AgentSession busy = registry.resolve("busy", name -> "sid-busy");
+		AcpAgentSession idle = registry.resolve("idle", name -> "sid-idle");
+		AcpAgentSession busy = registry.resolve("busy", name -> "sid-busy");
 		assertThat(busy.tryBeginTurn(Duration.ofSeconds(1))).isTrue();
 
-		List<AgentSession> evicted = registry.evictIdle(Duration.ZERO);
+		List<AcpAgentSession> evicted = registry.evictIdle(Duration.ZERO);
 
 		assertThat(evicted).containsExactly(idle);
 		assertThat(registry.knows("busy")).isTrue();
@@ -76,7 +76,7 @@ class SessionRegistryTests {
 
 	@Test
 	void aTurnPermitAdmitsOneCallerAtATime() throws Exception {
-		AgentSession session = registry.resolve("one", name -> "sid");
+		AcpAgentSession session = registry.resolve("one", name -> "sid");
 
 		assertThat(session.tryBeginTurn(Duration.ofMillis(50))).isTrue();
 		assertThat(session.tryBeginTurn(Duration.ofMillis(50))).isFalse();
@@ -87,7 +87,7 @@ class SessionRegistryTests {
 
 	@Test
 	void endingATurnTwiceDoesNotHandOutTwoPermits() throws Exception {
-		AgentSession session = registry.resolve("one", name -> "sid");
+		AcpAgentSession session = registry.resolve("one", name -> "sid");
 		assertThat(session.tryBeginTurn(Duration.ofMillis(50))).isTrue();
 
 		session.endTurn();
@@ -111,7 +111,7 @@ class SessionRegistryTests {
 			.hasMessageContaining("sid-1")
 			.hasMessageContaining("sid-2");
 
-		assertThat(registry.find("review")).get().extracting(AgentSession::sessionId).isEqualTo("sid-1");
+		assertThat(registry.find("review")).get().extracting(AcpAgentSession::sessionId).isEqualTo("sid-1");
 	}
 
 	@Test

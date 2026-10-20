@@ -20,9 +20,9 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.event.AgentEvent;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.event.AcpAgentEvent;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 
 import reactor.core.publisher.Flux;
 
@@ -75,25 +75,25 @@ import reactor.core.publisher.Flux;
  * Tool calling is the same story from the other side. The agent has its own tools and
  * runs them itself; {@code ToolCallbacks} registered on the Spring AI side are not
  * visible to it. Tool activity surfaces as {@code ToolCallStarted} and
- * {@code ToolCallUpdated} on the native {@link AgentClient} API, which is where an
+ * {@code ToolCallUpdated} on the native {@link AcpAgentClient} API, which is where an
  * application that cares about it should be.
  */
 public class AcpChatModel implements ChatModel {
 
 	private static final Logger logger = LoggerFactory.getLogger(AcpChatModel.class);
 
-	private final AgentClient client;
+	private final AcpAgentClient client;
 
 	private final AcpChatOptions defaultOptions;
 
 	/** So an ignored option is named once per model, not once per call. */
 	private final Set<String> reportedUnsupported = ConcurrentHashMap.newKeySet();
 
-	public AcpChatModel(AgentClient client) {
+	public AcpChatModel(AcpAgentClient client) {
 		this(client, AcpChatOptions.builder().build());
 	}
 
-	public AcpChatModel(AgentClient client, AcpChatOptions defaultOptions) {
+	public AcpChatModel(AcpAgentClient client, AcpChatOptions defaultOptions) {
 		this.client = client;
 		this.defaultOptions = defaultOptions == null ? AcpChatOptions.builder().build() : defaultOptions;
 	}
@@ -106,7 +106,7 @@ public class AcpChatModel implements ChatModel {
 	@Override
 	public ChatResponse call(Prompt prompt) {
 		AcpChatOptions options = options(prompt);
-		AgentClient.AgentResponse response = spec(prompt, options).call();
+		AcpAgentClient.AcpAgentResponse response = spec(prompt, options).call();
 		return new ChatResponse(
 				List.of(new Generation(new AssistantMessage(response.content()),
 						ChatGenerationMetadata.builder().finishReason(finishReason(response.completion())).build())),
@@ -118,18 +118,19 @@ public class AcpChatModel implements ChatModel {
 		AcpChatOptions options = options(prompt);
 		return Flux.defer(() -> {
 			// The last usage the agent reported, so the terminal chunk can carry it.
-			AtomicReference<AgentEvent.UsageUpdated> usage = new AtomicReference<>();
+			AtomicReference<AcpAgentEvent.UsageUpdated> usage = new AtomicReference<>();
 			return spec(prompt, options).stream().events().handle((event, sink) -> {
 				switch (event) {
-					case AgentEvent.Text text -> sink.next(chunk(text.text(), null, options, usage.get()));
-					case AgentEvent.UsageUpdated updated -> usage.set(updated);
-					case AgentEvent.Completed completed ->
+					case AcpAgentEvent.Text text -> sink.next(chunk(text.text(), null, options, usage.get()));
+					case AcpAgentEvent.UsageUpdated updated -> usage.set(updated);
+					case AcpAgentEvent.Completed completed ->
 						sink.next(chunk("", finishReason(completed), options, usage.get()));
-					case AgentEvent.Failed failed -> sink.error(failed.cause());
+					case AcpAgentEvent.Failed failed -> sink.error(failed.cause());
 					default -> {
 						// Thoughts, tool calls and plans are agent activity, not
 						// assistant output.
-						// They are on the AgentClient API, which is where an application
+						// They are on the AcpAgentClient API, which is where an
+						// application
 						// that wants
 						// them should be looking.
 					}
@@ -139,17 +140,17 @@ public class AcpChatModel implements ChatModel {
 	}
 
 	private ChatResponse chunk(String text, String finishReason, AcpChatOptions options,
-			AgentEvent.UsageUpdated usage) {
+			AcpAgentEvent.UsageUpdated usage) {
 		ChatGenerationMetadata generationMetadata = finishReason == null ? ChatGenerationMetadata.NULL
 				: ChatGenerationMetadata.builder().finishReason(finishReason).build();
 		return new ChatResponse(List.of(new Generation(new AssistantMessage(text), generationMetadata)),
 				metadata(options, usage));
 	}
 
-	private AgentClient.PromptSpec spec(Prompt prompt, AcpChatOptions options) {
+	private AcpAgentClient.PromptSpec spec(Prompt prompt, AcpChatOptions options) {
 		reportUnsupported(prompt.getOptions());
 
-		AgentClient.PromptSpec spec = client.prompt();
+		AcpAgentClient.PromptSpec spec = client.prompt();
 		if (options.getSession() != null) {
 			spec = spec.session(options.getSession());
 		}
@@ -288,7 +289,7 @@ public class AcpChatModel implements ChatModel {
 	 * for. The two ACP reasons with no equivalent keep their own names rather than being
 	 * flattened into one of these.
 	 */
-	private static String finishReason(AgentEvent.Completed completed) {
+	private static String finishReason(AcpAgentEvent.Completed completed) {
 		if (completed == null || completed.reason() == null) {
 			return "STOP";
 		}
@@ -312,7 +313,7 @@ public class AcpChatModel implements ChatModel {
 	 * measurements, and putting one in the other's field would put a number that means
 	 * "the whole conversation so far" where every dashboard reads "this call".
 	 */
-	private ChatResponseMetadata metadata(AcpChatOptions options, AgentEvent.UsageUpdated usage) {
+	private ChatResponseMetadata metadata(AcpChatOptions options, AcpAgentEvent.UsageUpdated usage) {
 		ChatResponseMetadata.Builder builder = ChatResponseMetadata.builder()
 			.model(modelOf(options))
 			.keyValue("acp.runtime", client.runtimeId());
@@ -337,7 +338,7 @@ public class AcpChatModel implements ChatModel {
 	private String modelOf(AcpChatOptions options) {
 		if (options.getSession() != null) {
 			String applied = client.session(options.getSession())
-				.flatMap(session -> session.configuration().applied(AgentRuntime.PortableOption.MODEL))
+				.flatMap(session -> session.configuration().applied(AcpAgentRuntime.PortableOption.MODEL))
 				.orElse(null);
 			if (applied != null) {
 				return applied;

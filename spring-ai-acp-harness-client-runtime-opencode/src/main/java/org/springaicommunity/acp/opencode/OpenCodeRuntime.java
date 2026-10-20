@@ -13,13 +13,13 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.config.ProviderEnvironment;
 import org.springaicommunity.acp.config.ProviderSpec;
 import org.springaicommunity.acp.config.RuntimeOptions;
-import org.springaicommunity.acp.runtime.AgentEnvironment;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentEnvironment;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 import org.springaicommunity.acp.runtime.Executables;
 import org.springaicommunity.acp.runtime.ToolNames;
 
@@ -55,7 +55,7 @@ import com.agentclientprotocol.sdk.spec.AcpSchema;
  * env: { OPENCODE_DISABLE_AUTOUPDATE: "1" }
  * }</pre>
  */
-public class OpenCodeRuntime implements AgentRuntime {
+public class OpenCodeRuntime implements AcpAgentRuntime {
 
 	public static final String ID = "opencode";
 
@@ -103,11 +103,11 @@ public class OpenCodeRuntime implements AgentRuntime {
 	}
 
 	@Override
-	public AgentLaunchSpec launch(AgentSettings settings) {
+	public AcpAgentLaunchSpec launch(AcpAgentSettings settings) {
 		RuntimeOptions options = settings.runtimeOptions();
 		List<String> args = new ArrayList<>(List.of("acp"));
 		args.addAll(options.textList("args"));
-		return new AgentLaunchSpec.Stdio(options.text("command").orElse(executable), args, environment(settings));
+		return new AcpAgentLaunchSpec.Stdio(options.text("command").orElse(executable), args, environment(settings));
 	}
 
 	/**
@@ -120,7 +120,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 * a file this library owns does not cost the ambient installation its login.
 	 */
 	@Override
-	public void provision(AgentSettings settings) {
+	public void provision(AcpAgentSettings settings) {
 		Map<String, Object> config = configFor(settings);
 		if (config.isEmpty()) {
 			return;
@@ -161,13 +161,13 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 * match the vendor's entry by its {@code <provider>/<model>} spelling, and the
 	 * endpoint's key would go to the vendor.
 	 */
-	private static Map<String, Object> configFor(AgentSettings settings) {
+	private static Map<String, Object> configFor(AcpAgentSettings settings) {
 		Map<String, Object> config = new LinkedHashMap<>(endpointConfig(settings));
 		config.putAll(settings.runtimeOptions().section("config"));
 		return config;
 	}
 
-	private static Map<String, Object> endpointConfig(AgentSettings settings) {
+	private static Map<String, Object> endpointConfig(AcpAgentSettings settings) {
 		ProviderSpec provider = settings.provider();
 		if (!provider.isByo() || provider.findApiType().isEmpty()) {
 			return Map.of();
@@ -228,7 +228,7 @@ public class OpenCodeRuntime implements AgentRuntime {
 	 * {@code on-unsupported: fail} on a configuration that is working exactly as asked.
 	 */
 	@Override
-	public boolean appliedOutOfBand(PortableOption option, AgentSettings settings) {
+	public boolean appliedOutOfBand(PortableOption option, AcpAgentSettings settings) {
 		return switch (option) {
 			case PROVIDER -> settings.findModel().isPresent() || settings.provider().hasCredentials();
 			case MODEL -> !endpointConfig(settings).isEmpty() && settings.findModel().isPresent();
@@ -253,13 +253,13 @@ public class OpenCodeRuntime implements AgentRuntime {
 		return ToolNames.fromRawInput(toolCall);
 	}
 
-	private Map<String, String> environment(AgentSettings settings) {
+	private Map<String, String> environment(AcpAgentSettings settings) {
 		Map<String, String> defaults = configFor(settings).isEmpty() ? Map.of()
 				: Map.of(CONFIG_ENV, configFile(settings).toString());
-		return AgentEnvironment.layered(defaults, ProviderEnvironment.of(settings.provider()), settings);
+		return AcpAgentEnvironment.layered(defaults, ProviderEnvironment.of(settings.provider()), settings);
 	}
 
-	private Path configFile(AgentSettings settings) {
+	private Path configFile(AcpAgentSettings settings) {
 		return settings.runtimeOptions()
 			.text("config-file")
 			.map(Path::of)

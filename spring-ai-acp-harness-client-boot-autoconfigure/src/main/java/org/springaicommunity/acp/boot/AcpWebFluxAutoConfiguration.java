@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.reactive.config.WebFluxConfigurer;
-import org.springaicommunity.acp.client.AgentClient;
+import org.springaicommunity.acp.client.AcpAgentClient;
 
 /**
  * Registers {@link AcpController} when an application has asked for it.
@@ -29,9 +29,9 @@ import org.springaicommunity.acp.client.AgentClient;
 public class AcpWebFluxAutoConfiguration {
 
 	@Bean
-	@ConditionalOnBean(AgentClient.class)
+	@ConditionalOnBean(AcpAgentClient.class)
 	@ConditionalOnMissingBean
-	AcpController acpController(AgentClient agent, AcpProperties properties) {
+	AcpController acpController(AcpAgentClient agent, AcpProperties properties) {
 		return new AcpController(agent, properties);
 	}
 

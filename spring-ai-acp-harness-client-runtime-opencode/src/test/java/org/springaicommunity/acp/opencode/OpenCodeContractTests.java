@@ -1,9 +1,9 @@
 package org.springaicommunity.acp.opencode;
 
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.springaicommunity.acp.runtime.AgentRuntime;
-import org.springaicommunity.acp.test.AgentProbe;
-import org.springaicommunity.acp.test.AgentRuntimeContract;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
+import org.springaicommunity.acp.test.AcpAgentProbe;
+import org.springaicommunity.acp.test.AcpAgentRuntimeContract;
 
 /**
  * The portable contract, against a real {@code opencode acp} subprocess.
@@ -16,14 +16,14 @@ import org.springaicommunity.acp.test.AgentRuntimeContract;
  * making.
  */
 @EnabledIf("usable")
-class OpenCodeContractTests extends AgentRuntimeContract {
+class OpenCodeContractTests extends AcpAgentRuntimeContract {
 
 	static boolean usable() {
-		return AgentProbe.isUsable(new OpenCodeRuntime());
+		return AcpAgentProbe.isUsable(new OpenCodeRuntime());
 	}
 
 	@Override
-	protected AgentRuntime runtime() {
+	protected AcpAgentRuntime runtime() {
 		return new OpenCodeRuntime();
 	}
 

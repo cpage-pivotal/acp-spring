@@ -1,13 +1,13 @@
 package org.springaicommunity.acp.config;
 
-import org.springaicommunity.acp.runtime.AgentRuntime.PortableOption;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.PortableOption;
 
 /**
  * What became of one requested option: what was asked for, what the agent actually took,
  * and which of the negotiated tier's several mechanisms got it there.
  *
  * <p>
- * Exposed through {@code AgentSession.configuration()} so an application can tell the
+ * Exposed through {@code AcpAgentSession.configuration()} so an application can tell the
  * difference between "the model I asked for" and "the model this agent is really
  * running", which {@code on-unsupported: warn} otherwise hides in a log line.
  */

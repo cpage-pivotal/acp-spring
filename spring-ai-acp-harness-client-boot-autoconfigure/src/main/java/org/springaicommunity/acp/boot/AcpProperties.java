@@ -34,8 +34,8 @@ import org.springaicommunity.acp.workspace.TerminalAccess;
  * {@code on-unsupported} governs. Runtime-specific options live under
  * {@code runtimes.<id>} and are passed to that adapter untouched.
  *
- * @param runtime Which agent to run, e.g. goose. Must match a registered AgentRuntime or
- * an agent a runtime provider supplies. May be left unset when exactly one runtime
+ * @param runtime Which agent to run, e.g. goose. Must match a registered AcpAgentRuntime
+ * or an agent a runtime provider supplies. May be left unset when exactly one runtime
  * adapter is on the classpath.
  * @param workspace Absolute path the agent treats as its working directory. Defaults to
  * the JVM's.

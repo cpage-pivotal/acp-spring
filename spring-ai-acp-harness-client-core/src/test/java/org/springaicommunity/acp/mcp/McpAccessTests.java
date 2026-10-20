@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.acp.config.McpServerSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime.McpScope;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime.McpScope;
 import org.springaicommunity.acp.session.SessionPrincipal;
 
 import com.sun.net.httpserver.HttpExchange;

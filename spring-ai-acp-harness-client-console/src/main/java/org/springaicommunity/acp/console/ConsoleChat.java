@@ -25,10 +25,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.runtime.AgentNotice;
-import org.springaicommunity.acp.session.AgentSession;
-import org.springaicommunity.acp.session.AgentSessions;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.runtime.AcpAgentNotice;
+import org.springaicommunity.acp.session.AcpAgentSession;
+import org.springaicommunity.acp.session.AcpAgentSessions;
 import org.springaicommunity.acp.session.StoredSession;
 
 import reactor.core.Disposable;
@@ -46,7 +46,7 @@ import reactor.core.Disposables;
  * Turns are streamed rather than called, because the interesting part of an agent is the
  * work it does before it answers, and a blocking call would show a blank terminal for a
  * minute and then a paragraph. Ctrl-C during a turn cancels that turn — disposing the
- * subscription is what {@code AgentClient} documents as cancelling it — and leaves the
+ * subscription is what {@code AcpAgentClient} documents as cancelling it — and leaves the
  * conversation where it was.
  */
 public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
@@ -59,7 +59,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 		.withZone(ZoneId.systemDefault());
 
-	private final AgentClient agent;
+	private final AcpAgentClient agent;
 
 	private final Terminal terminal;
 
@@ -81,7 +81,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	private final AtomicReference<Disposable> turn = new AtomicReference<>();
 
 	/** Notices already shown, so each is reported once rather than after every turn. */
-	private final Set<AgentNotice> seenNotices = new HashSet<>();
+	private final Set<AcpAgentNotice> seenNotices = new HashSet<>();
 
 	/** The named session turns currently run in. */
 	private String session;
@@ -98,7 +98,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	 * @param onExit what to do once the user leaves; the auto-configuration closes the
 	 * application
 	 */
-	public ConsoleChat(AgentClient agent, Terminal terminal, ConsoleRenderer renderer, String title, String greeting,
+	public ConsoleChat(AcpAgentClient agent, Terminal terminal, ConsoleRenderer renderer, String title, String greeting,
 			String session, Path historyFile, Runnable onExit) {
 		this.agent = agent;
 		this.terminal = terminal;
@@ -197,7 +197,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	}
 
 	private void open(String name) {
-		AgentSession opened = agent.openSession(name);
+		AcpAgentSession opened = agent.openSession(name);
 		opened.configuration()
 			.resolutions()
 			.values()
@@ -293,7 +293,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 		String next = nextName();
 		open(next);
 		session = next;
-		if (agent.sessions().supports(AgentSessions.Operation.CLOSE)) {
+		if (agent.sessions().supports(AcpAgentSessions.Operation.CLOSE)) {
 			try {
 				agent.sessions().close(previous);
 			}
@@ -305,10 +305,10 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	}
 
 	private void listSessions() {
-		AgentSessions sessions = agent.sessions();
-		if (!sessions.supports(AgentSessions.Operation.LIST)) {
+		AcpAgentSessions sessions = agent.sessions();
+		if (!sessions.supports(AcpAgentSessions.Operation.LIST)) {
 			out.info("  " + agent.runtimeId() + " cannot list its conversations (no "
-					+ AgentSessions.Operation.LIST.method() + ")");
+					+ AcpAgentSessions.Operation.LIST.method() + ")");
 			return;
 		}
 		List<StoredSession> stored = sessions.list();
@@ -316,7 +316,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 			out.info("  no stored conversations");
 			return;
 		}
-		String current = agent.session(session).map(AgentSession::sessionId).orElse(null);
+		String current = agent.session(session).map(AcpAgentSession::sessionId).orElse(null);
 		for (StoredSession each : stored) {
 			String marker = each.sessionId().equals(current) ? "* " : "  ";
 			String when = each.updatedAt() == null ? "" : "  " + WHEN.format(each.updatedAt());
@@ -330,17 +330,18 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 			out.error("usage: /resume <id> — /sessions lists them");
 			return;
 		}
-		AgentSessions sessions = agent.sessions();
+		AcpAgentSessions sessions = agent.sessions();
 		String next = nextName();
-		if (sessions.supports(AgentSessions.Operation.RESUME)) {
+		if (sessions.supports(AcpAgentSessions.Operation.RESUME)) {
 			sessions.resume(next, sessionId);
 		}
-		else if (sessions.supports(AgentSessions.Operation.LOAD)) {
+		else if (sessions.supports(AcpAgentSessions.Operation.LOAD)) {
 			sessions.load(next, sessionId);
 		}
 		else {
 			out.info("  " + agent.runtimeId() + " can neither resume nor load a conversation (no "
-					+ AgentSessions.Operation.RESUME.method() + " or " + AgentSessions.Operation.LOAD.method() + ")");
+					+ AcpAgentSessions.Operation.RESUME.method() + " or " + AcpAgentSessions.Operation.LOAD.method()
+					+ ")");
 			return;
 		}
 		session = next;
@@ -348,7 +349,7 @@ public class ConsoleChat implements ApplicationListener<ApplicationReadyEvent> {
 	}
 
 	private void notices() {
-		List<AgentNotice> notices = agent.notices();
+		List<AcpAgentNotice> notices = agent.notices();
 		if (notices.isEmpty()) {
 			out.info("  no notices from the agent");
 			return;

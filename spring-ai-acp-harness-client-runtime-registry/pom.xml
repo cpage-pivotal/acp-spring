@@ -13,7 +13,7 @@
 
     <artifactId>spring-ai-acp-harness-client-runtime-registry</artifactId>
     <name>Spring AI ACP Harness Client Registry Runtime</name>
-    <description>Generic AgentRuntime driven by the ACP agent registry: any published agent, no adapter</description>
+    <description>Generic AcpAgentRuntime driven by the ACP agent registry: any published agent, no adapter</description>
 
     <dependencies>
         <dependency>

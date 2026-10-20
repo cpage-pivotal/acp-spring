@@ -13,11 +13,11 @@ import java.util.Map;
  * <p>
  * For interoperability bugs between one agent and some MCP servers that neither side has
  * fixed yet — the kind of thing that makes an agent drop a server without saying so. An
- * {@code AgentRuntime} contributes these through {@code mcpRequestFilters}, which keeps
- * vendor knowledge in the adapter that owns it; the proxy only runs them. Filters run in
- * order on every request, after the route is known and before credentials are added, and
- * the first to {@link Outcome.Answer answer} ends the chain: nothing reaches the
- * upstream.
+ * {@code AcpAgentRuntime} contributes these through {@code mcpRequestFilters}, which
+ * keeps vendor knowledge in the adapter that owns it; the proxy only runs them. Filters
+ * run in order on every request, after the route is known and before credentials are
+ * added, and the first to {@link Outcome.Answer answer} ends the chain: nothing reaches
+ * the upstream.
  *
  * <p>
  * Each one should name the versions it was measured against and be easy to delete,

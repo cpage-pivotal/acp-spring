@@ -30,14 +30,14 @@ public final class SessionRegistry {
 
 	private static final Logger logger = LoggerFactory.getLogger(SessionRegistry.class);
 
-	private final Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
+	private final Map<String, AcpAgentSession> sessions = new ConcurrentHashMap<>();
 
 	/**
 	 * Returns the session for {@code name}, creating it through {@code factory} only if
 	 * this registry has never seen the name.
 	 * @param factory called at most once per name, under the map's per-key lock
 	 */
-	public AgentSession resolve(String name, Function<String, String> factory) {
+	public AcpAgentSession resolve(String name, Function<String, String> factory) {
 		return resolve(name, null, n -> new Opened(factory.apply(n), null));
 	}
 
@@ -56,12 +56,12 @@ public final class SessionRegistry {
 	 * release whatever it acquired if it throws
 	 * @throws SessionOwnershipException if the name is open for someone else
 	 */
-	public AgentSession resolve(String name, SessionPrincipal principal, Function<String, Opened> factory) {
+	public AcpAgentSession resolve(String name, SessionPrincipal principal, Function<String, Opened> factory) {
 		Validation.requireName(name, "session name");
-		AgentSession session = sessions.computeIfAbsent(name, n -> {
+		AcpAgentSession session = sessions.computeIfAbsent(name, n -> {
 			Opened opened = factory.apply(n);
 			logger.debug("Created session '{}' as {}", n, opened.sessionId());
-			return new AgentSession(n, opened.sessionId(), principal, opened.release());
+			return new AcpAgentSession(n, opened.sessionId(), principal, opened.release());
 		});
 		if (!session.belongsTo(principal)) {
 			throw new SessionOwnershipException(name);
@@ -87,7 +87,7 @@ public final class SessionRegistry {
 	 * and doing it silently would strand whichever session lost.
 	 * @throws IllegalStateException if the name is already registered
 	 */
-	public AgentSession adopt(String name, String sessionId) {
+	public AcpAgentSession adopt(String name, String sessionId) {
 		return adopt(name, sessionId, null, null);
 	}
 
@@ -97,10 +97,10 @@ public final class SessionRegistry {
 	 * @param release run once when the registry forgets the session — including when the
 	 * name turns out to be taken, so the caller never has to clean up after a refusal
 	 */
-	public AgentSession adopt(String name, String sessionId, SessionPrincipal principal, Runnable release) {
+	public AcpAgentSession adopt(String name, String sessionId, SessionPrincipal principal, Runnable release) {
 		Validation.requireName(name, "session name");
-		AgentSession adopted = new AgentSession(name, sessionId, principal, release);
-		AgentSession existing = sessions.putIfAbsent(name, adopted);
+		AcpAgentSession adopted = new AcpAgentSession(name, sessionId, principal, release);
+		AcpAgentSession existing = sessions.putIfAbsent(name, adopted);
 		if (existing != null) {
 			adopted.release();
 			throw new IllegalStateException("Session '" + name + "' is already open as " + existing.sessionId()
@@ -110,7 +110,7 @@ public final class SessionRegistry {
 		return adopted;
 	}
 
-	public Optional<AgentSession> find(String name) {
+	public Optional<AcpAgentSession> find(String name) {
 		return Optional.ofNullable(sessions.get(name));
 	}
 
@@ -122,8 +122,8 @@ public final class SessionRegistry {
 	 * Forgets a session and releases what it held here. Does not close it on the agent —
 	 * the caller owns that.
 	 */
-	public Optional<AgentSession> remove(String name) {
-		AgentSession removed = sessions.remove(name);
+	public Optional<AcpAgentSession> remove(String name) {
+		AcpAgentSession removed = sessions.remove(name);
 		if (removed != null) {
 			removed.release();
 		}
@@ -134,9 +134,9 @@ public final class SessionRegistry {
 	 * Removes sessions idle longer than {@code ttl} that are not mid-turn.
 	 * @return the sessions evicted, so the caller can close them on the agent
 	 */
-	public List<AgentSession> evictIdle(Duration ttl) {
+	public List<AcpAgentSession> evictIdle(Duration ttl) {
 		Instant cutoff = Instant.now().minus(ttl);
-		List<AgentSession> evicted = sessions.values().stream().filter(s -> s.idleSince(cutoff)).toList();
+		List<AcpAgentSession> evicted = sessions.values().stream().filter(s -> s.idleSince(cutoff)).toList();
 		evicted.forEach(s -> {
 			if (sessions.remove(s.name(), s)) {
 				s.release();
@@ -148,14 +148,14 @@ public final class SessionRegistry {
 		return evicted;
 	}
 
-	public List<AgentSession> all() {
+	public List<AcpAgentSession> all() {
 		return List.copyOf(sessions.values());
 	}
 
 	public void clear() {
-		List<AgentSession> all = List.copyOf(sessions.values());
+		List<AcpAgentSession> all = List.copyOf(sessions.values());
 		sessions.clear();
-		all.forEach(AgentSession::release);
+		all.forEach(AcpAgentSession::release);
 	}
 
 	public int size() {

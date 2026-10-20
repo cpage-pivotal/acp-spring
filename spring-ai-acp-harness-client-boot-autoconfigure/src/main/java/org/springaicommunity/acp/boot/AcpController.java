@@ -17,12 +17,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.client.AgentClientException;
-import org.springaicommunity.acp.config.AgentOptions;
-import org.springaicommunity.acp.event.AgentEvent;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.client.AcpAgentClientException;
+import org.springaicommunity.acp.config.AcpAgentOptions;
+import org.springaicommunity.acp.event.AcpAgentEvent;
 import org.springaicommunity.acp.session.StoredSession;
-import org.springaicommunity.acp.session.UnsupportedAgentOperationException;
+import org.springaicommunity.acp.session.UnsupportedAcpAgentOperationException;
 
 import reactor.core.publisher.Flux;
 
@@ -53,11 +53,11 @@ public class AcpController {
 
 	private static final Logger logger = LoggerFactory.getLogger(AcpController.class);
 
-	private final AgentClient agent;
+	private final AcpAgentClient agent;
 
 	private final AcpProperties.Controller properties;
 
-	public AcpController(AgentClient agent, AcpProperties properties) {
+	public AcpController(AcpAgentClient agent, AcpProperties properties) {
 		this.agent = agent;
 		this.properties = properties.controller();
 	}
@@ -69,11 +69,11 @@ public class AcpController {
 		validate(request);
 		String requestId = UUID.randomUUID().toString();
 		try {
-			AgentClient.AgentResponse response = spec(request).call();
+			AcpAgentClient.AcpAgentResponse response = spec(request).call();
 			return ResponseEntity
 				.ok(new PromptResponse(response.content(), response.completion().reason().toString(), null, requestId));
 		}
-		catch (AgentClientException ex) {
+		catch (AcpAgentClientException ex) {
 			// The agent's own words can carry anything it read; the caller gets the
 			// request id.
 			logger.warn("Agent request {} failed", requestId, ex);
@@ -89,7 +89,7 @@ public class AcpController {
 	 * Text only, deliberately: tool calls and plans name paths and commands inside the
 	 * workspace, and an endpoint that may be exposed to a browser should not be the thing
 	 * that decides those are safe to publish. An application that wants them has
-	 * {@code AgentClient}.
+	 * {@code AcpAgentClient}.
 	 */
 	@PostMapping(value = "${spring.acp.controller.path:/api/acp}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	public Flux<String> stream(@RequestBody PromptRequest request, Principal principal) {
@@ -97,9 +97,9 @@ public class AcpController {
 		validate(request);
 		return spec(request).stream()
 			.events()
-			.filter(AgentEvent.Text.class::isInstance)
-			.map(AgentEvent.Text.class::cast)
-			.map(AgentEvent.Text::text);
+			.filter(AcpAgentEvent.Text.class::isInstance)
+			.map(AcpAgentEvent.Text.class::cast)
+			.map(AcpAgentEvent.Text::text);
 	}
 
 	/**
@@ -111,7 +111,7 @@ public class AcpController {
 		try {
 			return ResponseEntity.ok(agent.sessions().list());
 		}
-		catch (UnsupportedAgentOperationException ex) {
+		catch (UnsupportedAcpAgentOperationException ex) {
 			throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, ex.getMessage());
 		}
 	}
@@ -136,16 +136,16 @@ public class AcpController {
 					agent.agentInfo().map(info -> info.toString()).orElse(null)));
 	}
 
-	private AgentClient.PromptSpec spec(PromptRequest request) {
-		AgentClient.PromptSpec spec = agent.prompt().user(request.prompt());
+	private AcpAgentClient.PromptSpec spec(PromptRequest request) {
+		AcpAgentClient.PromptSpec spec = agent.prompt().user(request.prompt());
 		if (request.session() != null) {
 			spec = spec.session(request.session());
 		}
 		return spec.options(options(request));
 	}
 
-	private AgentOptions options(PromptRequest request) {
-		AgentOptions.Builder builder = AgentOptions.builder();
+	private AcpAgentOptions options(PromptRequest request) {
+		AcpAgentOptions.Builder builder = AcpAgentOptions.builder();
 		if (request.timeout() != null) {
 			builder.timeout(request.timeout());
 		}

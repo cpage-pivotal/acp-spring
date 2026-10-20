@@ -35,12 +35,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springaicommunity.acp.client.AgentClient;
-import org.springaicommunity.acp.config.AgentSettings;
+import org.springaicommunity.acp.client.AcpAgentClient;
+import org.springaicommunity.acp.config.AcpAgentSettings;
 import org.springaicommunity.acp.config.McpServerSpec;
 import org.springaicommunity.acp.mcp.McpAccess;
-import org.springaicommunity.acp.runtime.AgentLaunchSpec;
-import org.springaicommunity.acp.runtime.AgentRuntime;
+import org.springaicommunity.acp.runtime.AcpAgentLaunchSpec;
+import org.springaicommunity.acp.runtime.AcpAgentRuntime;
 import org.springaicommunity.acp.session.SessionPrincipal;
 import org.springaicommunity.acp.session.SessionPrincipalResolver;
 
@@ -90,7 +90,7 @@ class WebSignInFlowTests {
 	OAuth2AuthorizedClientService authorizedClients;
 
 	@Autowired
-	AgentSettings settings;
+	AcpAgentSettings settings;
 
 	private static Map<String, String> query(String url) {
 		Map<String, String> params = new LinkedHashMap<>();
@@ -192,23 +192,23 @@ class WebSignInFlowTests {
 
 		/** No agent is started: the flow under test ends at the proxy. */
 		@Bean
-		AgentRuntime testRuntime() {
-			return new AgentRuntime() {
+		AcpAgentRuntime testRuntime() {
+			return new AcpAgentRuntime() {
 				@Override
 				public String id() {
 					return "test";
 				}
 
 				@Override
-				public AgentLaunchSpec launch(AgentSettings settings) {
+				public AcpAgentLaunchSpec launch(AcpAgentSettings settings) {
 					throw new UnsupportedOperationException("no agent in this test");
 				}
 			};
 		}
 
 		@Bean
-		AgentClient acpAgentClient() {
-			return org.mockito.Mockito.mock(AgentClient.class);
+		AcpAgentClient acpAgentClient() {
+			return org.mockito.Mockito.mock(AcpAgentClient.class);
 		}
 
 	}
