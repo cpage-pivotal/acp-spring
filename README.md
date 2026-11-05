@@ -6,7 +6,19 @@
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.x-6DB33F.svg)](https://docs.spring.io/spring-boot/)
 [![Spring AI](https://img.shields.io/badge/Spring%20AI-2.x-6DB33F.svg)](https://docs.spring.io/spring-ai/reference/)
 
-**Documentation:** https://spring-ai-acp-harness-client-docs.web.app/
+> [!IMPORTANT]
+> **This project has moved to
+> [spring-ai-community/spring-ai-acp-harness-client](https://github.com/spring-ai-community/spring-ai-acp-harness-client).**
+> This repository is archived and receives no further changes. File issues and pull requests there.
+>
+> Current documentation: https://spring-ai-community.github.io/spring-ai-acp-harness-client/latest-snapshot/
+> Upgrading from 0.5.0? 0.6.0 renames artifacts, packages, properties, types and metrics; the
+> [changelog](https://spring-ai-community.github.io/spring-ai-acp-harness-client/latest-snapshot/changes/)
+> says how to migrate.
+>
+> Releases up to 0.5.0 stay available from the Artifact Registry repository
+> `https://us-central1-maven.pkg.dev/cf-mcp/maven-public`. The 0.5.0 user guide is
+> [`docs/user-guide.html`](docs/user-guide.html) in this repository.
 
 A Spring library that talks to **any** [Agent Client Protocol](https://agentclientprotocol.com)
 coding agent — Goose, Codex, OpenCode, and others — behind one programming model and one
